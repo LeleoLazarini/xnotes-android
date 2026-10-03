@@ -116,6 +116,15 @@
     <string name="caption_erase_markups">擦除 PDF 文本标注</string>
     <string name="title_select">选择</string>
     <string name="title_shape">形状</string>
+    <string name="shape_line">直线</string>
+    <string name="shape_arrow">箭头</string>
+    <string name="shape_rectangle">矩形</string>
+    <string name="shape_ellipse">椭圆</string>
+    <string name="shape_circle">圆形</string>
+    <string name="shape_triangle">三角形</string>
+    <string name="shape_polygon">多边形</string>
+    <string name="shape_polyline">折线</string>
+    <string name="shape_curve">曲线</string>
     <string name="caption_fill">填充</string>
     <string name="caption_opacity">不透明度</string>
     <string name="caption_dashed">虚线笔</string>
@@ -485,6 +494,12 @@
     <string name="auto">自动</string>
     <string name="margins_mm">页边距（毫米）</string>
     <string name="done">完成</string>
+    <string name="text_colour">文字颜色</string>
+    <string name="remove_highlight">移除高亮</string>
+
+    <!-- Tooltips -->
+    <string name="tip_tap_for_settings">点按打开设置</string>
+    <string name="tip_hold_for_language">长按选择语言</string>
 
     <!-- Tables -->
     <string name="insert_table">插入表格</string>

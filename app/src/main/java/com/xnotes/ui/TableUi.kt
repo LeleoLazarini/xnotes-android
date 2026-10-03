@@ -455,7 +455,7 @@ private fun TableEditOverlay(editor: Editor, table: FlowTable) {
 
             if (fi == 0) {
                 key("done") {
-                    Centered((p.vp.right + px(30.dp)).toFloat(), plusY, 30.dp, 30.dp, Modifier.clip(CircleShape).background(accent).clickable { editor.endTableEdit() }) {
+                    Centered((p.vp.right + px(30.dp)).toFloat(), plusY, 30.dp, 30.dp, Modifier.clip(CircleShape).background(accent).clickable { editor.endTableEdit() }, tip = stringResource(R.string.done)) {
                         Icon(Icons.Filled.Check, stringResource(R.string.done), tint = palette.bg.toComposeColor(), modifier = Modifier.size(18.dp))
                     }
                 }
@@ -495,7 +495,7 @@ private fun rowBoundaries(p: Placed): Pair<List<Int>, List<Float>> {
     return rows to ys
 }
 
-/** A box of [w] x [h] centred on viewport ([x], [y]). */
+/** A box of [w] x [h] centred on viewport ([x], [y]), named by [tip] when the pen hovers it. */
 @Composable
 private fun Centered(
     x: Float,
@@ -503,25 +503,24 @@ private fun Centered(
     w: Dp,
     h: Dp,
     modifier: Modifier = Modifier,
+    tip: String? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val density = LocalDensity.current
     val wp = with(density) { w.toPx() }
     val hp = with(density) { h.toPx() }
-    Box(
-        Modifier
-            .offset { IntOffset((x - wp / 2f).roundToInt(), (y - hp / 2f).roundToInt()) }
-            .size(w, h)
-            .then(modifier),
-        contentAlignment = Alignment.Center,
-        content = content,
-    )
+    val place = Modifier.offset { IntOffset((x - wp / 2f).roundToInt(), (y - hp / 2f).roundToInt()) }
+    if (tip == null) {
+        Box(place.size(w, h).then(modifier), contentAlignment = Alignment.Center, content = content)
+    } else {
+        Tooltip(tip, place) { Box(Modifier.size(w, h).then(modifier), contentAlignment = Alignment.Center, content = content) }
+    }
 }
 
 @Composable
 private fun PlusButton(x: Float, y: Float, onClick: () -> Unit) {
     val palette = LocalPalette.current
-    Centered(x, y, 22.dp, 22.dp, Modifier.clip(CircleShape).background(palette.accent.toComposeColor()).clickable(onClick = onClick)) {
+    Centered(x, y, 22.dp, 22.dp, Modifier.clip(CircleShape).background(palette.accent.toComposeColor()).clickable(onClick = onClick), tip = stringResource(R.string.insert)) {
         Icon(Icons.Filled.Add, stringResource(R.string.insert), tint = palette.bg.toComposeColor(), modifier = Modifier.size(16.dp))
     }
 }
@@ -552,30 +551,34 @@ private fun Grip(
             .border(1.dp, palette.border.toComposeColor(), shape),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(28.dp, 22.dp)
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragStart = { start() },
-                            onDragEnd = { end() },
-                            onDragCancel = { cancel() },
-                        ) { change, amount ->
-                            change.consume()
-                            move(amount)
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Filled.DragIndicator,
-                    stringResource(R.string.move),
-                    tint = palette.textDim.toComposeColor(),
-                    modifier = Modifier.size(16.dp).rotate(if (vertical) 0f else 90f),
-                )
+            Tooltip(stringResource(R.string.move)) {
+                Box(
+                    Modifier
+                        .size(28.dp, 22.dp)
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragStart = { start() },
+                                onDragEnd = { end() },
+                                onDragCancel = { cancel() },
+                            ) { change, amount ->
+                                change.consume()
+                                move(amount)
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Filled.DragIndicator,
+                        stringResource(R.string.move),
+                        tint = palette.textDim.toComposeColor(),
+                        modifier = Modifier.size(16.dp).rotate(if (vertical) 0f else 90f),
+                    )
+                }
             }
-            Box(Modifier.size(24.dp, 22.dp).clickable(onClick = onDelete), contentAlignment = Alignment.Center) {
-                Icon(Icons.Filled.Close, stringResource(R.string.delete), tint = palette.text.toComposeColor(), modifier = Modifier.size(14.dp))
+            Tooltip(stringResource(R.string.delete)) {
+                Box(Modifier.size(24.dp, 22.dp).clickable(onClick = onDelete), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.delete), tint = palette.text.toComposeColor(), modifier = Modifier.size(14.dp))
+                }
             }
         }
     }

@@ -225,12 +225,14 @@ private fun SectionCard(
                     onDrop = onGrabDrop,
                     onCancel = onGrabCancel,
                 )
-                IconButton(onClick = onDelete, enabled = canDelete, modifier = Modifier.size(26.dp)) {
-                    Icon(
-                        XnotesIcons.close, stringResource(R.string.delete_section),
-                        tint = (if (canDelete) palette.textDim else palette.border).toComposeColor(),
-                        modifier = Modifier.size(14.dp),
-                    )
+                Tooltip(stringResource(R.string.delete_section)) {
+                    IconButton(onClick = onDelete, enabled = canDelete, modifier = Modifier.size(26.dp)) {
+                        Icon(
+                            XnotesIcons.close, stringResource(R.string.delete_section),
+                            tint = (if (canDelete) palette.textDim else palette.border).toComposeColor(),
+                            modifier = Modifier.size(14.dp),
+                        )
+                    }
                 }
             }
         },

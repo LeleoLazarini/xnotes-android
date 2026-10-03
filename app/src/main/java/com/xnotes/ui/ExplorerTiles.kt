@@ -239,8 +239,10 @@ internal fun ThumbBadges(b: ExplorerBody, e: BrowseEntry, inset: Dp = 8.dp) {
 private fun EntryMenuButton(b: ExplorerBody, e: BrowseEntry, tint: Color, size: Dp = 32.dp) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconButton(onClick = { open = true }, modifier = Modifier.size(width = size, height = 36.dp)) {
-            Icon(XnotesIcons.more, stringResource(R.string.more_for, b.label(e)), tint = tint, modifier = Modifier.size(17.dp))
+        Tooltip(stringResource(R.string.more)) {
+            IconButton(onClick = { open = true }, modifier = Modifier.size(width = size, height = 36.dp)) {
+                Icon(XnotesIcons.more, stringResource(R.string.more_for, b.label(e)), tint = tint, modifier = Modifier.size(17.dp))
+            }
         }
         EntryMenuFor(b, e, open) { open = false }
     }

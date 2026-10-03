@@ -179,15 +179,17 @@ private fun ToolbarItemView(
 
         ToolbarItem.HOME -> ToolbarIcon(XnotesIcons.prev, stringResource(R.string.toolbar_home)) { onOpenBackstage() }
         // A name has no room down a side rail.
-        ToolbarItem.TITLE -> if (!LocalBar.current.vertical) Label(
-            if (editor.state.document.displayName == null && editor.state.document.path == null) stringResource(R.string.untitled) else editor.title,
-            modifier = Modifier
-                .widthIn(max = 160.dp)
-                .clip(MaterialTheme.shapes.extraSmall)
-                .clickable { onRename() },
-        )
+        ToolbarItem.TITLE -> if (!LocalBar.current.vertical) Tooltip(stringResource(R.string.rename_note)) {
+            Label(
+                if (editor.state.document.displayName == null && editor.state.document.path == null) stringResource(R.string.untitled) else editor.title,
+                modifier = Modifier
+                    .widthIn(max = 160.dp)
+                    .clip(MaterialTheme.shapes.extraSmall)
+                    .clickable { onRename() },
+            )
+        }
         ToolbarItem.SIDEBAR ->
-            ToolbarIcon(XnotesIcons.sidebar, stringResource(R.string.side_panel), active = editor.sidebarVisible) { editor.toggleSidebar() }
+            ToolbarIcon(XnotesIcons.sidebar, stringResource(R.string.side_panel), active = editor.sidebarVisible, shortcut = Keys.SIDEBAR) { editor.toggleSidebar() }
 
         ToolbarItem.PEN, ToolbarItem.DASHED, ToolbarItem.CALLIGRAPHY, ToolbarItem.SPEED,
         ToolbarItem.TAPER, ToolbarItem.HIGHLIGHTER, ToolbarItem.ERASER, ToolbarItem.PAN,
@@ -208,50 +210,54 @@ private fun ToolbarItemView(
 
         ToolbarItem.IMAGE -> ImageMenu(editor, onInsertImage, onAddStickers)
 
-        ToolbarItem.UNDO -> ToolbarIcon(XnotesIcons.undo, stringResource(R.string.undo), enabled = editor.canUndo) { editor.undo() }
-        ToolbarItem.REDO -> ToolbarIcon(XnotesIcons.redo, stringResource(R.string.redo), enabled = editor.canRedo) { editor.redo() }
+        ToolbarItem.UNDO -> ToolbarIcon(XnotesIcons.undo, stringResource(R.string.undo), enabled = editor.canUndo, shortcut = Keys.UNDO) { editor.undo() }
+        ToolbarItem.REDO -> ToolbarIcon(XnotesIcons.redo, stringResource(R.string.redo), enabled = editor.canRedo, shortcut = Keys.REDO) { editor.redo() }
 
         ToolbarItem.PAGE_NAV -> {
-            ToolbarIcon(XnotesIcons.prev, stringResource(R.string.previous_page)) { editor.prevPage() }
+            ToolbarIcon(XnotesIcons.prev, stringResource(R.string.previous_page), shortcut = Keys.PREV_PAGE) { editor.prevPage() }
             var jumpOpen by remember { mutableStateOf(false) }
             Box {
-                PageCounter(
-                    editor.pageIndex + 1,
-                    editor.pageCount,
-                    Modifier
-                        .clip(MaterialTheme.shapes.extraSmall)
-                        .clickable { jumpOpen = true },
-                )
+                Tooltip(stringResource(R.string.title_go_to_page)) {
+                    PageCounter(
+                        editor.pageIndex + 1,
+                        editor.pageCount,
+                        Modifier
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .clickable { jumpOpen = true },
+                    )
+                }
                 if (jumpOpen) PageJumpPopup(editor) { jumpOpen = false }
             }
-            ToolbarIcon(XnotesIcons.next, stringResource(R.string.next_page)) { editor.nextPage() }
+            ToolbarIcon(XnotesIcons.next, stringResource(R.string.next_page), shortcut = Keys.NEXT_PAGE) { editor.nextPage() }
         }
         ToolbarItem.STYLES -> StylesButton(editor, onImportTemplate)
         ToolbarItem.MARGINS -> MarginsButton(editor)
         ToolbarItem.VIEW -> ViewButton(editor)
 
         ToolbarItem.ZOOM -> {
-            ToolbarIcon(XnotesIcons.zoomOut, stringResource(R.string.zoom_out), enabled = !editor.zoomLocked) { editor.zoomOut() }
+            ToolbarIcon(XnotesIcons.zoomOut, stringResource(R.string.zoom_out), enabled = !editor.zoomLocked, shortcut = Keys.ZOOM_OUT) { editor.zoomOut() }
             var zoomMenuOpen by remember { mutableStateOf(false) }
             Box {
-                Label(
-                    "${editor.zoomPercent}%",
-                    modifier = Modifier
-                        .clip(MaterialTheme.shapes.extraSmall)
-                        .clickable { zoomMenuOpen = true },
-                )
+                Tooltip(stringResource(R.string.title_zoom)) {
+                    Label(
+                        "${editor.zoomPercent}%",
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.extraSmall)
+                            .clickable { zoomMenuOpen = true },
+                    )
+                }
                 if (zoomMenuOpen) ZoomMenuPopup(editor) { zoomMenuOpen = false }
             }
-            ToolbarIcon(XnotesIcons.zoomIn, stringResource(R.string.zoom_in), enabled = !editor.zoomLocked) { editor.zoomIn() }
+            ToolbarIcon(XnotesIcons.zoomIn, stringResource(R.string.zoom_in), enabled = !editor.zoomLocked, shortcut = Keys.ZOOM_IN) { editor.zoomIn() }
         }
         ToolbarItem.FIT -> FitMenu(editor)
         ToolbarItem.ZOOM_LOCK -> ToolbarIcon(
             if (editor.zoomLocked) XnotesIcons.lock else XnotesIcons.unlock,
-            stringResource(R.string.toolbar_zoom_lock),
+            stringResource(if (editor.zoomLocked) R.string.unlock_zoom else R.string.lock_zoom),
             active = editor.zoomLocked,
         ) { editor.toggleZoomLock() }
 
-        ToolbarItem.FULLSCREEN -> ToolbarIcon(XnotesIcons.fullscreen, stringResource(R.string.toolbar_fullscreen)) { onToggleFullscreen() }
+        ToolbarItem.FULLSCREEN -> ToolbarIcon(XnotesIcons.fullscreen, stringResource(R.string.toolbar_fullscreen), shortcut = Keys.FULLSCREEN) { onToggleFullscreen() }
 
         ToolbarItem.COLORS -> editor.toolbarColors.take(editor.toolbarColorCount).forEachIndexed { i, color ->
             Box {
@@ -276,9 +282,18 @@ private fun ToolButton(
     setConfigForTool: (Tool?) -> Unit,
 ) {
     if (icon == null) return
+    val armed = editor.tool == tool
+    val configurable = tool.isStroke || tool == Tool.SHAPE || tool == Tool.ERASER || tool == Tool.SELECT || tool == Tool.TEXT || tool == Tool.MARKUP
     Box {
-        ToolbarIcon(icon, stringResource(tool.labelRes), active = editor.tool == tool, glideKey = tool) {
-            if (editor.tool == tool && (tool.isStroke || tool == Tool.SHAPE || tool == Tool.ERASER || tool == Tool.SELECT || tool == Tool.TEXT || tool == Tool.MARKUP)) {
+        ToolbarIcon(
+            icon,
+            stringResource(tool.labelRes),
+            active = armed,
+            glideKey = tool,
+            hint = if (armed && configurable) stringResource(R.string.tip_tap_for_settings) else null,
+            shortcut = PAGED_TOOL_KEYS[tool],
+        ) {
+            if (armed && configurable) {
                 setConfigForTool(tool)
             } else {
                 editor.selectTool(tool)
@@ -297,6 +312,18 @@ private fun ToolButton(
         }
     }
 }
+
+/** The single keys that arm a tool in a note (see [Editor.handleKeyDown]). */
+private val PAGED_TOOL_KEYS = mapOf(
+    Tool.PEN to "P",
+    Tool.CALLIGRAPHY to "C",
+    Tool.HIGHLIGHTER to "H",
+    Tool.ERASER to "E",
+    Tool.SELECT to "V",
+    Tool.LASSO to "L",
+    Tool.SHAPE to "S",
+    Tool.TEXT to "T",
+)
 
 /** Renames the open note: a small prefilled text field; the ".xnote" suffix is implicit. */
 @Composable
@@ -441,8 +468,9 @@ private const val GLIDE_BASE_MS = 80f
 private const val GLIDE_MAX_MS = 300
 
 /**
- * A toolbar button. With a [glideKey] it is one of the bar's tools and its selection is the bar's
- * gliding circle; otherwise [active] fades in a circle of its own.
+ * A toolbar button, named by a tooltip when the pen hovers it. With a [glideKey] it is one of the
+ * bar's tools and its selection is the bar's gliding circle; otherwise [active] fades in a circle
+ * of its own.
  */
 @Composable
 internal fun ToolbarIcon(
@@ -451,6 +479,8 @@ internal fun ToolbarIcon(
     active: Boolean = false,
     enabled: Boolean = true,
     glideKey: Any? = null,
+    hint: String? = null,
+    shortcut: String? = null,
     onClick: () -> Unit,
 ) {
     val palette = LocalPalette.current
@@ -472,23 +502,25 @@ internal fun ToolbarIcon(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val press by animateFloatAsState(if (pressed) 0.85f else 1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium), label = "toolPress")
-    Box(
-        Modifier.size(bar.button).clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
+    Tooltip(contentDescription, hint = hint, shortcut = shortcut) {
         Box(
-            Modifier
-                .size(bar.circle)
-                .then(
-                    if (glide == null || glideKey == null) Modifier
-                    else Modifier.onGloballyPositioned { c ->
-                        glide.row?.let { glide.centers[glideKey] = it.localPositionOf(c, Offset(c.size.width / 2f, c.size.height / 2f)) }
-                    },
-                )
-                .drawBehind { if (fill > 0f) drawCircle(circle.copy(alpha = circle.alpha * fill)) },
+            Modifier.size(bar.button).clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(bar.icon).graphicsLayer { scaleX = press; scaleY = press })
+            Box(
+                Modifier
+                    .size(bar.circle)
+                    .then(
+                        if (glide == null || glideKey == null) Modifier
+                        else Modifier.onGloballyPositioned { c ->
+                            glide.row?.let { glide.centers[glideKey] = it.localPositionOf(c, Offset(c.size.width / 2f, c.size.height / 2f)) }
+                        },
+                    )
+                    .drawBehind { if (fill > 0f) drawCircle(circle.copy(alpha = circle.alpha * fill)) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(bar.icon).graphicsLayer { scaleX = press; scaleY = press })
+            }
         }
     }
 }

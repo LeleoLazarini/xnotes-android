@@ -920,7 +920,7 @@ fun ShapeConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
             PopupTitle(stringResource(R.string.title_shape))
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 ShapeKind.DRAW_TOOL_KINDS.forEach { k ->
-                    KindChip(shapeIcon(k), k.id, selected = kind == k) { kind = k; emit() }
+                    KindChip(shapeIcon(k), stringResource(k.labelRes), selected = kind == k) { kind = k; emit() }
                 }
             }
             SliderRow(stringResource(R.string.caption_width), width, 1f..20f) { width = it; emit() }
@@ -1048,20 +1048,22 @@ private fun shapeIcon(kind: ShapeKind): ImageVector = when (kind) {
 @Composable
 private fun KindChip(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
-    Box(
-        Modifier
-            .clip(MaterialTheme.shapes.extraSmall)
-            .background(if (selected) palette.selectionBackground.toComposeColor() else palette.surface.toComposeColor())
-            .border(1.dp, if (selected) palette.accent.toComposeColor() else palette.border.toComposeColor(), MaterialTheme.shapes.extraSmall)
-            .clickable(onClick = onClick)
-            .padding(8.dp),
-    ) {
-        Icon(
-            icon,
-            contentDescription = label,
-            tint = if (selected) palette.selectionForeground.toComposeColor() else palette.text.toComposeColor(),
-            modifier = Modifier.size(20.dp),
-        )
+    Tooltip(label) {
+        Box(
+            Modifier
+                .clip(MaterialTheme.shapes.extraSmall)
+                .background(if (selected) palette.selectionBackground.toComposeColor() else palette.surface.toComposeColor())
+                .border(1.dp, if (selected) palette.accent.toComposeColor() else palette.border.toComposeColor(), MaterialTheme.shapes.extraSmall)
+                .clickable(onClick = onClick)
+                .padding(8.dp),
+        ) {
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (selected) palette.selectionForeground.toComposeColor() else palette.text.toComposeColor(),
+                modifier = Modifier.size(20.dp),
+            )
+        }
     }
 }
 
@@ -1089,8 +1091,8 @@ internal fun DropdownMenu(
         containerColor = palette.menuBg.toComposeColor(),
         border = BorderStroke(1.dp, palette.border.toComposeColor()),
     ) {
-        // A menu opened from inside this one hangs off its own row, not beside the rail.
-        CompositionLocalProvider(LocalMenuOffset provides DpOffset.Zero) { content() }
+        // A menu or tip opened from inside this one hangs off its own row, not beside the rail.
+        CompositionLocalProvider(LocalMenuOffset provides DpOffset.Zero, LocalTipSide provides TipSide.BELOW) { content() }
     }
 }
 

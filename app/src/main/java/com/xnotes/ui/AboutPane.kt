@@ -115,13 +115,15 @@ fun AboutPane() {
             if (version.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 // Tap to copy, so a version string is easy to paste into a report.
-                Row(
-                    Modifier.clickable { copyVersion(ctx, version) }.padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(stringResource(R.string.version_n, version), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
-                    Spacer(Modifier.width(6.dp))
-                    Icon(XnotesIcons.copy, stringResource(R.string.copy_version), tint = palette.textDim.toComposeColor(), modifier = Modifier.size(12.dp))
+                Tooltip(stringResource(R.string.copy_version)) {
+                    Row(
+                        Modifier.clickable { copyVersion(ctx, version) }.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(stringResource(R.string.version_n, version), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
+                        Spacer(Modifier.width(6.dp))
+                        Icon(XnotesIcons.copy, stringResource(R.string.copy_version), tint = palette.textDim.toComposeColor(), modifier = Modifier.size(12.dp))
+                    }
                 }
             }
 

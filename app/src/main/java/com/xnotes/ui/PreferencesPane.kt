@@ -197,13 +197,17 @@ fun PreferencesPane(
         // shifts the settings below: a back arrow to Home on compact, else a hamburger when hidden.
         Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
             if (compact) {
-                IconButton(onClick = onBackToHome) {
-                    Icon(XnotesIcons.prev, stringResource(R.string.back_to_home), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                Tooltip(stringResource(R.string.back_to_home)) {
+                    IconButton(onClick = onBackToHome) {
+                        Icon(XnotesIcons.prev, stringResource(R.string.back_to_home), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                    }
                 }
                 Spacer(Modifier.width(4.dp))
             } else if (!sidebarOpen) {
-                IconButton(onClick = onShowSidebar) {
-                    Icon(XnotesIcons.menu, stringResource(R.string.show_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                Tooltip(stringResource(R.string.show_sidebar)) {
+                    IconButton(onClick = onShowSidebar) {
+                        Icon(XnotesIcons.menu, stringResource(R.string.show_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                    }
                 }
                 Spacer(Modifier.width(4.dp))
             }

@@ -69,13 +69,15 @@ fun CanvasWaypointsPopup(editor: InfiniteEditor, onDismiss: () -> Unit) {
                         color = palette.textDim.toComposeColor(),
                         fontSize = 11.sp,
                     )
-                    IconButton(onClick = { editor.removeWaypoint(waypoint) }, modifier = Modifier.size(30.dp)) {
-                        Icon(
-                            XnotesIcons.close,
-                            contentDescription = stringResource(R.string.remove),
-                            tint = palette.textDim.toComposeColor(),
-                            modifier = Modifier.size(14.dp),
-                        )
+                    Tooltip(stringResource(R.string.remove)) {
+                        IconButton(onClick = { editor.removeWaypoint(waypoint) }, modifier = Modifier.size(30.dp)) {
+                            Icon(
+                                XnotesIcons.close,
+                                contentDescription = stringResource(R.string.remove),
+                                tint = palette.textDim.toComposeColor(),
+                                modifier = Modifier.size(14.dp),
+                            )
+                        }
                     }
                 }
             }

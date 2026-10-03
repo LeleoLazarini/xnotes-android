@@ -435,8 +435,10 @@ private fun BackstageSidebar(modifier: Modifier, nav: SidebarNav, onCollapse: ()
         ) {
             Text("xnotes", color = palette.text.toComposeColor(), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.weight(1f))
-            IconButton(onClick = onCollapse) {
-                Icon(XnotesIcons.prev, stringResource(R.string.collapse_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(22.dp))
+            Tooltip(stringResource(R.string.collapse_sidebar)) {
+                IconButton(onClick = onCollapse) {
+                    Icon(XnotesIcons.prev, stringResource(R.string.collapse_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(22.dp))
+                }
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -482,8 +484,10 @@ private fun BackstageRail(modifier: Modifier, nav: SidebarNav, onExpand: () -> U
         modifier.fillMaxHeight().background(palette.panel.toComposeColor()).padding(vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        IconButton(onClick = onExpand, modifier = Modifier.size(48.dp)) {
-            Icon(XnotesIcons.menu, stringResource(R.string.expand_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+        Tooltip(stringResource(R.string.expand_sidebar), side = TipSide.RIGHT) {
+            IconButton(onClick = onExpand, modifier = Modifier.size(48.dp)) {
+                Icon(XnotesIcons.menu, stringResource(R.string.expand_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+            }
         }
         Spacer(Modifier.height(10.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -536,12 +540,16 @@ private fun BackstageMain(
                 contentAlignment = Alignment.CenterStart,
             ) {
                 if (compact) {
-                    IconButton(onClick = onBackToHome) {
-                        Icon(XnotesIcons.prev, stringResource(R.string.back_to_home), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                    Tooltip(stringResource(R.string.back_to_home)) {
+                        IconButton(onClick = onBackToHome) {
+                            Icon(XnotesIcons.prev, stringResource(R.string.back_to_home), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                        }
                     }
                 } else if (!sidebarOpen) {
-                    IconButton(onClick = onShowSidebar) {
-                        Icon(XnotesIcons.menu, stringResource(R.string.show_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                    Tooltip(stringResource(R.string.show_sidebar)) {
+                        IconButton(onClick = onShowSidebar) {
+                            Icon(XnotesIcons.menu, stringResource(R.string.show_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                        }
                     }
                 }
             }
@@ -810,11 +818,13 @@ private fun HomePane(
         if (editor.browseRoot != null && prefs.showCreateButton) {
             var createMenuOpen by remember { mutableStateOf(false) }
             Box(Modifier.align(Alignment.BottomEnd).padding(20.dp)) {
-                FloatingActionButton(
-                    onClick = { createMenuOpen = true },
-                    shape = CircleShape,
-                ) {
-                    Icon(XnotesIcons.edit, stringResource(R.string.create_new), modifier = Modifier.size(24.dp))
+                Tooltip(stringResource(R.string.create_new)) {
+                    FloatingActionButton(
+                        onClick = { createMenuOpen = true },
+                        shape = CircleShape,
+                    ) {
+                        Icon(XnotesIcons.edit, stringResource(R.string.create_new), modifier = Modifier.size(24.dp))
+                    }
                 }
                 DropdownMenu(expanded = createMenuOpen, onDismissRequest = { createMenuOpen = false }) {
                     NewItemMenuItems({ createMenuOpen = false }, onCreateMode, calls.importPdf)
@@ -845,8 +855,10 @@ private fun ExplorerSection(
         Column(Modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (!sidebarOpen) {
-                    IconButton(onClick = onShowSidebar) {
-                        Icon(XnotesIcons.menu, stringResource(R.string.show_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                    Tooltip(stringResource(R.string.show_sidebar)) {
+                        IconButton(onClick = onShowSidebar) {
+                            Icon(XnotesIcons.menu, stringResource(R.string.show_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                        }
                     }
                     Spacer(Modifier.width(4.dp))
                     Text("xnotes", color = palette.text.toComposeColor(), fontWeight = FontWeight.Bold, fontSize = 20.sp)
@@ -1567,12 +1579,14 @@ private fun ExplorerSection(
                 Row(Modifier.fillMaxWidth().height(EXPLORER_HEADER), verticalAlignment = Alignment.CenterVertically) {
                     if (!sidebarOpen) {
                         Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                            Box(
-                                Modifier.size(40.dp).floatingBacking(liftNow, CircleShape, floatFill, floatEdge)
-                                    .clip(CircleShape).clickable(role = Role.Button, onClick = onShowSidebar),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(XnotesIcons.menu, stringResource(R.string.show_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                            Tooltip(stringResource(R.string.show_sidebar)) {
+                                Box(
+                                    Modifier.size(40.dp).floatingBacking(liftNow, CircleShape, floatFill, floatEdge)
+                                        .clip(CircleShape).clickable(role = Role.Button, onClick = onShowSidebar),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(XnotesIcons.menu, stringResource(R.string.show_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                                }
                             }
                         }
                     }

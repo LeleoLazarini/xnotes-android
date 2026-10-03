@@ -30,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -111,7 +112,8 @@ fun SelectionMenu(host: SelectionMenuHost) {
     val gap = with(density) { 10.dp.toPx() }
     val centerX = ((rect.left + rect.right) / 2.0).toFloat()
     val xPx = (centerX - barWidthPx / 2f).coerceAtLeast(with(density) { 8.dp.toPx() })
-    val yPx = if (rect.top.toFloat() - barHeightPx - gap > 0f) {
+    val barAbove = rect.top.toFloat() - barHeightPx - gap > 0f
+    val yPx = if (barAbove) {
         rect.top.toFloat() - barHeightPx - gap
     } else {
         rect.bottom.toFloat() + gap
@@ -119,41 +121,43 @@ fun SelectionMenu(host: SelectionMenuHost) {
     val xDp = with(density) { xPx.toDp() }
     val yDp = with(density) { yPx.toDp() }
 
-    Row(
-        modifier = Modifier
-            .offset(xDp, yDp)
-            .clip(MaterialTheme.shapes.medium)
-            .background(palette.menuBg.toComposeColor())
-            .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
-    ) {
-        ActionIcon(XnotesIcons.trash, stringResource(R.string.delete)) { host.deleteSelection() }
-        ActionIcon(XnotesIcons.cut, stringResource(R.string.cut)) { host.cutSelection() }
-        ActionIcon(XnotesIcons.copy, stringResource(R.string.copy)) { host.copySelection(); host.dismissSelectionMenu() }
-        ActionIcon(XnotesIcons.front, stringResource(R.string.bring_to_front)) { host.bringToFront(); host.dismissSelectionMenu() }
-        ActionIcon(XnotesIcons.duplicate, stringResource(R.string.duplicate)) { host.duplicateSelection() }
-        Box {
-            ActionIcon(XnotesIcons.more, stringResource(R.string.more)) { overflowOpen = true }
-            DropdownMenu(
-                expanded = overflowOpen,
-                onDismissRequest = { overflowOpen = false },
-                properties = PopupProperties(focusable = false),
-            ) {
-                // Empty when nothing selected carries ink: an image or a text box has no
-                // colour-and-width pair to restyle.
-                val styles = host.selectionStyles()
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.change_style)) },
-                    enabled = styles.isNotEmpty(),
-                    onClick = { overflowOpen = false; styleOpen = true },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.lock)) },
-                    onClick = { overflowOpen = false; host.lockSelection() },
-                )
-            }
-            if (styleOpen) {
-                // Closing settles any preview the slider left open.
-                SelectionStylePopup(host) { host.restyleSelection(null, null); styleOpen = false }
+    CompositionLocalProvider(LocalTipSide provides tipSideFor(barAbove)) {
+        Row(
+            modifier = Modifier
+                .offset(xDp, yDp)
+                .clip(MaterialTheme.shapes.medium)
+                .background(palette.menuBg.toComposeColor())
+                .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
+        ) {
+            ActionIcon(XnotesIcons.trash, stringResource(R.string.delete), shortcut = Keys.DELETE) { host.deleteSelection() }
+            ActionIcon(XnotesIcons.cut, stringResource(R.string.cut)) { host.cutSelection() }
+            ActionIcon(XnotesIcons.copy, stringResource(R.string.copy)) { host.copySelection(); host.dismissSelectionMenu() }
+            ActionIcon(XnotesIcons.front, stringResource(R.string.bring_to_front)) { host.bringToFront(); host.dismissSelectionMenu() }
+            ActionIcon(XnotesIcons.duplicate, stringResource(R.string.duplicate)) { host.duplicateSelection() }
+            Box {
+                ActionIcon(XnotesIcons.more, stringResource(R.string.more)) { overflowOpen = true }
+                DropdownMenu(
+                    expanded = overflowOpen,
+                    onDismissRequest = { overflowOpen = false },
+                    properties = PopupProperties(focusable = false),
+                ) {
+                    // Empty when nothing selected carries ink: an image or a text box has no
+                    // colour-and-width pair to restyle.
+                    val styles = host.selectionStyles()
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.change_style)) },
+                        enabled = styles.isNotEmpty(),
+                        onClick = { overflowOpen = false; styleOpen = true },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.lock)) },
+                        onClick = { overflowOpen = false; host.lockSelection() },
+                    )
+                }
+                if (styleOpen) {
+                    // Closing settles any preview the slider left open.
+                    SelectionStylePopup(host) { host.restyleSelection(null, null); styleOpen = false }
+                }
             }
         }
     }
@@ -270,13 +274,18 @@ fun ScreenshotMenu(editor: Editor) {
 }
 
 @Composable
-private fun ActionIcon(icon: ImageVector, desc: String, enabled: Boolean = true, onClick: () -> Unit) {
+private fun ActionIcon(icon: ImageVector, desc: String, enabled: Boolean = true, shortcut: String? = null, onClick: () -> Unit) {
     val palette = LocalPalette.current
     val tint = palette.text.toComposeColor().let { if (enabled) it else it.copy(alpha = 0.35f) }
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(46.dp)) {
-        Icon(icon, contentDescription = desc, tint = tint, modifier = Modifier.size(22.dp))
+    Tooltip(desc, shortcut = shortcut) {
+        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(46.dp)) {
+            Icon(icon, contentDescription = desc, tint = tint, modifier = Modifier.size(22.dp))
+        }
     }
 }
+
+/** A bar placed beside what it acts on opens its tips away from it, on the same side as itself. */
+private fun tipSideFor(barAbove: Boolean) = if (barAbove) TipSide.ABOVE else TipSide.BELOW
 
 /**
  * What the long-press menu needs from whichever editor is open. Same reasoning as
@@ -359,45 +368,48 @@ fun FlowEditMenu(editor: Editor) {
     val handleClearance = with(density) { (2 * com.xnotes.canvas.TextHandles.RADIUS_DP).dp.toPx() }
     val centerX = ((rect.left + rect.right) / 2.0).toFloat()
     val xPx = (centerX - barWidthPx / 2f).coerceAtLeast(with(density) { 8.dp.toPx() })
-    val yPx = if (rect.top.toFloat() - barHeightPx - gap > 0f) {
+    val barAbove = rect.top.toFloat() - barHeightPx - gap > 0f
+    val yPx = if (barAbove) {
         rect.top.toFloat() - barHeightPx - gap
     } else {
         rect.bottom.toFloat() + handleClearance + gap
     }
 
-    Row(
-        modifier = Modifier
-            .offset(with(density) { xPx.toDp() }, with(density) { yPx.toDp() })
-            .clip(MaterialTheme.shapes.medium)
-            .background(palette.menuBg.toComposeColor())
-            .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
-    ) {
-        ActionIcon(XnotesIcons.cut, stringResource(R.string.cut), enabled = hasSelection) {
-            editor.flowCut(); editor.dismissFlowContextMenu()
-        }
-        ActionIcon(XnotesIcons.copy, stringResource(R.string.copy), enabled = hasSelection) {
-            editor.flowCopy(); editor.dismissFlowContextMenu()
-        }
-        Box {
-            ActionIcon(XnotesIcons.paste, stringResource(R.string.paste), enabled = hasClip) { pasteOpen = true }
-            DropdownMenu(
-                expanded = pasteOpen,
-                onDismissRequest = { pasteOpen = false },
-                properties = PopupProperties(focusable = false),
-            ) {
-                DropdownMenuItem(text = { Text(stringResource(R.string.paste)) }, onClick = {
-                    pasteOpen = false; editor.pastePlainAtCaret(); editor.dismissFlowContextMenu()
-                })
-                DropdownMenuItem(text = { Text(stringResource(R.string.paste_markdown)) }, onClick = {
-                    pasteOpen = false; editor.pasteMarkdownAtCaret(); editor.dismissFlowContextMenu()
-                })
-                DropdownMenuItem(text = { Text(stringResource(R.string.paste_code)) }, onClick = {
-                    pasteOpen = false; editor.pasteAsCodeAtCaret(); editor.dismissFlowContextMenu()
-                })
+    CompositionLocalProvider(LocalTipSide provides tipSideFor(barAbove)) {
+        Row(
+            modifier = Modifier
+                .offset(with(density) { xPx.toDp() }, with(density) { yPx.toDp() })
+                .clip(MaterialTheme.shapes.medium)
+                .background(palette.menuBg.toComposeColor())
+                .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
+        ) {
+            ActionIcon(XnotesIcons.cut, stringResource(R.string.cut), enabled = hasSelection, shortcut = Keys.CUT) {
+                editor.flowCut(); editor.dismissFlowContextMenu()
             }
-        }
-        ActionIcon(XnotesIcons.trash, stringResource(R.string.delete), enabled = hasSelection) {
-            editor.flowDeleteSelection(); editor.dismissFlowContextMenu()
+            ActionIcon(XnotesIcons.copy, stringResource(R.string.copy), enabled = hasSelection, shortcut = Keys.COPY) {
+                editor.flowCopy(); editor.dismissFlowContextMenu()
+            }
+            Box {
+                ActionIcon(XnotesIcons.paste, stringResource(R.string.paste), enabled = hasClip) { pasteOpen = true }
+                DropdownMenu(
+                    expanded = pasteOpen,
+                    onDismissRequest = { pasteOpen = false },
+                    properties = PopupProperties(focusable = false),
+                ) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.paste)) }, onClick = {
+                        pasteOpen = false; editor.pastePlainAtCaret(); editor.dismissFlowContextMenu()
+                    })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.paste_markdown)) }, onClick = {
+                        pasteOpen = false; editor.pasteMarkdownAtCaret(); editor.dismissFlowContextMenu()
+                    })
+                    DropdownMenuItem(text = { Text(stringResource(R.string.paste_code)) }, onClick = {
+                        pasteOpen = false; editor.pasteAsCodeAtCaret(); editor.dismissFlowContextMenu()
+                    })
+                }
+            }
+            ActionIcon(XnotesIcons.trash, stringResource(R.string.delete), enabled = hasSelection, shortcut = Keys.DELETE) {
+                editor.flowDeleteSelection(); editor.dismissFlowContextMenu()
+            }
         }
     }
 }
@@ -428,31 +440,34 @@ fun PdfSelectionMenu(editor: Editor) {
     // A selection taller than the view leaves no room either side: keep the bar on screen.
     val maxY = (editor.state.viewportH - barHeightPx - margin).coerceAtLeast(margin)
     val yPx = (if (above > 0f) above else below).coerceIn(margin, maxY)
+    val barAbove = above > 0f
 
-    Row(
-        modifier = Modifier
-            .offset(with(density) { xPx.toDp() }, with(density) { yPx.toDp() })
-            .clip(MaterialTheme.shapes.medium)
-            .background(palette.menuBg.toComposeColor())
-            .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
-    ) {
-        ActionIcon(XnotesIcons.copy, stringResource(R.string.copy)) { editor.copyPdfText() }
-        for ((type, icon, label) in PDF_MARKS) {
-            ActionIcon(icon, stringResource(label)) { editor.markPdfSelection(type) }
-        }
-        if (actions.isNotEmpty()) {
-            Box {
-                ActionIcon(XnotesIcons.more, stringResource(R.string.more)) { overflowOpen = true }
-                DropdownMenu(
-                    expanded = overflowOpen,
-                    onDismissRequest = { overflowOpen = false },
-                    properties = PopupProperties(focusable = false),
-                ) {
-                    for ((label, app) in actions) {
-                        DropdownMenuItem(text = { Text(label) }, onClick = {
-                            overflowOpen = false
-                            editor.processPdfText(app)
-                        })
+    CompositionLocalProvider(LocalTipSide provides tipSideFor(barAbove)) {
+        Row(
+            modifier = Modifier
+                .offset(with(density) { xPx.toDp() }, with(density) { yPx.toDp() })
+                .clip(MaterialTheme.shapes.medium)
+                .background(palette.menuBg.toComposeColor())
+                .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
+        ) {
+            ActionIcon(XnotesIcons.copy, stringResource(R.string.copy), shortcut = Keys.COPY) { editor.copyPdfText() }
+            for ((type, icon, label) in PDF_MARKS) {
+                ActionIcon(icon, stringResource(label)) { editor.markPdfSelection(type) }
+            }
+            if (actions.isNotEmpty()) {
+                Box {
+                    ActionIcon(XnotesIcons.more, stringResource(R.string.more)) { overflowOpen = true }
+                    DropdownMenu(
+                        expanded = overflowOpen,
+                        onDismissRequest = { overflowOpen = false },
+                        properties = PopupProperties(focusable = false),
+                    ) {
+                        for ((label, app) in actions) {
+                            DropdownMenuItem(text = { Text(label) }, onClick = {
+                                overflowOpen = false
+                                editor.processPdfText(app)
+                            })
+                        }
                     }
                 }
             }
@@ -481,51 +496,56 @@ fun MarkupMenu(editor: Editor) {
     val above = rect.top.toFloat() - barHeightPx - gap
     val maxY = (editor.state.viewportH - barHeightPx - margin).coerceAtLeast(margin)
     val yPx = (if (above > 0f) above else rect.bottom.toFloat() + gap).coerceIn(margin, maxY)
+    val barAbove = above > 0f
     val m = menu.markup
 
-    Row(
-        modifier = Modifier
-            .offset(with(density) { xPx.toDp() }, with(density) { yPx.toDp() })
-            .clip(MaterialTheme.shapes.medium)
-            .background(palette.menuBg.toComposeColor())
-            .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box {
-            val colourLabel = stringResource(R.string.markup_colour)
-            IconButton(onClick = { colorsOpen = true }, modifier = Modifier.size(46.dp).semantics { contentDescription = colourLabel }) {
-                Box(Modifier.size(20.dp).clip(CircleShape).background(m.color.toComposeColor()))
-            }
-            DropdownMenu(expanded = colorsOpen, onDismissRequest = { colorsOpen = false }, properties = PopupProperties(focusable = false)) {
-                Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    editor.toolbarColors.take(editor.toolbarColorCount).forEach { c ->
-                        MarkupDot(c.toComposeColor(), active = c.r == m.color.r && c.g == m.color.g && c.b == m.color.b) {
-                            colorsOpen = false
-                            editor.recolorMarkup(c)
+    CompositionLocalProvider(LocalTipSide provides tipSideFor(barAbove)) {
+        Row(
+            modifier = Modifier
+                .offset(with(density) { xPx.toDp() }, with(density) { yPx.toDp() })
+                .clip(MaterialTheme.shapes.medium)
+                .background(palette.menuBg.toComposeColor())
+                .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box {
+                val colourLabel = stringResource(R.string.markup_colour)
+                Tooltip(colourLabel) {
+                    IconButton(onClick = { colorsOpen = true }, modifier = Modifier.size(46.dp).semantics { contentDescription = colourLabel }) {
+                        Box(Modifier.size(20.dp).clip(CircleShape).background(m.color.toComposeColor()))
+                    }
+                }
+                DropdownMenu(expanded = colorsOpen, onDismissRequest = { colorsOpen = false }, properties = PopupProperties(focusable = false)) {
+                    Row(Modifier.padding(horizontal = 8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        editor.toolbarColors.take(editor.toolbarColorCount).forEach { c ->
+                            MarkupDot(c.toComposeColor(), active = c.r == m.color.r && c.g == m.color.g && c.b == m.color.b) {
+                                colorsOpen = false
+                                editor.recolorMarkup(c)
+                            }
                         }
                     }
                 }
             }
-        }
-        Box {
-            ActionIcon(markIcon(m.type), stringResource(R.string.markup_kind)) { kindsOpen = true }
-            DropdownMenu(expanded = kindsOpen, onDismissRequest = { kindsOpen = false }, properties = PopupProperties(focusable = false)) {
-                for ((type, icon, label) in PDF_MARKS) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(label)) },
-                        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
-                        onClick = {
-                            kindsOpen = false
-                            if (type != m.type) editor.retypeMarkup(type)
-                        },
-                    )
+            Box {
+                ActionIcon(markIcon(m.type), stringResource(R.string.markup_kind)) { kindsOpen = true }
+                DropdownMenu(expanded = kindsOpen, onDismissRequest = { kindsOpen = false }, properties = PopupProperties(focusable = false)) {
+                    for ((type, icon, label) in PDF_MARKS) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(label)) },
+                            leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                            onClick = {
+                                kindsOpen = false
+                                if (type != m.type) editor.retypeMarkup(type)
+                            },
+                        )
+                    }
                 }
             }
+            ActionIcon(XnotesIcons.note, stringResource(R.string.markup_note)) { editor.editMarkupNote() }
+            ActionIcon(XnotesIcons.copy, stringResource(R.string.copy)) { editor.copyMarkupText() }
+            ActionIcon(XnotesIcons.trash, stringResource(R.string.delete)) { editor.deleteMarkup() }
+            if (menu.openLink != null) ActionIcon(XnotesIcons.link, stringResource(R.string.open_link)) { editor.openMarkupLink() }
         }
-        ActionIcon(XnotesIcons.note, stringResource(R.string.markup_note)) { editor.editMarkupNote() }
-        ActionIcon(XnotesIcons.copy, stringResource(R.string.copy)) { editor.copyMarkupText() }
-        ActionIcon(XnotesIcons.trash, stringResource(R.string.delete)) { editor.deleteMarkup() }
-        if (menu.openLink != null) ActionIcon(XnotesIcons.link, stringResource(R.string.open_link)) { editor.openMarkupLink() }
     }
 }
 
@@ -654,16 +674,19 @@ fun FlowTableMenu(editor: Editor) {
     val palette = LocalPalette.current
     val density = LocalDensity.current
     val bar = tableBarRect(editor, table, density) ?: return
-    Row(
-        modifier = Modifier
-            .offset(with(density) { bar.left.toDp() }, with(density) { bar.top.toDp() })
-            .clip(MaterialTheme.shapes.medium)
-            .background(palette.menuBg.toComposeColor())
-            .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
-    ) {
-        ActionIcon(XnotesIcons.tableEdit, stringResource(R.string.edit_table)) { editor.startTableEdit(table) }
-        ActionIcon(XnotesIcons.magicWand, stringResource(R.string.fit_columns)) { editor.tableAutoFit(table) }
-        ActionIcon(Icons.Outlined.TableChart, stringResource(R.string.table_style)) { editor.openTableStyle(table) }
-        ActionIcon(Icons.Outlined.GridOff, stringResource(R.string.delete_table)) { editor.tableDelete(table) }
+    // The bar sits over the table's top edge, so its tips open upward, off the table.
+    CompositionLocalProvider(LocalTipSide provides TipSide.ABOVE) {
+        Row(
+            modifier = Modifier
+                .offset(with(density) { bar.left.toDp() }, with(density) { bar.top.toDp() })
+                .clip(MaterialTheme.shapes.medium)
+                .background(palette.menuBg.toComposeColor())
+                .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
+        ) {
+            ActionIcon(XnotesIcons.tableEdit, stringResource(R.string.edit_table)) { editor.startTableEdit(table) }
+            ActionIcon(XnotesIcons.magicWand, stringResource(R.string.fit_columns)) { editor.tableAutoFit(table) }
+            ActionIcon(Icons.Outlined.TableChart, stringResource(R.string.table_style)) { editor.openTableStyle(table) }
+            ActionIcon(Icons.Outlined.GridOff, stringResource(R.string.delete_table)) { editor.tableDelete(table) }
+        }
     }
 }

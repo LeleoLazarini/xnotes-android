@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -95,7 +96,7 @@ fun SidePanel(
             SegIcon(XnotesIcons.thumbnails, stringResource(R.string.pages), tab == SidePanelTab.PAGES) { editor.sidePanelTab = SidePanelTab.PAGES }
             SegIcon(XnotesIcons.contents, stringResource(R.string.contents), tab == SidePanelTab.CONTENTS) { editor.sidePanelTab = SidePanelTab.CONTENTS }
             SegIcon(XnotesIcons.bookmark, stringResource(R.string.bookmarks), tab == SidePanelTab.BOOKMARKS) { editor.sidePanelTab = SidePanelTab.BOOKMARKS }
-            SegIcon(XnotesIcons.search, stringResource(R.string.search), tab == SidePanelTab.SEARCH) { editor.sidePanelTab = SidePanelTab.SEARCH }
+            SegIcon(XnotesIcons.search, stringResource(R.string.search), tab == SidePanelTab.SEARCH, shortcut = Keys.SEARCH) { editor.sidePanelTab = SidePanelTab.SEARCH }
         }
         Box(Modifier.fillMaxWidth().weight(1f)) {
             when (tab) {
@@ -112,15 +113,17 @@ fun SidePanel(
 }
 
 @Composable
-private fun SegIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, selected: Boolean, onClick: () -> Unit) {
+private fun SegIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, selected: Boolean, shortcut: String? = null, onClick: () -> Unit) {
     val palette = LocalPalette.current
-    IconButton(onClick = onClick) {
-        Icon(
-            icon,
-            contentDescription = desc,
-            tint = if (selected) palette.accent.toComposeColor() else palette.textDim.toComposeColor(),
-            modifier = Modifier.size(20.dp),
-        )
+    Tooltip(desc, shortcut = shortcut) {
+        IconButton(onClick = onClick) {
+            Icon(
+                icon,
+                contentDescription = desc,
+                tint = if (selected) palette.accent.toComposeColor() else palette.textDim.toComposeColor(),
+                modifier = Modifier.size(20.dp),
+            )
+        }
     }
 }
 
@@ -229,13 +232,15 @@ private fun PageThumb(
             } else if (!selecting) {
                 // Three-dot menu, on a faint scrim so it reads over any thumbnail.
                 Box(Modifier.align(Alignment.TopEnd).padding(2.dp)) {
-                    Box(
-                        Modifier.size(26.dp).clip(CircleShape)
-                            .background(palette.panel.toComposeColor().copy(alpha = 0.7f))
-                            .clickable { menuOpen = true },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(XnotesIcons.more, stringResource(R.string.page_options), tint = palette.text.toComposeColor(), modifier = Modifier.size(16.dp))
+                    Tooltip(stringResource(R.string.page_options)) {
+                        Box(
+                            Modifier.size(26.dp).clip(CircleShape)
+                                .background(palette.panel.toComposeColor().copy(alpha = 0.7f))
+                                .clickable { menuOpen = true },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(XnotesIcons.more, stringResource(R.string.page_options), tint = palette.text.toComposeColor(), modifier = Modifier.size(16.dp))
+                        }
                     }
                     PageContextMenu(editor, index, menuOpen, { menuOpen = false }, onSharePages, onSavePagesAsPdf, onSavePagesAsImages)
                 }
@@ -306,27 +311,34 @@ private fun PageSelectionBar(
     onSavePagesAsImages: (List<Int>) -> Unit,
 ) {
     val palette = LocalPalette.current
-    Row(
-        Modifier.fillMaxWidth().height(52.dp).background(palette.surface.toComposeColor()).padding(horizontal = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = { editor.clearPageSelection() }) {
-            Icon(XnotesIcons.close, stringResource(R.string.clear_selection), tint = palette.textDim.toComposeColor(), modifier = Modifier.size(18.dp))
+    // The bar sits at the panel's foot, so its tips open upward.
+    CompositionLocalProvider(LocalTipSide provides TipSide.ABOVE) {
+        Row(
+            Modifier.fillMaxWidth().height(52.dp).background(palette.surface.toComposeColor()).padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Tooltip(stringResource(R.string.clear_selection)) {
+                IconButton(onClick = { editor.clearPageSelection() }) {
+                    Icon(XnotesIcons.close, stringResource(R.string.clear_selection), tint = palette.textDim.toComposeColor(), modifier = Modifier.size(18.dp))
+                }
+            }
+            Text("${editor.pageSelectionCount}", color = palette.text.toComposeColor(), fontSize = 13.sp)
+            Spacer(Modifier.weight(1f))
+            BarAction(XnotesIcons.copy, stringResource(R.string.copy)) { editor.copyPages(editor.selectedPageIndices()) }
+            BarAction(XnotesIcons.cut, stringResource(R.string.cut)) { editor.cutPages(editor.selectedPageIndices()) }
+            BarAction(XnotesIcons.trash, stringResource(R.string.delete)) { editor.deletePages(editor.selectedPageIndices()) }
+            FormatMenu(XnotesIcons.download, stringResource(R.string.save_as), { onSavePagesAsImages(editor.selectedPageIndices()) }, { onSavePagesAsPdf(editor.selectedPageIndices()) })
+            FormatMenu(XnotesIcons.share, stringResource(R.string.share), { onSharePages(editor.selectedPageIndices(), false) }, { onSharePages(editor.selectedPageIndices(), true) })
         }
-        Text("${editor.pageSelectionCount}", color = palette.text.toComposeColor(), fontSize = 13.sp)
-        Spacer(Modifier.weight(1f))
-        BarAction(XnotesIcons.copy, stringResource(R.string.copy)) { editor.copyPages(editor.selectedPageIndices()) }
-        BarAction(XnotesIcons.cut, stringResource(R.string.cut)) { editor.cutPages(editor.selectedPageIndices()) }
-        BarAction(XnotesIcons.trash, stringResource(R.string.delete)) { editor.deletePages(editor.selectedPageIndices()) }
-        FormatMenu(XnotesIcons.download, stringResource(R.string.save_as), { onSavePagesAsImages(editor.selectedPageIndices()) }, { onSavePagesAsPdf(editor.selectedPageIndices()) })
-        FormatMenu(XnotesIcons.share, stringResource(R.string.share), { onSharePages(editor.selectedPageIndices(), false) }, { onSharePages(editor.selectedPageIndices(), true) })
     }
 }
 
 @Composable
 private fun BarAction(icon: ImageVector, desc: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(34.dp)) {
-        Icon(icon, desc, tint = LocalPalette.current.textDim.toComposeColor(), modifier = Modifier.size(19.dp))
+    Tooltip(desc) {
+        IconButton(onClick = onClick, modifier = Modifier.size(34.dp)) {
+            Icon(icon, desc, tint = LocalPalette.current.textDim.toComposeColor(), modifier = Modifier.size(19.dp))
+        }
     }
 }
 
@@ -487,8 +499,10 @@ private fun BookmarksTab(editor: Editor) {
 
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
-            IconButton(onClick = { showAdd = true }) {
-                Icon(XnotesIcons.plus, stringResource(R.string.add_bookmark), tint = palette.textDim.toComposeColor(), modifier = Modifier.size(18.dp))
+            Tooltip(stringResource(R.string.add_bookmark)) {
+                IconButton(onClick = { showAdd = true }) {
+                    Icon(XnotesIcons.plus, stringResource(R.string.add_bookmark), tint = palette.textDim.toComposeColor(), modifier = Modifier.size(18.dp))
+                }
             }
         }
         if (bookmarks.isEmpty()) {
@@ -506,8 +520,10 @@ private fun BookmarksTab(editor: Editor) {
                             fontSize = 12.sp,
                             modifier = Modifier.weight(1f),
                         )
-                        IconButton(onClick = { editor.removeBookmark(i) }) {
-                            Icon(XnotesIcons.trash, stringResource(R.string.remove), tint = palette.textDim.toComposeColor(), modifier = Modifier.size(16.dp))
+                        Tooltip(stringResource(R.string.remove)) {
+                            IconButton(onClick = { editor.removeBookmark(i) }) {
+                                Icon(XnotesIcons.trash, stringResource(R.string.remove), tint = palette.textDim.toComposeColor(), modifier = Modifier.size(16.dp))
+                            }
                         }
                     }
                 }

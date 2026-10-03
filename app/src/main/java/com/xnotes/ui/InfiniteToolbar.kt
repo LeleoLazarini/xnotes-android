@@ -92,7 +92,15 @@ fun InfiniteToolbar(
                         if (icon != null) {
                             Box {
                                 // Tapping the armed tool again opens its settings, as the paged bar does.
-                                ToolbarIcon(icon, stringResource(tool.labelRes), active = editor.tool == tool, glideKey = tool) {
+                                val armed = editor.tool == tool
+                                val configurable = tool.isStroke || tool == Tool.ERASER || tool == Tool.SHAPE || tool == Tool.SELECT
+                                ToolbarIcon(
+                                    icon,
+                                    stringResource(tool.labelRes),
+                                    active = armed,
+                                    glideKey = tool,
+                                    hint = if (armed && configurable) stringResource(R.string.tip_tap_for_settings) else null,
+                                ) {
                                     when {
                                         tool == Tool.ERASER && editor.tool == tool -> eraserOpen = true
                                         tool == Tool.SHAPE && editor.tool == tool -> shapeOpen = true
@@ -130,9 +138,9 @@ fun InfiniteToolbar(
                         }
 
                     ToolbarItem.UNDO ->
-                        ToolbarIcon(XnotesIcons.undo, stringResource(R.string.undo), enabled = editor.canUndo) { editor.undo() }
+                        ToolbarIcon(XnotesIcons.undo, stringResource(R.string.undo), enabled = editor.canUndo, shortcut = Keys.UNDO) { editor.undo() }
                     ToolbarItem.REDO ->
-                        ToolbarIcon(XnotesIcons.redo, stringResource(R.string.redo), enabled = editor.canRedo) { editor.redo() }
+                        ToolbarIcon(XnotesIcons.redo, stringResource(R.string.redo), enabled = editor.canRedo, shortcut = Keys.REDO) { editor.redo() }
 
                     // Where the paged bar keeps its page, styles and view menus. Waypoints take the
                     // place of pagination: on an unbounded canvas, a saved view is what a page
@@ -151,20 +159,20 @@ fun InfiniteToolbar(
                         }
 
                     ToolbarItem.ZOOM -> {
-                        ToolbarIcon(XnotesIcons.zoomOut, stringResource(R.string.zoom_out), enabled = !editor.zoomLocked) {
+                        ToolbarIcon(XnotesIcons.zoomOut, stringResource(R.string.zoom_out), enabled = !editor.zoomLocked, shortcut = Keys.ZOOM_OUT) {
                             editor.zoomBy(1.0 / InfiniteEditor.ZOOM_STEP)
                         }
                         Label("${editor.zoomPercent}%")
-                        ToolbarIcon(XnotesIcons.zoomIn, stringResource(R.string.zoom_in), enabled = !editor.zoomLocked) {
+                        ToolbarIcon(XnotesIcons.zoomIn, stringResource(R.string.zoom_in), enabled = !editor.zoomLocked, shortcut = Keys.ZOOM_IN) {
                             editor.zoomBy(InfiniteEditor.ZOOM_STEP)
                         }
                     }
                     ToolbarItem.FIT ->
-                        ToolbarIcon(XnotesIcons.fit, stringResource(R.string.fit_all), enabled = !editor.zoomLocked) { editor.zoomToFit() }
+                        ToolbarIcon(XnotesIcons.fit, stringResource(R.string.fit_all), enabled = !editor.zoomLocked, shortcut = Keys.FIT_ALL) { editor.zoomToFit() }
 
                     ToolbarItem.ZOOM_LOCK -> ToolbarIcon(
                         if (editor.zoomLocked) XnotesIcons.lock else XnotesIcons.unlock,
-                        stringResource(R.string.toolbar_zoom_lock),
+                        stringResource(if (editor.zoomLocked) R.string.unlock_zoom else R.string.lock_zoom),
                         active = editor.zoomLocked,
                     ) { editor.toggleZoomLock() }
 

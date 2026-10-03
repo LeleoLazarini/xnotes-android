@@ -150,14 +150,16 @@ private fun QueryField(editor: Editor) {
             )
         }
         if (field.text.isNotEmpty()) {
-            Icon(
-                XnotesIcons.close, stringResource(R.string.clear_search),
-                tint = palette.textDim.toComposeColor(),
-                modifier = Modifier.size(16.dp).clip(CircleShape).clickable {
-                    field = TextFieldValue("")
-                    editor.searchFor("")
-                },
-            )
+            Tooltip(stringResource(R.string.clear_search)) {
+                Icon(
+                    XnotesIcons.close, stringResource(R.string.clear_search),
+                    tint = palette.textDim.toComposeColor(),
+                    modifier = Modifier.size(16.dp).clip(CircleShape).clickable {
+                        field = TextFieldValue("")
+                        editor.searchFor("")
+                    },
+                )
+            }
         }
     }
 }
@@ -177,8 +179,8 @@ private fun QueryBar(editor: Editor, results: SearchResults?) {
             maxLines = 1,
             modifier = Modifier.weight(1f),
         )
-        StepButton(XnotesIcons.chevronUp, stringResource(R.string.previous_match), any) { editor.searchStep(forward = false) }
-        StepButton(XnotesIcons.chevronDown, stringResource(R.string.next_match), any) { editor.searchStep(forward = true) }
+        StepButton(XnotesIcons.chevronUp, stringResource(R.string.previous_match), any, Keys.PREV_MATCH) { editor.searchStep(forward = false) }
+        StepButton(XnotesIcons.chevronDown, stringResource(R.string.next_match), any, Keys.NEXT_MATCH) { editor.searchStep(forward = true) }
     }
 }
 
@@ -195,30 +197,34 @@ private fun position(editor: Editor, results: SearchResults?): String {
 @Composable
 private fun Toggle(label: String, description: String, on: Boolean, onToggle: () -> Unit) {
     val palette = LocalPalette.current
-    Box(
-        Modifier
-            .size(32.dp)
-            .padding(3.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (on) palette.selectionBackground.toComposeColor() else Color.Transparent)
-            .toggleable(value = on, role = Role.Checkbox, onValueChange = { onToggle() })
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label,
-            color = (if (on) palette.selectionForeground else palette.textDim).toComposeColor(),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
+    Tooltip(description) {
+        Box(
+            Modifier
+                .size(32.dp)
+                .padding(3.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (on) palette.selectionBackground.toComposeColor() else Color.Transparent)
+                .toggleable(value = on, role = Role.Checkbox, onValueChange = { onToggle() })
+                .semantics { contentDescription = description },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                label,
+                color = (if (on) palette.selectionForeground else palette.textDim).toComposeColor(),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
     }
 }
 
 @Composable
-private fun StepButton(icon: ImageVector, description: String, enabled: Boolean, onClick: () -> Unit) {
+private fun StepButton(icon: ImageVector, description: String, enabled: Boolean, shortcut: String, onClick: () -> Unit) {
     val palette = LocalPalette.current
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(36.dp)) {
-        Icon(icon, description, tint = (if (enabled) palette.text else palette.textDim).toComposeColor(), modifier = Modifier.size(18.dp))
+    Tooltip(description, shortcut = shortcut) {
+        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(36.dp)) {
+            Icon(icon, description, tint = (if (enabled) palette.text else palette.textDim).toComposeColor(), modifier = Modifier.size(18.dp))
+        }
     }
 }
 

@@ -16,6 +16,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -72,41 +73,46 @@ fun TextStyleBar(editor: Editor) {
     val xDp = with(density) { xPx.toDp() }
     val yDp = with(density) { yPx.toDp() }
 
-    Row(
-        modifier = Modifier
-            .offset(xDp, yDp)
-            .height(44.dp)
-            .onSizeChanged { measuredWidthPx = it.width.toFloat() }
-            .clip(MaterialTheme.shapes.medium)
-            .background(palette.menuBg.toComposeColor())
-            .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        FacePicker(current = bar.face) { editor.setTextFace(it) }
-        Box(
-            Modifier.width(1.dp).fillMaxHeight().padding(vertical = 8.dp)
-                .background(palette.border.toComposeColor()),
-        )
-        SizeStepper(
-            size = bar.pointSize,
-            onDelta = { editor.setTextPointSize(bar.pointSize + it) },
-        )
-        // A commit (✓) button so an edit can be finished without tapping off the box.
-        if (bar.editing) {
+    // Tips open upward so they don't cover the box being styled.
+    CompositionLocalProvider(LocalTipSide provides TipSide.ABOVE) {
+        Row(
+            modifier = Modifier
+                .offset(xDp, yDp)
+                .height(44.dp)
+                .onSizeChanged { measuredWidthPx = it.width.toFloat() }
+                .clip(MaterialTheme.shapes.medium)
+                .background(palette.menuBg.toComposeColor())
+                .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.medium),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FacePicker(current = bar.face) { editor.setTextFace(it) }
             Box(
                 Modifier.width(1.dp).fillMaxHeight().padding(vertical = 8.dp)
                     .background(palette.border.toComposeColor()),
             )
-            Box(
-                modifier = Modifier.size(44.dp).clickable { editor.commitText() },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    XnotesIcons.check,
-                    contentDescription = stringResource(R.string.done),
-                    tint = palette.text.toComposeColor(),
-                    modifier = Modifier.size(22.dp),
+            SizeStepper(
+                size = bar.pointSize,
+                onDelta = { editor.setTextPointSize(bar.pointSize + it) },
+            )
+            // A commit (✓) button so an edit can be finished without tapping off the box.
+            if (bar.editing) {
+                Box(
+                    Modifier.width(1.dp).fillMaxHeight().padding(vertical = 8.dp)
+                        .background(palette.border.toComposeColor()),
                 )
+                Tooltip(stringResource(R.string.done)) {
+                    Box(
+                        modifier = Modifier.size(44.dp).clickable { editor.commitText() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            XnotesIcons.check,
+                            contentDescription = stringResource(R.string.done),
+                            tint = palette.text.toComposeColor(),
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                }
             }
         }
     }
@@ -117,22 +123,24 @@ private fun FacePicker(current: FontFace, onPick: (FontFace) -> Unit) {
     val palette = LocalPalette.current
     var open by remember { mutableStateOf(false) }
     Box {
-        Row(
-            modifier = Modifier
-                .fillMaxHeight()
-                .clickable { open = true }
-                .padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                fontLabel(current),
-                color = palette.text.toComposeColor(),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 92.dp),
-                style = TextStyle(fontFamily = current.toComposeFamily(), fontSize = 15.sp),
-            )
-            Text(" ▾", color = palette.textDim.toComposeColor(), fontSize = 11.sp)
+        Tooltip(stringResource(R.string.font)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .clickable { open = true }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    fontLabel(current),
+                    color = palette.text.toComposeColor(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 92.dp),
+                    style = TextStyle(fontFamily = current.toComposeFamily(), fontSize = 15.sp),
+                )
+                Text(" ▾", color = palette.textDim.toComposeColor(), fontSize = 11.sp)
+            }
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             FontMenuItems(current = current) {
@@ -147,24 +155,26 @@ private fun FacePicker(current: FontFace, onPick: (FontFace) -> Unit) {
 private fun SizeStepper(size: Double, onDelta: (Double) -> Unit) {
     val palette = LocalPalette.current
     Row(verticalAlignment = Alignment.CenterVertically) {
-        StepButton("−") { onDelta(-1.0) } // minus
+        StepButton("−", stringResource(R.string.smaller)) { onDelta(-1.0) } // minus
         Text(
             size.roundToInt().toString(),
             color = palette.text.toComposeColor(),
             fontSize = 15.sp,
             modifier = Modifier.width(26.dp),
         )
-        StepButton("+") { onDelta(1.0) }
+        StepButton("+", stringResource(R.string.larger)) { onDelta(1.0) }
     }
 }
 
 @Composable
-private fun StepButton(glyph: String, onClick: () -> Unit) {
+private fun StepButton(glyph: String, label: String, onClick: () -> Unit) {
     val palette = LocalPalette.current
-    Box(
-        modifier = Modifier.size(40.dp).clickable { onClick() },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(glyph, color = palette.text.toComposeColor(), fontSize = 20.sp)
+    Tooltip(label) {
+        Box(
+            modifier = Modifier.size(40.dp).clickable { onClick() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(glyph, color = palette.text.toComposeColor(), fontSize = 20.sp)
+        }
     }
 }

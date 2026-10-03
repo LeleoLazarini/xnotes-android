@@ -13,6 +13,7 @@ import com.xnotes.core.model.PageSize
 import com.xnotes.core.pal.FontFace
 import com.xnotes.core.text.TableBorders
 import com.xnotes.core.tools.MarkupMode
+import com.xnotes.core.tools.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolbarItem
 import com.xnotes.platform.FontCatalog
@@ -53,6 +54,20 @@ val MarkupMode.labelRes: Int
         MarkupMode.UNDERLINE -> R.string.underline
         MarkupMode.STRIKEOUT -> R.string.strikethrough
         MarkupMode.SQUIGGLY -> R.string.markup_squiggly
+    }
+
+@get:StringRes
+val ShapeKind.labelRes: Int
+    get() = when (this) {
+        ShapeKind.LINE -> R.string.shape_line
+        ShapeKind.ARROW -> R.string.shape_arrow
+        ShapeKind.RECTANGLE -> R.string.shape_rectangle
+        ShapeKind.ELLIPSE -> R.string.shape_ellipse
+        ShapeKind.CIRCLE -> R.string.shape_circle
+        ShapeKind.TRIANGLE -> R.string.shape_triangle
+        ShapeKind.POLYGON -> R.string.shape_polygon
+        ShapeKind.POLYLINE -> R.string.shape_polyline
+        ShapeKind.CURVE -> R.string.shape_curve
     }
 
 @get:StringRes

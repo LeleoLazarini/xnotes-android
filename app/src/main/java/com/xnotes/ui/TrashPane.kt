@@ -99,8 +99,10 @@ internal fun TrashPane(editor: Editor, sidebarOpen: Boolean, onShowSidebar: () -
             val searchRoom = maxWidth - emptyWidth - 12.dp - (if (sidebarOpen) 0.dp else 48.dp)
             Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (!sidebarOpen) {
-                    IconButton(onClick = onShowSidebar) {
-                        Icon(XnotesIcons.menu, stringResource(R.string.show_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                    Tooltip(stringResource(R.string.show_sidebar)) {
+                        IconButton(onClick = onShowSidebar) {
+                            Icon(XnotesIcons.menu, stringResource(R.string.show_sidebar), tint = palette.text.toComposeColor(), modifier = Modifier.size(24.dp))
+                        }
                     }
                 }
                 Text(stringResource(R.string.trash), color = palette.text.toComposeColor(), fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 1, modifier = Modifier.weight(1f))
@@ -300,8 +302,10 @@ private fun TrashRow(
             }
             var menu by remember { mutableStateOf(false) }
             Box {
-                IconButton(onClick = { menu = true }, modifier = Modifier.size(40.dp)) {
-                    Icon(XnotesIcons.more, stringResource(R.string.more_for, label(item)), tint = dim, modifier = Modifier.size(17.dp))
+                Tooltip(stringResource(R.string.more)) {
+                    IconButton(onClick = { menu = true }, modifier = Modifier.size(40.dp)) {
+                        Icon(XnotesIcons.more, stringResource(R.string.more_for, label(item)), tint = dim, modifier = Modifier.size(17.dp))
+                    }
                 }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text(stringResource(R.string.restore)) }, onClick = { menu = false; onRestore() })

@@ -102,6 +102,21 @@ internal fun ExplorerChip(
     labelled: Boolean = true,
     onClick: () -> Unit,
 ) {
+    // Down to its icon, a chip names itself in a tip.
+    if (labelled) ChipBody(label, on, modifier, icon, trailing, labelled, onClick)
+    else Tooltip(label) { ChipBody(label, on, modifier, icon, trailing, labelled, onClick) }
+}
+
+@Composable
+private fun ChipBody(
+    label: String,
+    on: Boolean,
+    modifier: Modifier,
+    icon: ImageVector?,
+    trailing: ImageVector?,
+    labelled: Boolean,
+    onClick: () -> Unit,
+) {
     val palette = LocalPalette.current
     val fg = (if (on) palette.selectionForeground else palette.text).toComposeColor()
     val iconTint = (if (on) palette.selectionForeground else palette.textDim).toComposeColor()
@@ -188,30 +203,34 @@ internal fun LayoutSwitcher(layouts: List<ExplorerLayout>, current: ExplorerLayo
     ) {
         layouts.forEach { l ->
             val on = l == current
-            Box(
-                Modifier
-                    .width(42.dp)
-                    .height(40.dp)
-                    .background(if (on) palette.selectionBackground.toComposeColor() else Color.Transparent)
-                    .clickable { onPick(l) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(layoutIcon(l), stringResource(l.labelRes), tint = (if (on) palette.selectionForeground else palette.textDim).toComposeColor(), modifier = Modifier.size(20.dp))
+            Tooltip(stringResource(l.labelRes)) {
+                Box(
+                    Modifier
+                        .width(42.dp)
+                        .height(40.dp)
+                        .background(if (on) palette.selectionBackground.toComposeColor() else Color.Transparent)
+                        .clickable { onPick(l) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(layoutIcon(l), stringResource(l.labelRes), tint = (if (on) palette.selectionForeground else palette.textDim).toComposeColor(), modifier = Modifier.size(20.dp))
+                }
             }
         }
     }
 }
 
-/** A plain icon button in the explorer's header and bars. */
+/** A plain icon button in the explorer's header and bars, named by a tooltip. */
 @Composable
 internal fun ExplorerIcon(icon: ImageVector, desc: String, tint: Color? = null, enabled: Boolean = true, onClick: () -> Unit) {
     val palette = LocalPalette.current
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(40.dp)) {
-        Icon(
-            icon, desc,
-            tint = (tint ?: palette.text.toComposeColor()).copy(alpha = if (enabled) 1f else 0.35f),
-            modifier = Modifier.size(20.dp),
-        )
+    Tooltip(desc) {
+        IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(40.dp)) {
+            Icon(
+                icon, desc,
+                tint = (tint ?: palette.text.toComposeColor()).copy(alpha = if (enabled) 1f else 0.35f),
+                modifier = Modifier.size(20.dp),
+            )
+        }
     }
 }
 

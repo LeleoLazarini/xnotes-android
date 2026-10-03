@@ -157,7 +157,13 @@ internal fun ToolbarFrame(
     // Material places a menu below its anchor; shifting it one bar across and one button up puts it
     // beside the rail, and on a right rail material mirrors it to the left side on its own.
     val menuOffset = if (bar.vertical) DpOffset(bar.thickness, -bar.button) else DpOffset.Zero
-    CompositionLocalProvider(LocalToolGlide provides glide, LocalBar provides bar, LocalMenuOffset provides menuOffset) {
+    val tipSide = when (look.position) {
+        ToolbarPosition.TOP -> TipSide.BELOW
+        ToolbarPosition.BOTTOM -> TipSide.ABOVE
+        ToolbarPosition.LEFT -> TipSide.RIGHT
+        ToolbarPosition.RIGHT -> TipSide.LEFT
+    }
+    CompositionLocalProvider(LocalToolGlide provides glide, LocalBar provides bar, LocalMenuOffset provides menuOffset, LocalTipSide provides tipSide) {
         if (bar.vertical) {
             Column(
                 stretch.width(bar.thickness).then(surface),
