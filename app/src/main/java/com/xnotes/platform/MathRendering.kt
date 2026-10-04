@@ -120,10 +120,10 @@ object MathRendering : MathTypesetter {
     // A formula a canvas stopped asking for this long ago has scrolled away.
     private const val SHOWN_STALE_MS = 750L
 
-    // Results for formulas on screen reach the main thread on the next frame; the rest in batches,
-    // since each batch that brings boxes lays the whole flow out again.
-    private const val ON_SCREEN_MS = 16L
-    private const val OFF_SCREEN_MS = 250L
+    // Each batch that brings boxes lays the whole flow out again, so results reach the main thread
+    // in batches: soon for formulas on screen, which shimmer meanwhile, less often for the rest.
+    private const val ON_SCREEN_MS = 60L
+    private const val OFF_SCREEN_MS = 300L
 
     // How long a caller that can wait gives the composition to hand over a renderer.
     private const val ENGINE_WAIT_MS = 5000L

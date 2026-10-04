@@ -102,6 +102,9 @@ import kotlinx.coroutines.launch
  *  when the session restores instantly. */
 private const val MIN_LOADER_MS = 600L
 
+/** How long the maths waits for the font bytes it measures with before going without. */
+private const val MATH_FONT_WAIT_MS = 1500L
+
 /** Whether the display has a camera cutout (notch/hole-punch). False below API 29, which has no
  *  cutout API; such devices fall back to fullscreen by default. Also false for a context with no
  *  display of its own, which cannot answer the question. */
@@ -287,6 +290,8 @@ private fun EditorScreen(
     val mathText = androidx.compose.ui.text.rememberTextMeasurer(cacheSize = 256)
     val mathFonts = com.xnotes.platform.LatexInternals.defaultFonts()
     LaunchedEffect(mathDensity, mathText, mathFonts) {
+        // The fonts come a moment before the bytes that measure them exactly; setting formulas between would set them twice.
+        if (mathFonts.mainBytes == null) kotlinx.coroutines.delay(MATH_FONT_WAIT_MS)
         com.xnotes.platform.MathRendering.install(mathDensity, mathText, mathFonts)
         editor.refreshFlowMath()
     }
