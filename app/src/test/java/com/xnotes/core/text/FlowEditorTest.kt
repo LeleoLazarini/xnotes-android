@@ -166,6 +166,17 @@ class FlowEditorTest {
     }
 
     @Test
+    fun anEmptyHeadingTypesAsAHeadingWithNothingArmed() {
+        // A caret placed back on an empty heading has no pending style left to type with.
+        val flow = TextFlow().apply { paragraphs.add(para("").apply { headingLevel = 2 }) }
+        val editor = FlowEditor(flow)
+        assertEquals(Paragraph.HEADING_STYLE, editor.charStyleAt(FlowPos.START))
+        editor.insertText(FlowPos.START, "Title")
+        assertEquals(2, flow.paragraphs[0].headingLevel)
+        assertEquals(Paragraph.HEADING_STYLE, flow.paragraphs[0].runs.single().style)
+    }
+
+    @Test
     fun typingWithExplicitStyleStartsAStyledRun() {
         val flow = TextFlow().apply { paragraphs.add(para("ab")) }
         FlowEditor(flow).insertText(FlowPos(0, 1), "X", CharStyle(italic = true))
