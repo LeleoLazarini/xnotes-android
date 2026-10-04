@@ -2,8 +2,14 @@ package com.xnotes.platform
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
+import android.graphics.Shader
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.LruCache
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -17,7 +23,13 @@ import com.hrm.latex.renderer.model.LatexFontFamilies
 import com.hrm.latex.renderer.model.LatexTheme
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.pal.MathBox
+import com.xnotes.core.pal.MathSize
 import com.xnotes.core.pal.MathTypesetter
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 import kotlin.math.ceil
 import kotlin.math.log2
 import kotlin.math.max
@@ -28,9 +40,12 @@ import kotlin.math.pow
  * Typesets and draws the flow's LaTeX, through a renderer that can only be built
  * inside a composition. One per process like [com.xnotes.settings.LiveSettings],
  * because a [AndroidRenderer] is made fresh around each canvas and there is
- * nowhere else for the formula cache to live. Until [install] runs, measuring
- * returns null and maths reads as its own source, which is also what happens to
- * LaTeX that will not parse.
+ * nowhere else for the formula cache to live.
+ *
+ * Setting a formula takes the library milliseconds, so the main thread never does it: [size]
+ * answers pending and queues the formula for a worker, and a canvas draws a stand-in until it
+ * lands, when [Listener]s hear of it. Only callers off the main thread ([Blocking], [Pace.WAIT])
+ * set formulas where they stand.
  *
  * A formula is laid out once, and that one layout gives both its box and its rasters. Rasters are
  * alpha masks the text colour tints when drawn, so a new colour or theme costs nothing, except for
@@ -49,6 +64,8 @@ object MathRendering : MathTypesetter {
 
     @Volatile private var engine: Engine? = null
 
+    private val installed = CountDownLatch(1)
+
     /** A formula as the caches know it. */
     private data class Formula(val latex: String, val sizePt: Double, val display: Boolean)
 
@@ -60,6 +77,24 @@ object MathRendering : MathTypesetter {
 
     /** A raster of [formula] at [bucket]; [argb] is the colour it was painted in, or 0 for a mask. */
     private data class RasterKey(val formula: Formula, val bucket: Int, val argb: Int)
+
+    /** How a canvas draws a formula that is not ready to draw. */
+    enum class Pace {
+        /** Set it there and then: thumbnails and exports, off the main thread. */
+        WAIT,
+
+        /** Queue it and shimmer in its place: the live canvas. */
+        LIVE,
+
+        /** Queue it and hold a flat tint in its place: a still of a page. */
+        STILL,
+    }
+
+    /** Told on the main thread as queued formulas land. */
+    fun interface Listener {
+        /** [sized] when a box landed, which moves the layout; [idle] once nothing more is queued. */
+        fun landed(sized: Boolean, idle: Boolean)
+    }
 
     // Settings are a few dozen bytes each and the layout pass asks after every formula in the note,
     // so this holds far more than any note has.
@@ -82,8 +117,28 @@ object MathRendering : MathTypesetter {
     // The bitmap a PDF export falls back to when it cannot take a formula as outlines.
     private const val EXPORT_SCALE = 3f
 
+    // A formula a canvas stopped asking for this long ago has scrolled away.
+    private const val SHOWN_STALE_MS = 750L
+
+    // Results for formulas on screen reach the main thread on the next frame; the rest in batches,
+    // since each batch that brings boxes lays the whole flow out again.
+    private const val ON_SCREEN_MS = 16L
+    private const val OFF_SCREEN_MS = 250L
+
+    // How long a caller that can wait gives the composition to hand over a renderer.
+    private const val ENGINE_WAIT_MS = 5000L
+
+    // The stand-in: a tint of the formula's ink, with a paler sheen sweeping across it.
+    private const val STAND_IN_ALPHA = 0.14f
+    private const val SHEEN_ALPHA = 0.05f
+    private const val SHEEN_MS = 1300L
+    private const val CORNER = 0.18f
+
     /** What a mask is painted in: its alpha is all a mask keeps. */
     private val MASK_INK = Rgba(0, 0, 0, 255)
+
+    /** Stands in the cache for a raster that could not be made, so it is not asked for again. */
+    private val NONE: Bitmap by lazy { Bitmap.createBitmap(1, 1, Bitmap.Config.ALPHA_8) }
 
     private val settings = LruCache<Formula, Setting>(SETTINGS)
 
@@ -100,7 +155,21 @@ object MathRendering : MathTypesetter {
      */
     class Ink {
         internal val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        internal val standIn = Paint(Paint.ANTI_ALIAS_FLAG)
         internal val rect = RectF()
+        internal val matrix = Matrix()
+        private var sheen: LinearGradient? = null
+        private var sheenOf = 0
+
+        /** A band from [base] to [light] and back, one unit wide, for the stand-in's sweep. */
+        internal fun sheen(base: Int, light: Int): LinearGradient {
+            sheen?.let { if (sheenOf == base) return it }
+            return LinearGradient(0f, 0f, 1f, 0f, intArrayOf(base, light, base), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+                .also {
+                    sheen = it
+                    sheenOf = base
+                }
+        }
     }
 
     /**
@@ -115,18 +184,57 @@ object MathRendering : MathTypesetter {
             layouts.evictAll()
             rasters.evictAll()
         }
+        installed.countDown()
+        queueLock.withLock { work.signal() }
     }
 
-    override fun ready(): Boolean = engine != null
+    /** The engine, waited for a while by a caller off the main thread that would rather not go without. */
+    private fun awaitEngine(): Engine? {
+        engine?.let { return it }
+        if (Looper.myLooper() != Looper.getMainLooper()) installed.await(ENGINE_WAIT_MS, TimeUnit.MILLISECONDS)
+        return engine
+    }
+
+    /** Formulas queue before the renderer exists, and set once it does. */
+    override fun ready(): Boolean = true
 
     override fun measure(latex: String, sizePt: Double, display: Boolean): MathBox? {
-        val e = engine ?: return null
-        if (latex.isBlank() || e.spPx <= 0f) return null
+        if (latex.isBlank()) return null
+        val e = awaitEngine() ?: return null
+        if (e.spPx <= 0f) return null
         val f = Formula(latex, sizePt, display)
         settings.get(f)?.let { return it.box }
-        // The library caches in plain maps, and page caches are built off the main
-        // thread, so every call into it is serialized here rather than there.
+        // The library caches in plain maps, so every call into it is serialized here.
         return synchronized(this) { settings.get(f) ?: layOut(e, f).first }.box
+    }
+
+    override fun size(latex: String, sizePt: Double, display: Boolean): MathSize {
+        if (latex.isBlank()) return MathSize.Refused
+        val f = Formula(latex, sizePt, display)
+        settings.get(f)?.let { return it.box ?: MathSize.Refused }
+        queueLock.withLock {
+            if (laid.add(f)) {
+                earlier.remove(f)
+                wake()
+            }
+        }
+        return MathSize.Pending
+    }
+
+    override fun beginLayout() {
+        queueLock.withLock {
+            if (laid.isEmpty()) return
+            earlier.addAll(laid)
+            laid = LinkedHashSet()
+        }
+    }
+
+    /** The same typesetter for a caller off the main thread that would rather wait than guess. */
+    object Blocking : MathTypesetter {
+        override fun measure(latex: String, sizePt: Double, display: Boolean): MathBox? =
+            MathRendering.measure(latex, sizePt, display)
+
+        override fun ready(): Boolean = awaitEngine() != null
     }
 
     /** Set [f] afresh, remembering the setting and the layout it came from. Call holding the lock. */
@@ -152,7 +260,8 @@ object MathRendering : MathTypesetter {
 
     /**
      * Draw [latex] with its left edge at [x], sitting on [baseline], in [color], on a canvas that
-     * shows one page px as [scale] of its own.
+     * shows one page px as [scale] of its own. True when it is drawn, or never will be because it
+     * does not set; false when it is still being set at the [pace] given, and the caller stands in.
      */
     fun draw(
         canvas: Canvas,
@@ -164,21 +273,82 @@ object MathRendering : MathTypesetter {
         color: Rgba,
         display: Boolean,
         scale: Float,
-    ) {
-        val e = engine ?: return
-        if (latex.isBlank() || e.spPx <= 0f) return
+        pace: Pace,
+    ): Boolean {
+        if (latex.isBlank()) return true
         val f = Formula(latex, sizePt, display)
         val bucket = bucketFor(scale)
-        val cached = settings.get(f)?.let { s -> rasters.get(RasterKey(f, bucket, argbFor(s, color))) }
-        val bmp = cached ?: synchronized(this) { rasterLocked(e, f, bucket, color) } ?: return
-        val box = settings.get(f)?.box ?: return
+        if (pace == Pace.WAIT) {
+            val e = awaitEngine() ?: return true
+            val cached = settings.get(f)?.let { s -> rasters.get(RasterKey(f, bucket, argbFor(s, color))) }
+            val bmp = cached ?: synchronized(this) { rasterLocked(e, f, bucket, color) }
+            val box = settings.get(f)?.box ?: return true
+            blit(canvas, ink, bmp, x, baseline, box, color)
+            return true
+        }
+        val setting = settings.get(f)
+        if (setting == null) {
+            ask(f, bucket, color, color.toArgb())
+            return false
+        }
+        val box = setting.box ?: return true
+        val argb = argbFor(setting, color)
+        val bmp = rasters.get(RasterKey(f, bucket, argb)) ?: run {
+            ask(f, bucket, color, argb)
+            // Whatever size of it there is stands in meanwhile, so a pinch never flashes a formula.
+            nearest(f, bucket, argb)
+        } ?: return false
         blit(canvas, ink, bmp, x, baseline, box, color)
+        return true
     }
+
+    /** Queue [latex] for a canvas that is showing a stand-in for it now. */
+    fun want(latex: String, sizePt: Double, display: Boolean, color: Rgba, scale: Float) {
+        if (latex.isBlank()) return
+        val f = Formula(latex, sizePt, display)
+        val argb = settings.get(f)?.let { argbFor(it, color) } ?: color.toArgb()
+        ask(f, bucketFor(scale), color, argb)
+    }
+
+    /** A stand-in at [left]..[bottom] for a formula not drawn yet, in a tint of [color]; it sweeps unless [still]. */
+    fun drawStandIn(canvas: Canvas, ink: Ink, left: Double, top: Double, right: Double, bottom: Double, color: Rgba, still: Boolean) {
+        val w = (right - left).toFloat()
+        val h = (bottom - top).toFloat()
+        if (w <= 0f || h <= 0f) return
+        ink.rect.set(left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
+        val radius = min(w, h) * CORNER
+        val base = tint(color, STAND_IN_ALPHA)
+        val paint = ink.standIn
+        if (still) {
+            paint.shader = null
+            paint.color = base
+        } else {
+            val band = max(h * 2.5f, w * 0.3f)
+            val phase = (SystemClock.uptimeMillis() % SHEEN_MS) / SHEEN_MS.toFloat()
+            ink.matrix.setScale(band, 1f)
+            ink.matrix.postTranslate(left.toFloat() - band + phase * (w + band), 0f)
+            val sheen = ink.sheen(base, tint(color, SHEEN_ALPHA))
+            sheen.setLocalMatrix(ink.matrix)
+            paint.shader = sheen
+            paint.color = android.graphics.Color.BLACK
+        }
+        canvas.drawRoundRect(ink.rect, radius, radius, paint)
+    }
+
+    private fun tint(color: Rgba, alpha: Float): Int =
+        (color.toArgb() and 0xFFFFFF) or ((color.a * alpha).toInt().coerceIn(0, 255) shl 24)
 
     private fun argbFor(setting: Setting, color: Rgba): Int = if (setting.colored) color.toArgb() else 0
 
+    /** [f]'s raster nearest [bucket], larger ones first since shrinking stays sharp. */
+    private fun nearest(f: Formula, bucket: Int, argb: Int): Bitmap? {
+        for (b in bucket + 1..MAX_BUCKET) rasters.get(RasterKey(f, b, argb))?.let { return it }
+        for (b in bucket - 1 downTo MIN_BUCKET) rasters.get(RasterKey(f, b, argb))?.let { return it }
+        return null
+    }
+
     /** [f]'s raster at [bucket] for [color], painted now unless it is cached. Call holding the lock. */
-    private fun rasterLocked(e: Engine, f: Formula, bucket: Int, color: Rgba): Bitmap? {
+    private fun rasterLocked(e: Engine, f: Formula, bucket: Int, color: Rgba): Bitmap {
         var setting = settings.get(f)
         var layout = layouts.get(f)
         if (setting == null || (setting.box != null && layout == null)) {
@@ -186,13 +356,13 @@ object MathRendering : MathTypesetter {
             setting = s
             layout = l
         }
-        val box = setting.box ?: return null
+        val box = setting.box ?: return NONE
         val key = RasterKey(f, bucket, argbFor(setting, color))
         rasters.get(key)?.let { return it }
         // The colours a formula paints in sit in its layout, so one that has its own is set again in
         // the text colour; any other paints its mask from the layout it was measured with.
         val painted = if (setting.colored) layoutIn(e, f, color) else layout
-        val bmp = painted?.let { paint(e, it, box, scaleOf(bucket), setting.colored) } ?: return null
+        val bmp = painted?.let { paint(e, it, box, scaleOf(bucket), setting.colored) } ?: NONE
         rasters.put(key, bmp)
         return bmp
     }
@@ -221,6 +391,7 @@ object MathRendering : MathTypesetter {
     }
 
     private fun blit(canvas: Canvas, ink: Ink, bmp: Bitmap, x: Double, baseline: Double, box: MathBox, color: Rgba) {
+        if (bmp === NONE) return
         // A mask takes the text colour from the paint; a coloured raster already carries it.
         ink.paint.color = if (bmp.config == Bitmap.Config.ALPHA_8) color.toArgb() else android.graphics.Color.BLACK
         ink.rect.set(
@@ -232,6 +403,141 @@ object MathRendering : MathTypesetter {
         canvas.drawBitmap(bmp, null, ink.rect, ink.paint)
     }
 
+    // --- the queue ---
+
+    /** A raster a canvas is standing in for now, and when it last asked. */
+    private class Shown(val formula: Formula, val bucket: Int, val color: Rgba, var asked: Long)
+
+    private val queueLock = ReentrantLock()
+    private val work = queueLock.newCondition()
+
+    /** Rasters canvases are standing in for, first come first set. */
+    private val shown = LinkedHashMap<RasterKey, Shown>()
+
+    /** Formulas the latest layout pass asked after, in its order, which is the note's. */
+    private var laid = LinkedHashSet<Formula>()
+
+    /** Formulas asked after before that and not since, set once the rest are done. */
+    private val earlier = LinkedHashSet<Formula>()
+
+    private var idle = true
+    private var sizedSince = false
+    private var deliverAt = 0L
+
+    private val listeners = CopyOnWriteArrayList<Listener>()
+
+    private val main by lazy { Handler(Looper.getMainLooper()) }
+
+    private val worker: Thread by lazy {
+        Thread({ work() }, "xnotes-math").apply {
+            isDaemon = true
+            start()
+        }
+    }
+
+    fun addListener(l: Listener) {
+        listeners.add(l)
+    }
+
+    fun removeListener(l: Listener) {
+        listeners.remove(l)
+    }
+
+    private fun ask(f: Formula, bucket: Int, color: Rgba, argb: Int) {
+        val now = SystemClock.uptimeMillis()
+        val key = RasterKey(f, bucket, argb)
+        queueLock.withLock {
+            val s = shown[key]
+            if (s != null) {
+                s.asked = now
+                return
+            }
+            shown[key] = Shown(f, bucket, color, now)
+            wake()
+        }
+    }
+
+    /** Call holding [queueLock]. */
+    private fun wake() {
+        idle = false
+        worker
+        work.signal()
+    }
+
+    private fun work() {
+        while (true) {
+            val job = next()
+            var sized = false
+            synchronized(this) {
+                val e = engine ?: return@synchronized
+                val f = if (job is Shown) job.formula else job as Formula
+                val had = settings.get(f) != null
+                if (job is Shown) rasterLocked(e, f, job.bucket, job.color) else if (!had) layOut(e, f)
+                sized = !had
+            }
+            landed(sized, onScreen = job is Shown)
+        }
+    }
+
+    /** The next formula to set, waiting while there is none or no engine to set it with. */
+    private fun next(): Any {
+        queueLock.lock()
+        try {
+            while (true) {
+                if (engine != null) {
+                    val now = SystemClock.uptimeMillis()
+                    val shownLeft = shown.values.iterator()
+                    while (shownLeft.hasNext()) {
+                        val s = shownLeft.next()
+                        shownLeft.remove()
+                        if (now - s.asked <= SHOWN_STALE_MS) return s
+                    }
+                    laid.firstOrNull()?.let {
+                        laid.remove(it)
+                        return it
+                    }
+                    earlier.firstOrNull()?.let {
+                        earlier.remove(it)
+                        return it
+                    }
+                    if (!idle) {
+                        idle = true
+                        deliver(ON_SCREEN_MS)
+                    }
+                }
+                work.await()
+            }
+        } finally {
+            queueLock.unlock()
+        }
+    }
+
+    private fun landed(sized: Boolean, onScreen: Boolean) = queueLock.withLock {
+        if (sized) sizedSince = true
+        deliver(if (onScreen) ON_SCREEN_MS else OFF_SCREEN_MS)
+    }
+
+    /** Hand what has landed to the main thread within [delayMs], unless it is going sooner. Call holding [queueLock]. */
+    private fun deliver(delayMs: Long) {
+        val at = SystemClock.uptimeMillis() + delayMs
+        if (deliverAt != 0L && deliverAt <= at) return
+        deliverAt = at
+        main.removeCallbacks(delivery)
+        main.postAtTime(delivery, at)
+    }
+
+    private val delivery = Runnable {
+        val sized: Boolean
+        val wasIdle: Boolean
+        queueLock.withLock {
+            sized = sizedSince
+            wasIdle = idle
+            sizedSince = false
+            deliverAt = 0L
+        }
+        for (l in listeners) l.landed(sized, wasIdle)
+    }
+
     /**
      * Draw [latex] with the renderer's own drawing calls into [canvas], its box's top-left at the
      * canvas origin and in content px: the same box [measure] reports, so a backend recording the
@@ -239,8 +545,9 @@ object MathRendering : MathTypesetter {
      * engine yet or the LaTeX does not set.
      */
     fun drawVector(canvas: Canvas, latex: String, sizePt: Double, color: Rgba, display: Boolean): Boolean {
-        val e = engine ?: return false
-        if (latex.isBlank() || e.spPx <= 0f) return false
+        if (latex.isBlank()) return false
+        val e = awaitEngine() ?: return false
+        if (e.spPx <= 0f) return false
         return synchronized(this) {
             runCatching {
                 val layout = layoutIn(e, Formula(latex, sizePt, display), color) ?: return@runCatching false
@@ -258,8 +565,9 @@ object MathRendering : MathTypesetter {
      * The bitmap is a fresh one the caller owns.
      */
     fun formulaBitmap(latex: String, sizePt: Double, color: Rgba, display: Boolean): Pair<Bitmap, MathBox>? {
-        val e = engine ?: return null
-        if (latex.isBlank() || e.spPx <= 0f) return null
+        if (latex.isBlank()) return null
+        val e = awaitEngine() ?: return null
+        if (e.spPx <= 0f) return null
         return synchronized(this) {
             val f = Formula(latex, sizePt, display)
             val box = (settings.get(f) ?: layOut(e, f).first).box ?: return@synchronized null

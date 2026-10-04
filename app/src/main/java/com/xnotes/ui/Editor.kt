@@ -1477,7 +1477,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         if (controller.frontInk?.live != true) view.requestRender()
     }
 
+    /** Formulas set off the main thread landing: a box moves the layout, a raster only repaints. */
+    private val mathLanded = com.xnotes.platform.MathRendering.Listener { sized, idle -> onMathLanded(sized, idle) }
+
+    /** Set when a side-panel thumbnail stood in for a formula, so they render again once it lands. */
+    @Volatile private var thumbsAwaitMath = false
+
     init {
+        com.xnotes.platform.MathRendering.addListener(mathLanded)
         view.input = { ev ->
             // Any fresh canvas touch quietly retires the flow action bar and still does its job.
             when (ev.actionMasked) {
@@ -1756,13 +1763,48 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
      * Installs the flow-text painter: it draws the PUBLISHED layout snapshot for the page
      * (never the live model — cache threads call this), under the ink and over the page
      * background via [CanvasState.paintFlow]. A page unknown to the snapshot paints nothing.
+     * Formulas go through [CanvasState.paintMath] instead, painted live rather than cached.
      */
     private fun installFlowPainter() {
         state.paintFlow = { page, renderer, region ->
             val pf = publishedFlow
             val idx = pf?.indexOf?.get(page)
-            if (pf != null && idx != null) FlowPainter.paintPage(renderer, pf.frame, idx, region)
+            if (pf != null && idx != null) FlowPainter.paintPage(renderer, pf.frame, idx, region, math = false)
         }
+        state.paintMath = { page, renderer, region ->
+            val pf = publishedFlow
+            val idx = pf?.indexOf?.get(page)
+            if (pf != null && idx != null) FlowPainter.paintMath(renderer, pf.frame, idx, region)
+        }
+    }
+
+    private fun onMathLanded(sized: Boolean, idle: Boolean) {
+        if (sized && publishedFlow?.frame?.hasPendingMath == true) republishForMath()
+        if (idle && thumbsAwaitMath) {
+            thumbsAwaitMath = false
+            synchronized(pageThumbs) { pageThumbs.evictAll() }
+            pdfThumbTick++
+        }
+        onRender()
+    }
+
+    /**
+     * Formula boxes landed: lay the flow out again and rebuild just the pages whose text moved,
+     * their old surfaces still up meanwhile, so nothing blinks while a note's maths settles.
+     */
+    private fun republishForMath() {
+        val old = publishedFlow?.frame
+        val oldPages = publishedPageList
+        republishFlow(invalidate = false)
+        if (state.flowLifted) return
+        val new = publishedFlow?.frame ?: return
+        val moved = HashSet<Page>()
+        for (i in 0 until maxOf(old?.pages?.size ?: 0, new.pages.size)) {
+            if (old?.textSignature(i) == new.textSignature(i)) continue
+            oldPages.getOrNull(i)?.let(moved::add)
+            publishedPageList.getOrNull(i)?.let(moved::add)
+        }
+        if (moved.isNotEmpty()) state.refreshInk(moved)
     }
 
     /** Feed the layout derived highlight colours (published on the main thread only). */
@@ -2025,7 +2067,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
      * small) and safe off-thread (the highlighter is stateless per call).
      */
     private fun themedFlowLayout(flow: com.xnotes.core.text.TextFlow): FlowLayout {
-        val layout = FlowLayout(textMeasurer, com.xnotes.platform.MathRendering)
+        val layout = FlowLayout(textMeasurer, com.xnotes.platform.MathRendering.Blocking)
         val theme = activeCodeTheme()
         layout.codeBackground = { theme.background }
         layout.autoColor = { defaultTextColor() }
@@ -2874,6 +2916,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             state.paintPageBackground?.invoke(page, r, scale, cover)
         }
         state.paintFlow?.invoke(page, r, cover)
+        (r as? com.xnotes.platform.AndroidRenderer)?.let { ar ->
+            ar.mathPace = com.xnotes.platform.MathRendering.Pace.STILL
+            state.paintMath?.invoke(page, ar, cover)
+            if (ar.standIns > 0) thumbsAwaitMath = true
+        }
         for (item in itemsSnapshot(page)) {
             if (!active()) return null
             item.paint(r)
@@ -7092,6 +7139,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         if (other.noteOpen) { secondaryStarted = true; return }
         if (!secondaryStarted) return
         secondaryStarted = false
+        com.xnotes.platform.MathRendering.removeListener(other.mathLanded)
         other.sibling = null
         sibling = null
         secondary = null

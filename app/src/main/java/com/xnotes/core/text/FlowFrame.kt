@@ -212,6 +212,45 @@ class FlowFrame(
 
     val isEmpty: Boolean get() = pages.all { it.lines.isEmpty() }
 
+    /** Whether any formula here holds a guessed box, so its real one landing moves this layout. */
+    val hasPendingMath: Boolean by lazy { pages.any { p -> p.lines.any { l -> l.segs.any { it.pending } } } }
+
+    /**
+     * A fingerprint of everything a cache bakes of [pageIndex]: where its lines, words, chips and
+     * tables sit, but not its formulas, which the screen paints apart. Two frames that agree here
+     * paint the page's cached text alike.
+     */
+    fun textSignature(pageIndex: Int): Long {
+        val page = pages.getOrNull(pageIndex) ?: return 0L
+        var h = 1L
+        fun mix(v: Long) {
+            h = (h * 1_000_003L) xor v
+        }
+        for (line in page.lines) {
+            mix(line.paraIndex.toLong())
+            mix(line.startChar.toLong())
+            mix(line.endChar.toLong())
+            mix(line.top.toRawBits())
+            mix(line.baseline.toRawBits())
+            mix(line.bottom.toRawBits())
+            for (x in line.xs) mix(x.toRawBits())
+            for (seg in line.segs) mix(if (seg.math) -seg.start.toLong() - 1 else seg.start.toLong())
+            for (d in line.decos) {
+                mix(d.x0.toRawBits())
+                mix(d.x1.toRawBits())
+                mix((d.math?.ordinal ?: -1).toLong())
+            }
+        }
+        for (t in page.tables) {
+            for (row in t.rows) {
+                mix(row.top.toRawBits())
+                mix(row.bottom.toRawBits())
+            }
+            for (x in t.colXs) mix(x.toRawBits())
+        }
+        return h
+    }
+
     fun pagesWithLines(): Set<Int> = pages.indices.filterTo(mutableSetOf()) { pages[it].lines.isNotEmpty() }
 
     /** The page-local extent of the flow on [pageIndex] (padded for chips/markers), or null. */

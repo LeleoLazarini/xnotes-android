@@ -19,6 +19,7 @@ import com.xnotes.core.model.Stroke
 import com.xnotes.core.pal.BlendMode
 import com.xnotes.core.pal.Pen
 import com.xnotes.platform.AndroidRenderer
+import com.xnotes.platform.MathRendering
 
 /**
  * The on-screen canvas. Draws the document in immediate mode each frame
@@ -394,7 +395,7 @@ class CanvasView @JvmOverloads constructor(
         val st = state ?: return
         canvas.drawColor(st.palette.bg.toArgb())
 
-        val r = AndroidRenderer(canvas)
+        val r = AndroidRenderer(canvas).apply { mathPace = MathRendering.Pace.LIVE }
         val origin = st.origin()
         r.save()
         r.translate(origin.x, origin.y)
@@ -416,14 +417,15 @@ class CanvasView @JvmOverloads constructor(
             st.backgroundForOrSchedule(page)?.let { blitPageSurface(r, st, page, pr, it.surface) }
             // A live caret session lifts the flow out of the ink cache; paint it
             // immediate-mode here (under the ink, over the background) so every
-            // keystroke shows without waiting for a cache rebuild.
-            if (st.flowLifted) {
-                r.withSave {
-                    r.clipRect(pr)
-                    r.translate(pr.left, pr.top)
-                    st.applyPageTransform(r, page)
-                    st.paintFlow?.invoke(page, r, st.displayRectToPage(page, visible.translate(-pr.left, -pr.top)))
-                }
+            // keystroke shows without waiting for a cache rebuild. Formulas are
+            // never cached, so one that finishes setting shows on the next frame.
+            r.withSave {
+                r.clipRect(pr)
+                r.translate(pr.left, pr.top)
+                st.applyPageTransform(r, page)
+                val region = st.displayRectToPage(page, visible.translate(-pr.left, -pr.top))
+                if (st.flowLifted) st.paintFlow?.invoke(page, r, region)
+                st.paintMath?.invoke(page, r, region)
             }
             st.cacheForOrSchedule(page)?.let { blitPageSurface(r, st, page, pr, it.surface) }
         }
@@ -440,12 +442,13 @@ class CanvasView @JvmOverloads constructor(
                 val dw = blit.base.width * blit.scale
                 val dh = blit.base.height * blit.scale
                 r.drawRaster(blit.base, Rect(blit.dx, blit.dy, dw, dh))
-                // A lifted flow is absent from the sharp ink layer too: draw it live
-                // between the sharp base and sharp ink so the stack order holds.
-                // Clipped to the blit's own rect: outside it the page loop's live pass
-                // already painted the flow, and a second (translucent) chip on top
-                // reads as a lighter band while the slid sharp frame settles.
-                if (st.flowLifted) {
+                // A lifted flow and the formulas are absent from the sharp ink layer
+                // too: draw them live between the sharp base and sharp ink so the
+                // stack order holds. Clipped to the blit's own rect: outside it the
+                // page loop's live pass already painted them, and a second
+                // (translucent) chip on top reads as a lighter band while the slid
+                // sharp frame settles.
+                if (st.flowLifted || st.paintMath != null) {
                     r.withSave {
                         r.clipRect(Rect(blit.dx, blit.dy, dw, dh))
                         r.translate(origin.x, origin.y)
@@ -459,7 +462,9 @@ class CanvasView @JvmOverloads constructor(
                                 r.clipRect(pr)
                                 r.translate(pr.left, pr.top)
                                 st.applyPageTransform(r, page)
-                                st.paintFlow?.invoke(page, r, st.displayRectToPage(page, visible.translate(-pr.left, -pr.top)))
+                                val region = st.displayRectToPage(page, visible.translate(-pr.left, -pr.top))
+                                if (st.flowLifted) st.paintFlow?.invoke(page, r, region)
+                                st.paintMath?.invoke(page, r, region)
                             }
                         }
                     }
@@ -526,6 +531,9 @@ class CanvasView @JvmOverloads constructor(
         // Debug HUD on top, reading the just-pruned cache state (viewport space).
         debugOverlay.sampleFrame(System.nanoTime())
         debugOverlay.draw(r, st)
+
+        // A formula still being set shimmers in its place; keep the sweep moving until it lands.
+        if (r.standIns > 0) postInvalidateDelayed(SHIMMER_FRAME_MS)
     }
 
     /** Fires once the view has been still for [SHARP_SETTLE_MS], rendering the sharp viewport. */
@@ -679,6 +687,9 @@ class CanvasView @JvmOverloads constructor(
 
         /** How long the view must be still before the sharp viewport is rendered (ms). */
         private const val SHARP_SETTLE_MS = 90L
+
+        /** Repaint interval (ms) while a formula's stand-in shimmers. */
+        private const val SHIMMER_FRAME_MS = 33L
 
         /** Idle repaint interval (ms) while the debug HUD is visible, so its FPS falls to 0. */
         private const val DEBUG_TICK_MS = 250L

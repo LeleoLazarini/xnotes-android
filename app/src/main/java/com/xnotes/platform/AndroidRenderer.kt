@@ -377,6 +377,13 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
         canvas.drawText(text, x.toFloat(), baseline.toFloat(), paint)
     }
 
+    /** What drawing a formula that is not set yet does; the live canvas queues it rather than waits. */
+    var mathPace = MathRendering.Pace.WAIT
+
+    /** How many stand-ins were drawn for formulas still being set. */
+    var standIns = 0
+        private set
+
     override fun drawMath(
         latex: String,
         x: Double,
@@ -384,9 +391,13 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
         sizePt: Double,
         color: Rgba,
         display: Boolean,
-    ): Boolean {
-        MathRendering.draw(canvas, mathInk, latex, x, baseline, sizePt, color, display, avgScale)
-        return true
+    ): Boolean = MathRendering.draw(canvas, mathInk, latex, x, baseline, sizePt, color, display, avgScale, mathPace)
+
+    override fun drawMathPending(latex: String, sizePt: Double, display: Boolean, box: Rect, color: Rgba) {
+        if (mathPace != MathRendering.Pace.WAIT) MathRendering.want(latex, sizePt, display, color, avgScale)
+        val still = mathPace != MathRendering.Pace.LIVE
+        MathRendering.drawStandIn(canvas, mathInk, box.left, box.top, box.right, box.bottom, color, still)
+        standIns++
     }
 
     private fun applyPen(pen: Pen) {

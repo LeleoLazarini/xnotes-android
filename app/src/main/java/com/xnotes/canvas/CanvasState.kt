@@ -346,6 +346,13 @@ class CanvasState(
     var paintFlow: ((page: Page, renderer: Renderer, region: Rect) -> Unit)? = null
 
     /**
+     * Optional painter for the flow's formulas, which [paintFlow] leaves out of every cache:
+     * [CanvasView] paints them over the background each frame, so one that finishes setting
+     * appears without its page being rebuilt. Like [paintFlow] it reads only the published layout.
+     */
+    var paintMath: ((page: Page, renderer: Renderer, region: Rect) -> Unit)? = null
+
+    /**
      * True while a flow-text caret session is live: screen ink caches build WITHOUT
      * the flow and [CanvasView] paints it immediate-mode each frame instead, so a
      * keystroke never waits for a cache rebuild. Session start/end must invalidate
@@ -1401,9 +1408,15 @@ class CanvasState(
      * untouched — undo/redo never edits it, so it must not flash either.
      */
     fun refreshAllInk() {
+        refreshInk(caches.keys.toList())
+    }
+
+    /** [refreshAllInk] for just [pages]: rebuilt off-thread, their old surfaces blitted meanwhile. */
+    fun refreshInk(pages: Collection<Page>) {
         cacheGen++
         sharpGen++
-        for (page in caches.keys.toList()) {
+        for (page in pages) {
+            if (page !in caches) continue
             staleInk.add(page)
             scheduleInk(page, clampedRes(page))
         }
