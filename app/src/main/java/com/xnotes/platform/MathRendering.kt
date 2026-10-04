@@ -25,6 +25,7 @@ import com.xnotes.core.model.Rgba
 import com.xnotes.core.pal.MathBox
 import com.xnotes.core.pal.MathSize
 import com.xnotes.core.pal.MathTypesetter
+import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -424,7 +425,8 @@ object MathRendering : MathTypesetter {
     private var sizedSince = false
     private var deliverAt = 0L
 
-    private val listeners = CopyOnWriteArrayList<Listener>()
+    /** Held weakly, since this outlives any editor that listens; each editor holds its own. */
+    private val listeners = CopyOnWriteArrayList<WeakReference<Listener>>()
 
     private val main by lazy { Handler(Looper.getMainLooper()) }
 
@@ -436,11 +438,11 @@ object MathRendering : MathTypesetter {
     }
 
     fun addListener(l: Listener) {
-        listeners.add(l)
+        listeners.add(WeakReference(l))
     }
 
     fun removeListener(l: Listener) {
-        listeners.remove(l)
+        listeners.removeAll { it.get().let { held -> held == null || held === l } }
     }
 
     private fun ask(f: Formula, bucket: Int, color: Rgba, argb: Int) {
@@ -535,7 +537,7 @@ object MathRendering : MathTypesetter {
             sizedSince = false
             deliverAt = 0L
         }
-        for (l in listeners) l.landed(sized, wasIdle)
+        for (ref in listeners) ref.get()?.landed(sized, wasIdle) ?: listeners.remove(ref)
     }
 
     /**
