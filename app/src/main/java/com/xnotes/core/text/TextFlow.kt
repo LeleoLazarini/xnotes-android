@@ -2,8 +2,6 @@ package com.xnotes.core.text
 
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.pal.FontFace
-import kotlin.math.ln
-import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /** Paragraph alignment. [id] is the stable serialized token. */
@@ -276,22 +274,19 @@ data class FlowDefaults(
 
         /**
          * The factory text size for a screen whose shorter side is [shortSideDp]. A
-         * narrower screen shows the fitted page smaller, so the size grows as a power
-         * law through the two calibration points, in whole points held to 12..36.
+         * narrower screen shows the fitted page smaller, so the size grows in inverse
+         * proportion to look the same on every screen, in whole points held to 6..36.
          */
         fun sizeForScreen(shortSideDp: Double): Double {
             if (!(shortSideDp > 0.0)) return TextFlow.DEFAULT_SIZE_PT
-            val k = ln(PHONE_PT / TABLET_PT) / ln(TABLET_DP / PHONE_DP)
-            val pt = TABLET_PT * (TABLET_DP / shortSideDp).pow(k)
+            val pt = TABLET_PT * TABLET_DP / shortSideDp
             return pt.roundToInt().toDouble().coerceIn(MIN_SCREEN_PT, MAX_SCREEN_PT)
         }
 
-        // Chosen by eye on a Galaxy A14 (phone) and a Galaxy Tab S9 FE (tablet).
-        private const val PHONE_DP = 411.0
-        private const val PHONE_PT = 30.0
+        // Chosen by eye on a Galaxy Tab S9 FE.
         private const val TABLET_DP = 823.0
-        private const val TABLET_PT = 18.0
-        private const val MIN_SCREEN_PT = 12.0
+        private const val TABLET_PT = 12.0
+        private const val MIN_SCREEN_PT = 6.0
         private const val MAX_SCREEN_PT = 36.0
     }
 }

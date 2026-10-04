@@ -108,13 +108,12 @@ class TextFlowTest {
     }
 
     @Test
-    fun factorySizeFitsTheScreenThroughBothCalibrationPoints() {
-        // The shorter sides of the two devices it was tuned on: 1080px at 420dpi, 1440px at 280dpi.
-        assertEquals(30.0, FlowDefaults.sizeForScreen(1080 * 160 / 420.0), 0.0)
-        assertEquals(18.0, FlowDefaults.sizeForScreen(1440 * 160 / 280.0), 0.0)
-        val between = FlowDefaults.sizeForScreen(600.0)
-        assertTrue(between > 18.0 && between < 30.0)
-        assertEquals(12.0, FlowDefaults.sizeForScreen(5000.0), 0.0)
+    fun factorySizeIsInverselyProportionalToTheScreensShorterSide() {
+        // A Galaxy Tab S9 FE (1440px at 280dpi) and a Galaxy A14 (1080px at 420dpi).
+        assertEquals(12.0, FlowDefaults.sizeForScreen(1440 * 160 / 280.0), 0.0)
+        assertEquals(24.0, FlowDefaults.sizeForScreen(1080 * 160 / 420.0), 0.0)
+        assertEquals(8.0, FlowDefaults.sizeForScreen(823.0 * 1.5), 0.0)
+        assertEquals(6.0, FlowDefaults.sizeForScreen(5000.0), 0.0)
         assertEquals(36.0, FlowDefaults.sizeForScreen(100.0), 0.0)
         assertEquals(TextFlow.DEFAULT_SIZE_PT, FlowDefaults.sizeForScreen(0.0), 0.0)
     }
