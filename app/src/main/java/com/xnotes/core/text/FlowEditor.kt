@@ -10,7 +10,8 @@ import com.xnotes.core.history.ParaSnapshot
  * The single mutation gateway for a [TextFlow] (spec: push-after-apply). Every
  * op applies its edit and returns the [Command] describing it (null when the
  * edit was a no-op), which the caller pushes onto the history. Runs are kept
- * normalized (no empty runs, adjacent equal styles merged) after every op.
+ * normalized (no empty runs, adjacent equal styles merged, no hand-set size in a
+ * heading) after every op.
  */
 class FlowEditor(private val flow: TextFlow) {
 
@@ -276,9 +277,18 @@ class FlowEditor(private val flow: TextFlow) {
         normalize(para)
     }
 
-    /** Merge adjacent equal-style runs and drop empties (an empty paragraph keeps zero runs). */
+    /**
+     * Merge adjacent equal-style runs and drop empties (an empty paragraph keeps zero runs).
+     * A heading's level sizes its text, so text sized by hand makes it body text, the
+     * rest of it keeping the size it showed.
+     */
     internal fun normalize(para: Paragraph) {
         para.runs.removeAll { it.text.isEmpty() }
+        if (para.headingLevel > 0 && para.runs.any { it.style.sizePt != null }) {
+            val size = para.textSizePt(flow)
+            for (run in para.runs) if (run.style.sizePt == null) run.style = run.style.copy(sizePt = size)
+            para.headingLevel = 0
+        }
         var i = 0
         while (i < para.runs.size - 1) {
             val a = para.runs[i]
