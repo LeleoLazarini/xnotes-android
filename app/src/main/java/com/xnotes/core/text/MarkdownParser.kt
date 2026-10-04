@@ -4,13 +4,13 @@ import com.xnotes.core.model.Rgba
 
 /**
  * A deliberately small, line-based markdown reader for the explicit "Paste as
- * Markdown" action (no AST, no indented code blocks). Headings map to
- * size multipliers over the flow's default size, fenced blocks become code
- * paragraphs (one per line, language from the fence info), lists/tasks/
- * blockquotes map to paragraph properties, and the inline pass handles
- * ** __ * _ ~~ `code` plus links (styled text, URL dropped) and images (alt
- * text). GitHub pipe tables become flow tables with a header row and the
- * delimiter row's column alignments. Unclosed markers fall out as literal text.
+ * Markdown" action (no AST, no indented code blocks). Headings map to heading
+ * levels, fenced blocks become code paragraphs (one per line, language from the
+ * fence info), lists/tasks/blockquotes map to paragraph properties, and the
+ * inline pass handles ** __ * _ ~~ `code` plus links (styled text, URL dropped)
+ * and images (alt text). GitHub pipe tables become flow tables with a header
+ * row and the delimiter row's column alignments. Unclosed markers fall out as
+ * literal text.
  */
 object MarkdownParser {
 
@@ -38,11 +38,8 @@ object MarkdownParser {
     /** Common fence-info aliases to the bundled grammar ids. */
     fun normalizeLang(id: String): String = LANG_ALIASES[id] ?: id
 
-    /**
-     * Parse [text] into flow paragraphs; [baseSizePt] anchors the heading sizes and
-     * pipe tables take [tableStyle] (with its header row on).
-     */
-    fun parse(text: String, baseSizePt: Double, tableStyle: TableStyle = TableStyle()): List<Paragraph> {
+    /** Parse [text] into flow paragraphs; pipe tables take [tableStyle] (with its header row on). */
+    fun parse(text: String, tableStyle: TableStyle = TableStyle()): List<Paragraph> {
         val out = mutableListOf<Paragraph>()
         val lines = text.split('\n')
         var i = 0
@@ -80,7 +77,7 @@ object MarkdownParser {
                 if (i < lines.size) i++ // swallow the closing fence
                 continue
             }
-            out.add(parseLine(line, baseSizePt))
+            out.add(parseLine(line))
             i++
         }
         return out
@@ -156,10 +153,10 @@ object MarkdownParser {
         codeLang = lang,
     )
 
-    private fun parseLine(line: String, baseSizePt: Double): Paragraph {
+    private fun parseLine(line: String): Paragraph {
         HEADING.matchEntire(line)?.let { m ->
             val level = m.groupValues[1].length
-            return Paragraph(inline(m.groupValues[2], Paragraph.headingStyle(level, baseSizePt)), headingLevel = level)
+            return Paragraph(inline(m.groupValues[2], Paragraph.HEADING_STYLE), headingLevel = level)
         }
         TASK.matchEntire(line)?.let { m ->
             return Paragraph(

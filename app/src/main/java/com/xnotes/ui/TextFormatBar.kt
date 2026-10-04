@@ -114,7 +114,7 @@ fun TextFormatBar(editor: Editor) {
             HighlightButton(editor, style.highlight)
             BarDivider()
             FontFaceButton(editor, style.face)
-            SizeStepper(style.sizePt ?: editor.flowDefaultSizePt()) { editor.flowAdjustSize(it) }
+            SizeStepper(editor.flowShownSizePt()) { editor.flowAdjustSize(it) }
             BarDivider()
             BarIcon(Icons.Filled.FormatBold, stringResource(R.string.bold), active = style.bold, shortcut = Keys.BOLD) { editor.flowToggleBold() }
             BarIcon(Icons.Filled.FormatItalic, stringResource(R.string.italic), active = style.italic, shortcut = Keys.ITALIC) { editor.flowToggleItalic() }

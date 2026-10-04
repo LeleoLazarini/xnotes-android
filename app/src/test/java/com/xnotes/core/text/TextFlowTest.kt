@@ -4,6 +4,7 @@ import com.xnotes.core.model.Rgba
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -98,7 +99,7 @@ class TextFlowTest {
     fun everyHeadingLevelIsBiggerThanTheNextAndBiggerThanBody() {
         // h5 and h6 both sat at body size once, which made three levels look alike.
         val body = TextFlow.DEFAULT_SIZE_PT
-        val sizes = (1..Paragraph.MAX_HEADING).map { Paragraph.headingStyle(it, body).sizePt!! }
+        val sizes = (1..Paragraph.MAX_HEADING).map { Paragraph.headingSizePt(it, body) }
         for (i in 0 until sizes.size - 1) {
             assertTrue("h${i + 1} vs h${i + 2}", sizes[i] > sizes[i + 1])
         }
@@ -120,9 +121,14 @@ class TextFlowTest {
 
     @Test
     fun headingsAreBoldAndScaleWithTheFlowsBaseSize() {
-        val small = Paragraph.headingStyle(3, 10.0).sizePt!!
-        val large = Paragraph.headingStyle(3, 20.0).sizePt!!
-        assertEquals(2.0, large / small, 1e-9)
-        assertTrue(Paragraph.headingStyle(6, 12.0).bold)
+        val flow = TextFlow().apply { defaultSizePt = 10.0 }
+        val heading = Paragraph(headingLevel = 3)
+        val small = heading.textSizePt(flow)
+        flow.defaultSizePt = 20.0
+        assertEquals(2.0, heading.textSizePt(flow) / small, 1e-9)
+        assertEquals(20.0, Paragraph().textSizePt(flow), 0.0)
+        // The level sizes a heading's text, so its own style leaves the size unset.
+        assertTrue(Paragraph.HEADING_STYLE.bold)
+        assertNull(Paragraph.HEADING_STYLE.sizePt)
     }
 }

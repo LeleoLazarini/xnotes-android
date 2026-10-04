@@ -7,16 +7,16 @@ import org.junit.Test
 
 class MarkdownParserTest {
 
-    private fun parse(text: String) = MarkdownParser.parse(text, baseSizePt = 12.0)
+    private fun parse(text: String) = MarkdownParser.parse(text)
 
     @Test
-    fun headingsScaleAndBold() {
+    fun headingsTakeTheirLevelAndBold() {
         val p = parse("## Section")[0]
         assertEquals("Section", p.plainText())
+        assertEquals(2, p.headingLevel)
         assertTrue(p.runs[0].style.bold)
-        // The shared scale owns the numbers (see TextFlowTest); this pins the wiring.
-        assertEquals(Paragraph.headingStyle(2, 12.0).sizePt!!, p.runs[0].style.sizePt!!, 1e-9)
-        assertTrue(p.runs[0].style.sizePt!! > 12.0)
+        // The level sizes it (see TextFlowTest), so the run carries no size of its own.
+        assertEquals(null, p.runs[0].style.sizePt)
     }
 
     @Test

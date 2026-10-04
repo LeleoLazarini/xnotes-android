@@ -32,9 +32,9 @@ enum class ListKind(val id: String) {
 
 /**
  * Immutable character style for a run. Nullable fields inherit the flow defaults
- * ([TextFlow.defaultColor]/[TextFlow.defaultSizePt]/[TextFlow.defaultFace]);
- * [code] renders in [TextFlow.monoFace] with a subtle background. Equality
- * drives run merging, so keep this a value type.
+ * ([TextFlow.defaultColor]/[TextFlow.defaultFace]), and a null size the paragraph's
+ * ([Paragraph.textSizePt]); [code] renders in [TextFlow.monoFace] with a subtle
+ * background. Equality drives run merging, so keep this a value type.
  */
 data class CharStyle(
     val bold: Boolean = false,
@@ -78,7 +78,7 @@ class Paragraph(
     var table: FlowTable? = null,
     /** True on the first paragraph of each table cell. */
     var cellStart: Boolean = false,
-    /** 1..[MAX_HEADING] marks a heading, whose runs carry its size; 0 is body text. */
+    /** 1..[MAX_HEADING] marks a heading, whose text takes its size from the level; 0 is body text. */
     var headingLevel: Int = 0,
 ) {
     /** Bumped on any content or style mutation; layout caches key on it. */
@@ -92,6 +92,10 @@ class Paragraph(
     val length: Int get() = runs.sumOf { it.text.length }
 
     fun plainText(): String = runs.joinToString("") { it.text }
+
+    /** The size text with none of its own sets at here: the flow's base, scaled for a heading. */
+    fun textSizePt(flow: TextFlow): Double =
+        if (headingLevel > 0) headingSizePt(headingLevel, flow.defaultSizePt) else flow.defaultSizePt
 
     /** True when every paragraph-level property is at its default (runs not considered). */
     fun isDefaultStyle(): Boolean =
@@ -112,9 +116,12 @@ class Paragraph(
         // that measures the same as body text is only bold, which is not a level.
         private val HEADING_SCALE = doubleArrayOf(2.0, 1.75, 1.55, 1.4, 1.25, 1.1)
 
-        /** The character style heading [level] renders in over [baseSizePt]. */
-        fun headingStyle(level: Int, baseSizePt: Double): CharStyle =
-            CharStyle(bold = true, sizePt = baseSizePt * HEADING_SCALE[(level - 1).coerceIn(HEADING_SCALE.indices)])
+        /** A heading's own text: bold, its size left to the level so it follows the base. */
+        val HEADING_STYLE = CharStyle(bold = true)
+
+        /** The size heading [level] sets at over [baseSizePt]. */
+        fun headingSizePt(level: Int, baseSizePt: Double): Double =
+            baseSizePt * HEADING_SCALE[(level - 1).coerceIn(HEADING_SCALE.indices)]
     }
 }
 

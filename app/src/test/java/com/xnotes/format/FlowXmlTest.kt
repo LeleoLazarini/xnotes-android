@@ -177,12 +177,34 @@ class FlowXmlTest {
     @Test
     fun aHeadingRoundTripsItsLevel() {
         val flow = TextFlow().apply {
-            paragraphs.add(
-                Paragraph(mutableListOf(Run("Title", CharStyle(bold = true, sizePt = 24.0))), headingLevel = 2),
-            )
+            paragraphs.add(Paragraph(mutableListOf(Run("Title", Paragraph.HEADING_STYLE)), headingLevel = 2))
         }
         assertTrue(String(FlowXml.write(flow)).contains("xnotes:heading=\"2\""))
-        assertEquals(2, roundTrip(flow).paragraphs.single().headingLevel)
+        val back = roundTrip(flow).paragraphs.single()
+        assertEquals(2, back.headingLevel)
+        assertEquals(Paragraph.HEADING_STYLE, back.runs.single().style)
+    }
+
+    @Test
+    fun aHeadingWritesTheSizeItsLevelSetsForOlderReaders() {
+        val flow = TextFlow().apply {
+            defaultSizePt = 12.0
+            paragraphs.add(Paragraph(mutableListOf(Run("Title", Paragraph.HEADING_STYLE)), headingLevel = 2))
+        }
+        assertTrue(String(FlowXml.write(flow)).contains("fo:font-size=\"21.0pt\""))
+    }
+
+    @Test
+    fun aHeadingSizedFromAnOlderBaseFollowsTheBaseOnceRead() {
+        // What earlier versions wrote after an h1 made at 18pt had its base turned down to 12.
+        val flow = TextFlow().apply {
+            defaultSizePt = 12.0
+            paragraphs.add(Paragraph(mutableListOf(Run("Title", CharStyle(bold = true, sizePt = 36.0))), headingLevel = 1))
+        }
+        val back = roundTrip(flow)
+        val p = back.paragraphs.single()
+        assertNull(p.runs.single().style.sizePt)
+        assertEquals(24.0, p.textSizePt(back), 1e-9)
     }
 
     @Test

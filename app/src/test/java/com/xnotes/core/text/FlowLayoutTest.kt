@@ -142,6 +142,18 @@ class FlowLayoutTest {
     }
 
     @Test
+    fun aHeadingFollowsTheBaseSizeWhenItChanges() {
+        val heading = para("T", Paragraph.HEADING_STYLE).apply { headingLevel = 1 }
+        val sized = para("T", CharStyle(sizePt = 20.0))
+        val flow = TextFlow().apply { paragraphs.add(heading); paragraphs.add(sized) }
+        assertEquals(24.0, layout.breakLines(flow, heading, 200.0).single().ascent, 1e-9)
+        flow.defaultSizePt = 8.0
+        assertEquals(16.0, layout.breakLines(flow, heading, 200.0).single().ascent, 1e-9)
+        // Text sized by hand keeps its size.
+        assertEquals(20.0, layout.breakLines(flow, sized, 200.0).single().ascent, 1e-9)
+    }
+
+    @Test
     fun anEmptyBodyLineKeepsTheDefaultHeight() {
         val p = para("")
         assertEquals(15.6, layout.breakLines(flowWith(p), p, 200.0).single().height, 1e-9)
@@ -152,7 +164,7 @@ class FlowLayoutTest {
         // The caret previews at the heading size, so the empty line has to be that
         // tall already or the caret sits high until something is typed.
         val empty = para("").apply { headingLevel = 2 }
-        val typed = para("T", Paragraph.headingStyle(2, TextFlow.DEFAULT_SIZE_PT)).apply { headingLevel = 2 }
+        val typed = para("T", Paragraph.HEADING_STYLE).apply { headingLevel = 2 }
         val before = layout.breakLines(flowWith(empty), empty, 200.0).single()
         val after = layout.breakLines(flowWith(typed), typed, 200.0).single()
         assertEquals(after.height, before.height, 1e-9)

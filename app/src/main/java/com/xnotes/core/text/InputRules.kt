@@ -231,14 +231,13 @@ object InputRules {
         }?.let { cmds += it }
         var pending: CharStyle? = null
         if (b.heading > 0) {
-            val style = Paragraph.headingStyle(b.heading, flow.defaultSizePt)
             val len = flow.paragraphs[pos.para].length
             if (len > 0) {
                 ed.setCharStyle(FlowRange(caret, FlowPos(pos.para, len))) {
-                    it.copy(bold = true, sizePt = style.sizePt)
+                    it.copy(bold = true, sizePt = null)
                 }?.let { cmds += it }
             }
-            pending = style
+            pending = Paragraph.HEADING_STYLE
         }
         return Result(ed.combined(cmds), caret, pending)
     }

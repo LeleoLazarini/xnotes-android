@@ -1342,9 +1342,10 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         if (!flowText.active) return
         val text = clipboardText() ?: return
         val caretSize = flowCaretStyle().sizePt
-        val paras = com.xnotes.core.text.MarkdownParser.parse(text, caretSize ?: flowDefaultSizePt(), newTableDefaults.style)
+        val paras = com.xnotes.core.text.MarkdownParser.parse(text, newTableDefaults.style)
         if (caretSize != null) {
             for (p in paras) {
+                if (p.headingLevel > 0) continue // its level sizes it
                 for (run in p.runs) {
                     if (run.style.sizePt == null) run.style = run.style.copy(sizePt = caretSize)
                 }
@@ -6033,10 +6034,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     fun flowSetCharHighlight(c: Rgba?) = flowSetChar { it.copy(highlight = c) }
     fun flowSetCharFace(f: FontFace?) = flowSetChar { it.copy(face = f) }
 
+    /** The size the bar shows: the caret style's own, else the one its paragraph sets text at. */
+    fun flowShownSizePt(): Double =
+        flowCaretStyle().sizePt ?: flowCaretParagraph()?.textSizePt(state.document.flow) ?: flowDefaultSizePt()
+
     /** Step the bar's shown size by [delta] and apply that one size across the selection. */
     fun flowAdjustSize(delta: Double) {
-        val shown = flowCaretStyle().sizePt ?: flowDefaultSizePt()
-        val target = (shown + delta).coerceIn(6.0, 96.0)
+        val target = (flowShownSizePt() + delta).coerceIn(6.0, 96.0)
         flowSetChar { it.copy(sizePt = target) }
     }
 
@@ -6063,8 +6067,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     /**
      * Make the selected paragraph(s) heading [level], or body text at 0. The runs
-     * carry the size, so they are restyled alongside the paragraph flag; this is
-     * also the path that keeps headings reachable with markdown shortcuts off.
+     * turn bold alongside the paragraph flag and drop any size of their own, which
+     * the level supplies; this is also the path that keeps headings reachable with
+     * markdown shortcuts off.
      */
     fun flowSetHeading(level: Int) {
         if (!flowText.active) return
@@ -6079,18 +6084,17 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         flowText.flushBurst()
         val ed = FlowEditor(flow)
         val cmds = mutableListOf<Command>()
-        val style = if (level > 0) Paragraph.headingStyle(level, flow.defaultSizePt) else null
         ed.setParaStyle(sel) { it.headingLevel = level }?.let { cmds += it }
         for (i in sel.start.para..last) {
             val para = flow.paragraphs[i]
             if (para.length == 0 || para.table != null) continue
-            if (style == null && !were[i - sel.start.para]) continue
+            if (level == 0 && !were[i - sel.start.para]) continue
             ed.setCharStyle(FlowRange(FlowPos(i, 0), FlowPos(i, para.length))) {
-                it.copy(bold = style != null, sizePt = style?.sizePt)
+                it.copy(bold = level > 0, sizePt = null)
             }?.let { cmds += it }
         }
         flowText.commitEdit(ed.combined(cmds), null)
-        if (sel.collapsed) flowText.pendingStyle = style ?: CharStyle.DEFAULT
+        if (sel.collapsed) flowText.pendingStyle = if (level > 0) Paragraph.HEADING_STYLE else CharStyle.DEFAULT
         flowSelTick++
     }
 

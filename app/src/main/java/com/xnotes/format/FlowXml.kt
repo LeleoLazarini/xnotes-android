@@ -49,8 +49,9 @@ object FlowXml {
                 paraStyles.getOrPut(para.align to para.indent) { "P${paraStyles.size + 1}" }
             }
             for (run in para.runs) {
-                if (run.style != CharStyle.DEFAULT) {
-                    charStyles.getOrPut(run.style) { "T${charStyles.size + 1}" }
+                val style = writtenStyle(flow, para, run.style)
+                if (style != CharStyle.DEFAULT) {
+                    charStyles.getOrPut(style) { "T${charStyles.size + 1}" }
                 }
             }
         }
@@ -89,20 +90,20 @@ object FlowXml {
         while (i < paras.size) {
             val block = tables.getOrNull(nextTable)?.takeIf { it.first == i }
             if (block != null) {
-                appendTable(block, paras, paraStyles, charStyles)
+                appendTable(flow, block, paras, paraStyles, charStyles)
                 nextTable++
                 i = block.last + 1
                 continue
             }
             val kind = paras[i].list
             if (kind == ListKind.NONE) {
-                appendParagraph(paras[i], paraStyles, charStyles, "   ")
+                appendParagraph(flow, paras[i], paraStyles, charStyles, "   ")
                 i++
             } else {
                 append("   <text:list xnotes:list=\"${kind.id}\">\n")
                 while (i < paras.size && paras[i].list == kind) {
                     append("    <text:list-item>\n")
-                    appendParagraph(paras[i], paraStyles, charStyles, "     ")
+                    appendParagraph(flow, paras[i], paraStyles, charStyles, "     ")
                     append("    </text:list-item>\n")
                     i++
                 }
@@ -161,6 +162,7 @@ object FlowXml {
     }
 
     private fun StringBuilder.appendTable(
+        flow: TextFlow,
         b: TableBlock,
         paras: List<Paragraph>,
         paraStyles: Map<Pair<ParaAlign, Int>, String>,
@@ -189,7 +191,7 @@ object FlowXml {
                 append("     <table:table-cell office:value-type=\"string\">\n")
                 if (b.hasCell(r, c)) {
                     for (p in b.cellFirstPara(r, c)..b.cellLastPara(r, c)) {
-                        appendParagraph(paras[p], paraStyles, charStyles, "      ")
+                        appendParagraph(flow, paras[p], paraStyles, charStyles, "      ")
                     }
                 } else {
                     append("      <text:p></text:p>\n")
@@ -203,6 +205,7 @@ object FlowXml {
     }
 
     private fun StringBuilder.appendParagraph(
+        flow: TextFlow,
         para: Paragraph,
         paraStyles: Map<Pair<ParaAlign, Int>, String>,
         charStyles: Map<CharStyle, String>,
@@ -216,7 +219,7 @@ object FlowXml {
         para.codeLang?.let { append(" xnotes:code-lang=\"${escapeAttr(it)}\"") }
         append(">")
         for (run in para.runs) {
-            val styleName = charStyles[run.style]
+            val styleName = charStyles[writtenStyle(flow, para, run.style)]
             if (styleName == null) {
                 appendEncodedText(run.text)
             } else {
@@ -227,6 +230,10 @@ object FlowXml {
         }
         append("</text:p>\n")
     }
+
+    /** A heading's text sizes from its level; spelled out, older readers still size it. */
+    private fun writtenStyle(flow: TextFlow, para: Paragraph, style: CharStyle): CharStyle =
+        if (para.headingLevel > 0 && style.sizePt == null) style.copy(sizePt = para.textSizePt(flow)) else style
 
     /** Escape markup and ODF-encode whitespace (lone interior spaces stay literal). */
     private fun StringBuilder.appendEncodedText(text: String) {
@@ -471,6 +478,8 @@ object FlowXml {
             headingLevel = attr(p, "heading")?.toIntOrNull()?.coerceIn(0, Paragraph.MAX_HEADING) ?: 0,
         )
         collectRuns(p, CharStyle.DEFAULT, charStyles, para.runs)
+        // The size written on a heading's text is for older readers; the level sizes it here.
+        if (para.headingLevel > 0) for (run in para.runs) run.style = run.style.copy(sizePt = null)
         mergeAdjacent(para.runs)
         return para
     }

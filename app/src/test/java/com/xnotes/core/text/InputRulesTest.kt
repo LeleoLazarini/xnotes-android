@@ -52,7 +52,7 @@ class InputRulesTest {
         assertEquals(1, p.headingLevel)
         assertEquals(1, p.runs.size)
         assertTrue(p.runs[0].style.bold)
-        assertEquals(TextFlow.DEFAULT_SIZE_PT * 2.0, p.runs[0].style.sizePt!!, 1e-9)
+        assertNull(p.runs[0].style.sizePt)
     }
 
     @Test
@@ -205,7 +205,7 @@ class InputRulesTest {
         val p = typed("# A **B**")
         assertEquals(1, p.headingLevel)
         assertEquals("A B", p.plainText())
-        assertEquals(TextFlow.DEFAULT_SIZE_PT * 2.0, p.runs.last().style.sizePt!!, 1e-9)
+        assertNull(p.runs.last().style.sizePt)
         assertTrue(p.runs.last().style.bold)
     }
 
@@ -323,7 +323,7 @@ class InputRulesTest {
         for (md in listOf("# Title", "## Sub", "- item", "1. item", "> quote", "**b** x", "a `c` b")) {
             val flow = TextFlow()
             type(flow, md)
-            val pasted = MarkdownParser.parse(md, TextFlow.DEFAULT_SIZE_PT).single()
+            val pasted = MarkdownParser.parse(md).single()
             val mine = flow.paragraphs.single()
             assertEquals(md, pasted.plainText(), mine.plainText())
             assertEquals(md, pasted.list, mine.list)

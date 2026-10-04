@@ -11,13 +11,13 @@ import com.xnotes.core.pal.MathTypesetter
 import com.xnotes.core.pal.TextMeasurer
 
 /**
- * The concrete font a run resolves to: style overrides over the flow defaults.
- * Code is mono, and so is maths: a formula sets in its own faces anyway, so this
- * only shows when the LaTeX behind it does, which is exactly when it should not
- * look like the prose around it.
+ * The concrete font a run resolves to: style overrides over the flow defaults,
+ * a heading's level sizing its text. Code is mono, and so is maths: a formula
+ * sets in its own faces anyway, so this only shows when the LaTeX behind it
+ * does, which is exactly when it should not look like the prose around it.
  */
 fun resolveFont(flow: TextFlow, para: Paragraph, style: CharStyle): FontSpec = FontSpec(
-    pointSize = style.sizePt ?: flow.defaultSizePt,
+    pointSize = style.sizePt ?: para.textSizePt(flow),
     face = if (para.codeLang != null || style.code || style.math) flow.monoFace else style.face ?: flow.defaultFace,
     bold = style.bold,
     italic = style.italic,
@@ -205,11 +205,7 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         }
         // An empty heading still stands as tall as the text it is waiting for, so the
         // caret previews at the right height and the line does not jump on the first key.
-        val emptyStyle = if (para.headingLevel > 0) {
-            Paragraph.headingStyle(para.headingLevel, flow.defaultSizePt)
-        } else {
-            CharStyle.DEFAULT
-        }
+        val emptyStyle = if (para.headingLevel > 0) Paragraph.HEADING_STYLE else CharStyle.DEFAULT
         val emptyFont = resolveFont(flow, para, if (bold) emptyStyle.copy(bold = true) else emptyStyle)
         val shape = ParaShape(
             text, adv, runEnds,
