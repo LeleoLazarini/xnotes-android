@@ -384,8 +384,9 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
         sizePt: Double,
         color: Rgba,
         display: Boolean,
-    ) {
+    ): Boolean {
         MathRendering.draw(canvas, mathInk, latex, x, baseline, sizePt, color, display, avgScale)
+        return true
     }
 
     private fun applyPen(pen: Pen) {

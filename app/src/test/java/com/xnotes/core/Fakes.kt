@@ -10,6 +10,7 @@ import com.xnotes.core.pal.ImageCodec
 import com.xnotes.core.pal.ImageSize
 import com.xnotes.core.pal.LineMetrics
 import com.xnotes.core.pal.MathBox
+import com.xnotes.core.pal.MathSize
 import com.xnotes.core.pal.MathTypesetter
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.RasterSurface
@@ -85,8 +86,16 @@ class FakeRenderer : Renderer {
         sizePt: Double,
         color: Rgba,
         display: Boolean,
-    ) {
+    ): Boolean {
         ops += "drawMath${if (display) "Display" else ""}:$latex@$x,$baseline"
+        return mathReady
+    }
+
+    /** What [drawMath] answers: false plays a backend still setting the formula. */
+    var mathReady = true
+
+    override fun drawMathPending(latex: String, sizePt: Double, display: Boolean, box: Rect, color: Rgba) {
+        ops += "mathPending:$latex@${box.left},${box.top},${box.w},${box.h}"
     }
 }
 
@@ -161,6 +170,32 @@ class FakeMathTypesetter(
             ascent = sizePt * tall * grow,
             descent = sizePt * 0.3,
         )
+    }
+}
+
+/**
+ * A typesetter that sets off the caller's thread: every formula is pending until [land] hands
+ * its box in, null for one it refuses. It counts the layout passes and what each one asked.
+ */
+class FakeAsyncTypesetter : MathTypesetter {
+    private val landed = HashMap<String, MathBox?>()
+    val asked = ArrayList<String>()
+    var passes = 0
+
+    fun land(latex: String, box: MathBox?) {
+        landed[latex] = box
+    }
+
+    override fun measure(latex: String, sizePt: Double, display: Boolean): MathBox? = landed[latex]
+
+    override fun size(latex: String, sizePt: Double, display: Boolean): MathSize {
+        asked += latex
+        if (!landed.containsKey(latex)) return MathSize.Pending
+        return landed[latex] ?: MathSize.Refused
+    }
+
+    override fun beginLayout() {
+        passes++
     }
 }
 

@@ -5,23 +5,26 @@ import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.pal.FontSpec
 import com.xnotes.core.pal.LineMetrics
+import com.xnotes.core.pal.MathBox
 
 /** Page dimensions handed to layout (content px at the document dpi). */
 data class PageBox(val width: Double, val height: Double)
 
 /**
- * How a math run is being shown this pass: as the formula it sets, as the LaTeX
- * behind it because the caret is in there, or as LaTeX the typesetter refused.
- * The last two both draw as text, and only the chip behind them tells the user
- * whether they opened it or broke it.
+ * How a math run is being shown this pass: as the formula it sets, as a box held
+ * open for that formula while it is still being set, as the LaTeX behind it
+ * because the caret is in there, or as LaTeX the typesetter refused. The last two
+ * both draw as text, and only the chip behind them tells the user whether they
+ * opened it or broke it.
  */
-enum class MathShow { FORMULA, SOURCE, ERROR }
+enum class MathShow { FORMULA, PENDING, SOURCE, ERROR }
 
 /**
  * A drawable fragment: [text] starts at page-local [x] on the line baseline, and
  * at paragraph-local character [start]. With [math] set it is LaTeX to be
  * typeset there rather than characters to draw, which is the same run read
- * either way depending on where the caret is.
+ * either way depending on where the caret is, and [box] is the room it holds:
+ * its own, or while it is [pending] a guess at it.
  */
 class Seg(
     val text: String,
@@ -30,6 +33,8 @@ class Seg(
     val style: CharStyle,
     val math: Boolean = false,
     val start: Int = 0,
+    val box: MathBox? = null,
+    val pending: Boolean = false,
 ) {
     /** The paragraph-local character just past this fragment. */
     val end: Int get() = start + text.length

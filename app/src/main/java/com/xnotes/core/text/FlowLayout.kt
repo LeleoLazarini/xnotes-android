@@ -6,6 +6,7 @@ import com.xnotes.core.model.Rgba
 import com.xnotes.core.pal.FontSpec
 import com.xnotes.core.pal.LineMetrics
 import com.xnotes.core.pal.MathBox
+import com.xnotes.core.pal.MathSize
 import com.xnotes.core.pal.MathTypesetter
 import com.xnotes.core.pal.TextMeasurer
 
@@ -92,6 +93,10 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         val atom: BooleanArray,
         /** Per run: how a math run is being shown, or null when it is not one. */
         val mathShow: Array<MathShow?>,
+        /** Per run: the box a formula holds its line open with, its own or a guess while it is pending. */
+        val mathBox: Array<MathBox?>,
+        /** The runs holding a guess, asked after again each pass until their own boxes land. */
+        val pending: IntArray,
     )
 
     private class ShapeEntry(
@@ -100,18 +105,18 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         val bold: Boolean,
         val reveal: Int,
         val shape: ParaShape,
+        /** The last [pass] this shape was found current in. */
+        var pass: Int,
     )
-    private class BreakEntry(
-        val rev: Int,
-        val defaultsKey: Long,
-        val bold: Boolean,
-        val reveal: Int,
-        val width: Double,
-        val lines: List<BrokenLine>,
-    )
+
+    /** Lines broken from [shape], which is what they go stale with. */
+    private class BreakEntry(val shape: ParaShape, val width: Double, val lines: List<BrokenLine>)
 
     private val shapes = HashMap<Paragraph, ShapeEntry>()
     private val breaks = HashMap<Paragraph, BreakEntry>()
+
+    /** Counts layouts: a guessed shape is checked once a pass, so one pass never reads two shapes. */
+    private var pass = 0
 
     private fun defaultsKey(flow: TextFlow): Long =
         (flow.defaultFace.id.hashCode().toLong() shl 32) xor
@@ -131,7 +136,10 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         val key = defaultsKey(flow)
         val reveal = if (para.runs.any { it.style.math }) revealedMath(para) else -1
         shapes[para]?.let {
-            if (it.rev == para.rev && it.defaultsKey == key && it.bold == bold && it.reveal == reveal) {
+            if (it.rev == para.rev && it.defaultsKey == key && it.bold == bold && it.reveal == reveal &&
+                (it.pass == pass || stillPending(para, it.shape))
+            ) {
+                it.pass = pass
                 return it.shape
             }
         }
@@ -139,6 +147,8 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         val adv = DoubleArray(text.length)
         val atom = BooleanArray(text.length)
         val mathShow = arrayOfNulls<MathShow>(para.runs.size)
+        val mathBox = arrayOfNulls<MathBox>(para.runs.size)
+        val pending = ArrayList<Int>()
         val runEnds = IntArray(para.runs.size)
         val runMetrics = arrayOfNulls<LineMetrics>(para.runs.size)
         val runFonts = arrayOfNulls<FontSpec>(para.runs.size)
@@ -147,20 +157,31 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
             val font = resolveFont(flow, para, if (bold) run.style.copy(bold = true) else run.style)
             // A formula is one box on the line: its whole advance rides on the first
             // character so the caret and the glyphs agree, and the rest measure zero.
-            // Shown as source (revealed, or refused) it is its own text again.
+            // Shown as source (revealed, or refused) it is its own text again. One
+            // still being set holds a guess at its box until the real one lands.
             var box: MathBox? = null
             if (run.style.math) {
                 val ts = math
                 mathShow[i] = when {
                     offset == reveal -> MathShow.SOURCE
                     ts == null || !ts.ready() || run.text.isEmpty() -> MathShow.SOURCE
-                    else -> {
-                        box = ts.measure(run.text, font.pointSize, run.style.mathDisplay)
-                        if (box == null) MathShow.ERROR else MathShow.FORMULA
+                    else -> when (val size = ts.size(run.text, font.pointSize, run.style.mathDisplay)) {
+                        is MathBox -> {
+                            box = size
+                            MathShow.FORMULA
+                        }
+                        MathSize.Pending -> {
+                            val em = measurer.metrics(proseFont(flow, para, run.style, bold)).height / LINE_PER_EM
+                            box = MathEstimate.box(run.text, em)
+                            pending.add(i)
+                            MathShow.PENDING
+                        }
+                        MathSize.Refused -> MathShow.ERROR
                     }
                 }
             }
             if (box != null) {
+                mathBox[i] = box
                 adv[offset] = box.width
                 for (k in offset + 1 until offset + run.text.length) atom[k] = true
                 // A formula asks for at least the room the same text would: most of
@@ -198,9 +219,21 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
             measurer.metrics(emptyFont),
             atom,
             mathShow,
+            mathBox,
+            pending.toIntArray(),
         )
-        shapes[para] = ShapeEntry(para.rev, key, bold, reveal, shape)
+        shapes[para] = ShapeEntry(para.rev, key, bold, reveal, shape, pass)
         return shape
+    }
+
+    /** Whether [shape]'s guessed formulas are all still pending; asking keeps them queued first. */
+    private fun stillPending(para: Paragraph, shape: ParaShape): Boolean {
+        val ts = math ?: return true
+        for (i in shape.pending) {
+            val run = para.runs[i]
+            if (ts.size(run.text, shape.runFonts[i].pointSize, run.style.mathDisplay) != MathSize.Pending) return false
+        }
+        return true
     }
 
 
@@ -219,20 +252,12 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         fromChar: Int = 0,
         bold: Boolean = false,
     ): List<BrokenLine> {
-        val key = defaultsKey(flow)
-        val reveal = if (para.runs.any { it.style.math }) revealedMath(para) else -1
-        if (fromChar == 0) {
-            breaks[para]?.let {
-                if (it.rev == para.rev && it.defaultsKey == key && it.bold == bold &&
-                    it.reveal == reveal && it.width == availWidth
-                ) {
-                    return it.lines
-                }
-            }
-        }
         val shape = shapeOf(flow, para, bold)
+        if (fromChar == 0) {
+            breaks[para]?.let { if (it.shape === shape && it.width == availWidth) return it.lines }
+        }
         val lines = breakShape(shape, availWidth.coerceAtLeast(MIN_LINE_WIDTH), fromChar)
-        if (fromChar == 0) breaks[para] = BreakEntry(para.rev, key, bold, reveal, availWidth, lines)
+        if (fromChar == 0) breaks[para] = BreakEntry(shape, availWidth, lines)
         return lines
     }
 
@@ -452,6 +477,8 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         val defColor = flow.defaultColor ?: autoColor() ?: TextFlow.DEFAULT_COLOR
         val cells = CellIndex(flow.paragraphs)
         if (pageBoxes.isEmpty()) return FlowFrame(emptyList(), flow.rev, 0, defColor, codeBackground(), cells)
+        pass++
+        math?.beginLayout()
         pruneCaches(flow)
         val contentRects = pageBoxes.map { contentRectOf(it, flow.margins, dpi) }
         val pageLines = List(pageBoxes.size) { mutableListOf<PlacedLine>() }
@@ -735,8 +762,13 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
                 // A formula is one segment whatever is inside it: splitting at its
                 // spaces would hand the painter pieces of LaTeX to set separately.
                 val show = shape.mathShow[r]
-                if (show == MathShow.FORMULA) {
-                    segs.add(Seg(shape.text.substring(from, to), xs[from - bl.startChar], font, style, math = true, start = from))
+                if (show == MathShow.FORMULA || show == MathShow.PENDING) {
+                    segs.add(
+                        Seg(
+                            shape.text.substring(from, to), xs[from - bl.startChar], font, style,
+                            math = true, start = from, box = shape.mathBox[r], pending = show == MathShow.PENDING,
+                        ),
+                    )
                     mathStarts += from
                     runStart = runEnd
                     continue
@@ -808,7 +840,7 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         for ((i, run) in para.runs.withIndex()) {
             val end = at + run.text.length
             if (end > bl.startChar && at < bl.endChar) {
-                if (run.style.mathDisplay && shape.mathShow[i] == MathShow.FORMULA) {
+                if (run.style.mathDisplay && shape.mathShow[i].let { it == MathShow.FORMULA || it == MathShow.PENDING }) {
                     found = true
                 } else if (shape.text.substring(maxOf(at, bl.startChar), minOf(end, bl.endChar)).isNotBlank()) {
                     return false
@@ -874,6 +906,9 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
 
         /** Gap between a marker's right edge and the paragraph text. */
         const val MARKER_GAP = 10.0
+
+        /** A typical face's ascent plus descent in ems, for reading a guess's em off the prose. */
+        private const val LINE_PER_EM = 1.17
 
         /** Layout never wraps narrower than this, however extreme the margins. */
         const val MIN_LINE_WIDTH = 20.0

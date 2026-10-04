@@ -252,7 +252,9 @@ interface Renderer {
      * baseline on [baseline] so it sits on the line like a word. The backend that
      * draws this must be the one behind [MathTypesetter], which already measured
      * the same string, or the text will wrap around a box that is not there.
-     * Default is a no-op, like [drawTextRun], for backends that never see maths.
+     * False when it cannot draw the formula yet, having gone to set it elsewhere:
+     * the caller then shows [drawMathPending] where it goes. Default is a no-op,
+     * like [drawTextRun], for backends that never see maths.
      */
     fun drawMath(
         latex: String,
@@ -261,7 +263,10 @@ interface Renderer {
         sizePt: Double,
         color: Rgba,
         display: Boolean = false,
-    ) {}
+    ): Boolean = true
+
+    /** Stand in at [box], tinted from [color], for [latex] while it is still being set. */
+    fun drawMathPending(latex: String, sizePt: Double, display: Boolean, box: Rect, color: Rgba) {}
 
     /** Run [block] between matching [save]/[restore] calls. */
     fun withSave(block: () -> Unit) {

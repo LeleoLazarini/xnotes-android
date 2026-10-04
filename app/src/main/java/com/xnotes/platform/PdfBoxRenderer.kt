@@ -420,10 +420,11 @@ internal class PdfBoxRenderer(
     }
 
     // A formula is one glyph: vector outlines on the page, its LaTeX when copied.
-    override fun drawMath(latex: String, x: Double, baseline: Double, sizePt: Double, color: Rgba, display: Boolean) {
-        val glyph = ctx.text.formulaGlyph(latex, sizePt, color, display) ?: return
+    override fun drawMath(latex: String, x: Double, baseline: Double, sizePt: Double, color: Rgba, display: Boolean): Boolean {
+        val glyph = ctx.text.formulaGlyph(latex, sizePt, color, display) ?: return true
         tag(PageTagger.Kind.TEXT, latex)
         showRun(PdfText.Run(listOf(glyph), doubleArrayOf(0.0)), x, baseline, sizePt * AndroidText.POINTS_TO_PX, color)
+        return true
     }
 
     /** Make [link]'s share of the flow open its address when clicked. */

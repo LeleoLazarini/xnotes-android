@@ -20,8 +20,16 @@ object FlowPainter {
     /**
      * [breaks] holds, per paragraph, offsets where a backend writing text needs a run to end and
      * the next begin, so each piece can be tagged on its own (a link inside a word, for one).
+     * Without [math] the formulas are left out, for a caller that draws them with [paintMath].
      */
-    fun paintPage(r: Renderer, frame: FlowFrame, pageIndex: Int, region: Rect, breaks: Map<Int, IntArray> = emptyMap()) {
+    fun paintPage(
+        r: Renderer,
+        frame: FlowFrame,
+        pageIndex: Int,
+        region: Rect,
+        breaks: Map<Int, IntArray> = emptyMap(),
+        math: Boolean = true,
+    ) {
         val page = frame.pages.getOrNull(pageIndex) ?: return
         if (r.writesText) r.beginMark(Mark.Decoration)
         for (table in page.tables) {
@@ -33,8 +41,28 @@ object FlowPainter {
         if (r.writesText) r.endMark()
         for (line in page.lines) {
             if (line.bottom < region.top || line.top > region.bottom) continue
-            paintLine(r, frame, line, breaks[line.paraIndex])
+            paintLine(r, frame, line, breaks[line.paraIndex], math)
         }
+    }
+
+    /** Only one page's formulas, for the screen, which paints them over the page every frame. */
+    fun paintMath(r: Renderer, frame: FlowFrame, pageIndex: Int, region: Rect) {
+        val page = frame.pages.getOrNull(pageIndex) ?: return
+        for (line in page.lines) {
+            if (line.mathStarts.isEmpty() || line.bottom < region.top || line.top > region.bottom) continue
+            for (seg in line.segs) {
+                if (seg.math) drawFormula(r, line, seg, seg.style.color ?: frame.defaultColor)
+            }
+        }
+    }
+
+    /** [seg]'s formula, or a stand-in while it is pending or the backend is still setting it. */
+    private fun drawFormula(r: Renderer, line: PlacedLine, seg: Seg, color: Rgba) {
+        val size = seg.font.pointSize
+        val display = seg.style.mathDisplay
+        if (!seg.pending && r.drawMath(seg.text, seg.x, line.baseline, size, color, display)) return
+        val box = seg.box ?: return
+        r.drawMathPending(seg.text, size, display, Rect(seg.x, line.baseline - box.ascent, box.width, box.height), color)
     }
 
     /**
@@ -115,7 +143,7 @@ object FlowPainter {
         }
     }
 
-    private fun paintLine(r: Renderer, frame: FlowFrame, line: PlacedLine, breaks: IntArray?) {
+    private fun paintLine(r: Renderer, frame: FlowFrame, line: PlacedLine, breaks: IntArray?, math: Boolean) {
         // Marks are only for a backend recording structure; the screen never allocates one.
         val tag = r.writesText
         val para = line.paraIndex
@@ -164,7 +192,7 @@ object FlowPainter {
                 r.beginMark(Mark.FlowText(para, seg.start, seg.end))
             }
             if (seg.math) {
-                r.drawMath(seg.text, seg.x, line.baseline, seg.font.pointSize, color, seg.style.mathDisplay)
+                if (math) drawFormula(r, line, seg, color)
             } else {
                 r.drawTextRun(seg.text, seg.x, line.baseline, seg.font, color)
             }
