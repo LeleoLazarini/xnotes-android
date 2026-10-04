@@ -1776,6 +1776,18 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             val idx = pf?.indexOf?.get(page)
             if (pf != null && idx != null) FlowPainter.paintMath(renderer, pf.frame, idx, region)
         }
+        state.prefetchMath = prefetch@{ page, scale ->
+            val frame = publishedFlow?.frame ?: return@prefetch
+            val idx = publishedFlow?.indexOf?.get(page) ?: return@prefetch
+            for (line in frame.pages.getOrNull(idx)?.lines.orEmpty()) {
+                if (line.mathStarts.isEmpty()) continue
+                for (seg in line.segs) {
+                    if (!seg.math) continue
+                    val color = seg.style.color ?: frame.defaultColor
+                    com.xnotes.platform.MathRendering.prefetch(seg.text, seg.font.pointSize, seg.style.mathDisplay, color, scale.toFloat())
+                }
+            }
+        }
     }
 
     private fun onMathLanded(sized: Boolean, idle: Boolean) {

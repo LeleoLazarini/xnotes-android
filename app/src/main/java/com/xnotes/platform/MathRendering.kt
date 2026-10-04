@@ -118,8 +118,10 @@ object MathRendering : MathTypesetter {
     // The bitmap a PDF export falls back to when it cannot take a formula as outlines.
     private const val EXPORT_SCALE = 3f
 
-    // A formula a canvas stopped asking for this long ago has scrolled away.
+    // A formula a canvas stopped asking for this long ago has scrolled away; one fetched ahead
+    // for a page nearby is given longer, since nothing asks again while the canvas is still.
     private const val SHOWN_STALE_MS = 750L
+    private const val NEARBY_STALE_MS = 2000L
 
     // Each batch that brings boxes lays the whole flow out again, so results reach the main thread
     // in batches: soon for formulas on screen, which shimmer meanwhile, less often for the rest.
@@ -303,6 +305,17 @@ object MathRendering : MathTypesetter {
         return true
     }
 
+    /** Queue [latex] for a page the canvas will likely show next, after the formulas it shows now. */
+    fun prefetch(latex: String, sizePt: Double, display: Boolean, color: Rgba, scale: Float) {
+        if (latex.isBlank()) return
+        val f = Formula(latex, sizePt, display)
+        val bucket = bucketFor(scale)
+        val setting = settings.get(f)
+        val argb = setting?.let { argbFor(it, color) } ?: color.toArgb()
+        if (setting != null && (setting.box == null || rasters.get(RasterKey(f, bucket, argb)) != null)) return
+        ask(f, bucket, color, argb, nearby = true)
+    }
+
     /** Queue [latex] for a canvas that is showing a stand-in for it now. */
     fun want(latex: String, sizePt: Double, display: Boolean, color: Rgba, scale: Float) {
         if (latex.isBlank()) return
@@ -406,14 +419,17 @@ object MathRendering : MathTypesetter {
 
     // --- the queue ---
 
-    /** A raster a canvas is standing in for now, and when it last asked. */
-    private class Shown(val formula: Formula, val bucket: Int, val color: Rgba, var asked: Long)
+    /** A raster a canvas is standing in for now, or will soon, and when it last asked. */
+    private class Shown(val formula: Formula, val bucket: Int, val color: Rgba, var asked: Long, val nearby: Boolean)
 
     private val queueLock = ReentrantLock()
     private val work = queueLock.newCondition()
 
     /** Rasters canvases are standing in for, first come first set. */
     private val shown = LinkedHashMap<RasterKey, Shown>()
+
+    /** Rasters for pages beside the ones in view, set once those in view are done. */
+    private val nearby = LinkedHashMap<RasterKey, Shown>()
 
     /** Formulas the latest layout pass asked after, in its order, which is the note's. */
     private var laid = LinkedHashSet<Formula>()
@@ -445,16 +461,17 @@ object MathRendering : MathTypesetter {
         listeners.removeAll { it.get().let { held -> held == null || held === l } }
     }
 
-    private fun ask(f: Formula, bucket: Int, color: Rgba, argb: Int) {
+    private fun ask(f: Formula, bucket: Int, color: Rgba, argb: Int, nearby: Boolean = false) {
         val now = SystemClock.uptimeMillis()
         val key = RasterKey(f, bucket, argb)
         queueLock.withLock {
-            val s = shown[key]
+            val queue = if (nearby) this.nearby else shown
+            val s = queue[key]
             if (s != null) {
                 s.asked = now
                 return
             }
-            shown[key] = Shown(f, bucket, color, now)
+            queue[key] = Shown(f, bucket, color, now, nearby)
             wake()
         }
     }
@@ -477,7 +494,7 @@ object MathRendering : MathTypesetter {
                 if (job is Shown) rasterLocked(e, f, job.bucket, job.color) else if (!had) layOut(e, f)
                 sized = !had
             }
-            landed(sized, onScreen = job is Shown)
+            landed(sized, onScreen = job is Shown && !job.nearby)
         }
     }
 
@@ -493,6 +510,12 @@ object MathRendering : MathTypesetter {
                         val s = shownLeft.next()
                         shownLeft.remove()
                         if (now - s.asked <= SHOWN_STALE_MS) return s
+                    }
+                    val nearbyLeft = nearby.values.iterator()
+                    while (nearbyLeft.hasNext()) {
+                        val s = nearbyLeft.next()
+                        nearbyLeft.remove()
+                        if (now - s.asked <= NEARBY_STALE_MS) return s
                     }
                     laid.firstOrNull()?.let {
                         laid.remove(it)

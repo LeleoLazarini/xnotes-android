@@ -352,6 +352,9 @@ class CanvasState(
      */
     var paintMath: ((page: Page, renderer: Renderer, region: Rect) -> Unit)? = null
 
+    /** Optional: queue the formulas of a page about to scroll in, to be drawn at [scale] screen px per page px. */
+    var prefetchMath: ((page: Page, scale: Double) -> Unit)? = null
+
     /**
      * True while a flow-text caret session is live: screen ink caches build WITHOUT
      * the flow and [CanvasView] paints it immediate-mode each frame instead, so a
@@ -1527,6 +1530,7 @@ class CanvasState(
             for (page in band.prefetch) {
                 backgroundForOrSchedule(page)
                 cacheForOrSchedule(page)
+                prefetchMath?.invoke(page, zoom)
             }
         }
         dropCachesExcept(band.keep)
