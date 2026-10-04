@@ -146,6 +146,21 @@ class TableEditorTest {
     }
 
     @Test
+    fun aMixedSelectionKeepsTheHeadingLevelOfTheTextItCuts() {
+        // A heading's level sizes its text, so dropping the level would shrink what is left.
+        val (head, _) = flowWithTable(rows = 3, cols = 2)
+        head.paragraphs.first().headingLevel = 1
+        FlowEditor(head).replaceRange(FlowRange(FlowPos(0, 2), FlowPos(3, 1)), "")
+        assertEquals(1, head.paragraphs.first().headingLevel)
+
+        val (tail, _) = flowWithTable(rows = 3, cols = 2)
+        tail.paragraphs.last().headingLevel = 2
+        FlowEditor(tail).replaceRange(FlowRange(FlowPos(3, 1), FlowPos(7, 2)), "")
+        assertEquals("ter", tail.paragraphs.last().plainText())
+        assertEquals(2, tail.paragraphs.last().headingLevel)
+    }
+
+    @Test
     fun aSelectionSpanningAWholeTableMergesItsBodyEnds() {
         val (flow, _) = flowWithTable()
         FlowEditor(flow).replaceRange(FlowRange(FlowPos(0, 3), FlowPos(7, 2)), "")

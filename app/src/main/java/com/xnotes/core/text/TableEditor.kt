@@ -111,7 +111,10 @@ class TableEditor(private val flow: TextFlow) {
             if (b == null) {
                 val para = paras[p]
                 if (p == s.para) {
-                    head = Paragraph(ed.copyRunsBefore(para, s.offset), para.align, para.indent, para.list, para.checked, para.codeLang)
+                    head = Paragraph(
+                        ed.copyRunsBefore(para, s.offset), para.align, para.indent, para.list, para.checked, para.codeLang,
+                        headingLevel = para.headingLevel,
+                    )
                     out.add(head)
                     caretPara = head
                     caretOffset = head.length
@@ -121,7 +124,12 @@ class TableEditor(private val flow: TextFlow) {
                         head.runs.addAll(tail)
                         ed.normalize(head)
                     } else {
-                        out.add(Paragraph(tail, para.align, para.indent, para.list, para.checked, para.codeLang))
+                        out.add(
+                            Paragraph(
+                                tail, para.align, para.indent, para.list, para.checked, para.codeLang,
+                                headingLevel = para.headingLevel,
+                            ),
+                        )
                         if (caretPara == null) caretPara = out.last()
                     }
                 }
