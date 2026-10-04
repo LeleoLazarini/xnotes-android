@@ -39,6 +39,7 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
     private val rasterBlendPaint = Paint(Paint.FILTER_BITMAP_FLAG).apply { isDither = true }
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val layerPaint = Paint()
+    private val mathInk by lazy { MathRendering.Ink() }
 
     /** The platform blend for [blend], or null when it has none (SRC_OVER, or below API 29). */
     private fun nativeBlend(blend: BlendMode): android.graphics.BlendMode? {
@@ -384,7 +385,7 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
         color: Rgba,
         display: Boolean,
     ) {
-        MathRendering.draw(canvas, latex, x, baseline, sizePt, color, display)
+        MathRendering.draw(canvas, mathInk, latex, x, baseline, sizePt, color, display, avgScale)
     }
 
     private fun applyPen(pen: Pen) {

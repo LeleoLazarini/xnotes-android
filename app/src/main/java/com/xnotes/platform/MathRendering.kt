@@ -7,21 +7,22 @@ import android.graphics.RectF
 import android.util.LruCache
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.sp
-import com.hrm.latex.renderer.export.ExportConfig
-import com.hrm.latex.renderer.export.LatexExporterState
-import com.hrm.latex.renderer.measure.LatexMeasurerState
 import com.hrm.latex.renderer.model.LatexConfig
 import com.hrm.latex.renderer.model.LatexFontFamilies
 import com.hrm.latex.renderer.model.LatexTheme
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.pal.MathBox
 import com.xnotes.core.pal.MathTypesetter
+import kotlin.math.ceil
+import kotlin.math.log2
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
 
 /**
  * Typesets and draws the flow's LaTeX, through a renderer that can only be built
@@ -30,77 +31,89 @@ import com.xnotes.core.pal.MathTypesetter
  * nowhere else for the formula cache to live. Until [install] runs, measuring
  * returns null and maths reads as its own source, which is also what happens to
  * LaTeX that will not parse.
+ *
+ * A formula is laid out once, and that one layout gives both its box and its rasters. Rasters are
+ * alpha masks the text colour tints when drawn, so a new colour or theme costs nothing, except for
+ * the few formulas that paint in colours of their own.
  */
 object MathRendering : MathTypesetter {
 
-    /**
-     * The measurer, the exporter and the density they were both built against, plus the pieces
-     * they were built from, which drawing a formula as vectors needs directly.
-     */
+    /** The renderer's pieces, all built against one density. */
     private class Engine(
-        val measurer: LatexMeasurerState,
-        val exporter: LatexExporterState,
         val spPx: Float,
         val density: Density,
         val text: TextMeasurer,
         val fonts: LatexFontFamilies,
+        val metrics: Any,
     )
 
     @Volatile private var engine: Engine? = null
 
-    // Formulas raster at this multiple of their page size so zooming in stays
-    // sharp; past it they soften like any other bitmap, which is the trade for
-    // not re-rastering every one of them on every pinch.
-    private const val OVERSAMPLE = 3f
+    /** A formula as the caches know it. */
+    private data class Formula(val latex: String, val sizePt: Double, val display: Boolean)
 
-    // No bitmap side may pass this. A page-wide formula at full oversample runs
-    // to thousands of pixels a side and tens of megabytes; the exporter answers
-    // that with null and the page then draws nothing at all, which loses the
-    // whole equation rather than softening it.
-    private const val MAX_BITMAP_PX = 2048.0
+    /**
+     * What setting a formula found: the box it fills, null for LaTeX that will not set, and whether
+     * it paints in colours of its own, which a tinted mask cannot carry.
+     */
+    private class Setting(val box: MathBox?, val colored: Boolean)
 
-    // Below this a formula would raster smaller than it is drawn, which is worse
-    // than a large bitmap.
-    private const val MIN_OVERSAMPLE = 1.0
+    /** A raster of [formula] at [bucket]; [argb] is the colour it was painted in, or 0 for a mask. */
+    private data class RasterKey(val formula: Formula, val bucket: Int, val argb: Int)
 
-    private const val CACHE_BYTES = 8 shl 20
+    // Settings are a few dozen bytes each and the layout pass asks after every formula in the note,
+    // so this holds far more than any note has.
+    private const val SETTINGS = 8192
 
-    private const val BOX_CACHE = 512
+    // Layouts hold the library's text layouts, so only the latest few are kept: enough to raster a
+    // screenful again at a new zoom without setting any of it twice.
+    private const val LAYOUTS = 48
 
-    /** Stands in for LaTeX the typesetter refused, so it is only ever asked once. */
-    private val REFUSED = MathBox(-1.0, -1.0, -1.0)
+    private const val RASTER_BYTES = 32 shl 20
 
-    private val bitmaps = object : LruCache<String, Bitmap>(CACHE_BYTES) {
-        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    // No raster side may pass this; a long formula at a deep zoom softens rather than costing tens
+    // of megabytes.
+    private const val MAX_SIDE_PX = 4096.0
+
+    // Rasters come in powers of two of their page size, from a quarter to eight times.
+    private const val MIN_BUCKET = -2
+    private const val MAX_BUCKET = 3
+
+    // The bitmap a PDF export falls back to when it cannot take a formula as outlines.
+    private const val EXPORT_SCALE = 3f
+
+    /** What a mask is painted in: its alpha is all a mask keeps. */
+    private val MASK_INK = Rgba(0, 0, 0, 255)
+
+    private val settings = LruCache<Formula, Setting>(SETTINGS)
+
+    /** Touched only holding the lock, like everything else that reaches the library. */
+    private val layouts = LruCache<Formula, Any>(LAYOUTS)
+
+    private val rasters = object : LruCache<RasterKey, Bitmap>(RASTER_BYTES) {
+        override fun sizeOf(key: RasterKey, value: Bitmap): Int = value.allocationByteCount
     }
 
     /**
-     * Sizes already worked out. Measuring is the slow half, hundreds of
-     * milliseconds for a long formula, and the painter asks after every visible
-     * one on every frame; the warm path has to answer without reaching the
-     * library at all, whose own caches sit behind a lock this would otherwise
-     * share with whatever is laying out in the background.
+     * What a drawing thread paints formulas with. Each renderer keeps its own, so the colour a mask
+     * is tinted with is never set by two threads at once.
      */
-    private val boxes = LruCache<String, MathBox>(BOX_CACHE)
-
-    private val blit = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    class Ink {
+        internal val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        internal val rect = RectF()
+    }
 
     /**
      * Adopt the renderer built in the composition. Called again whenever the
-     * density changes, which invalidates every rastered formula.
+     * density or the fonts change, which invalidates every formula set so far.
      */
-    fun install(
-        measurer: LatexMeasurerState,
-        exporter: LatexExporterState,
-        density: Density,
-        text: TextMeasurer,
-        fonts: LatexFontFamilies,
-    ) {
+    fun install(density: Density, text: TextMeasurer, fonts: LatexFontFamilies) {
         val spPx = with(density) { 1.sp.toPx() }
         synchronized(this) {
-            engine = Engine(measurer, exporter, spPx, density, text, fonts)
-            bitmaps.evictAll()
-            boxes.evictAll()
+            engine = Engine(spPx, density, text, fonts, LatexInternals.metrics(fonts))
+            settings.evictAll()
+            layouts.evictAll()
+            rasters.evictAll()
         }
     }
 
@@ -109,51 +122,114 @@ object MathRendering : MathTypesetter {
     override fun measure(latex: String, sizePt: Double, display: Boolean): MathBox? {
         val e = engine ?: return null
         if (latex.isBlank() || e.spPx <= 0f) return null
-        val key = key(latex, sizePt, display)
-        boxes.get(key)?.let { return if (it === REFUSED) null else it }
+        val f = Formula(latex, sizePt, display)
+        settings.get(f)?.let { return it.box }
         // The library caches in plain maps, and page caches are built off the main
         // thread, so every call into it is serialized here rather than there.
-        val d = synchronized(this) { e.measurer.measure(source(latex, display), config(e, sizePt, null)) }
-        val box = if (d == null) {
-            REFUSED
-        } else {
-            MathBox(
-                width = d.widthPx.toDouble(),
-                ascent = d.baselinePx.toDouble(),
-                descent = (d.heightPx - d.baselinePx).toDouble(),
-            )
-        }
-        boxes.put(key, box)
-        return if (box === REFUSED) null else box
+        return synchronized(this) { settings.get(f) ?: layOut(e, f).first }.box
     }
 
-    private fun key(latex: String, sizePt: Double, display: Boolean): String =
-        "$latex|$sizePt|$display"
+    /** Set [f] afresh, remembering the setting and the layout it came from. Call holding the lock. */
+    private fun layOut(e: Engine, f: Formula): Pair<Setting, Any?> {
+        val nodes = runCatching { LatexInternals.parse(source(f.latex, f.display)) }.getOrDefault(emptyList())
+        val layout = runCatching {
+            LatexInternals.layout(nodes, config(e, f.sizePt, MASK_INK), e.fonts, e.metrics, e.text, e.density)
+        }.getOrNull()
+        val setting = Setting(layout?.let(::boxOf), LatexInternals.ownColors(nodes))
+        settings.put(f, setting)
+        if (layout != null) layouts.put(f, layout)
+        return setting to layout
+    }
 
-    /** Draw [latex] with its left edge at [x], sitting on [baseline], in [color]. */
+    private fun boxOf(layout: Any): MathBox {
+        val baseline = LatexInternals.baseline(layout).toDouble()
+        return MathBox(
+            width = LatexInternals.width(layout).toDouble(),
+            ascent = baseline,
+            descent = LatexInternals.height(layout) - baseline,
+        )
+    }
+
+    /**
+     * Draw [latex] with its left edge at [x], sitting on [baseline], in [color], on a canvas that
+     * shows one page px as [scale] of its own.
+     */
     fun draw(
         canvas: Canvas,
+        ink: Ink,
         latex: String,
         x: Double,
         baseline: Double,
         sizePt: Double,
         color: Rgba,
-        display: Boolean = false,
+        display: Boolean,
+        scale: Float,
     ) {
         val e = engine ?: return
-        val box = measure(latex, sizePt, display) ?: return
-        val bmp = raster(e, source(latex, display), sizePt, color, box) ?: return
-        canvas.drawBitmap(
-            bmp,
-            null,
-            RectF(
-                x.toFloat(),
-                (baseline - box.ascent).toFloat(),
-                (x + box.width).toFloat(),
-                (baseline + box.descent).toFloat(),
-            ),
-            blit,
+        if (latex.isBlank() || e.spPx <= 0f) return
+        val f = Formula(latex, sizePt, display)
+        val bucket = bucketFor(scale)
+        val cached = settings.get(f)?.let { s -> rasters.get(RasterKey(f, bucket, argbFor(s, color))) }
+        val bmp = cached ?: synchronized(this) { rasterLocked(e, f, bucket, color) } ?: return
+        val box = settings.get(f)?.box ?: return
+        blit(canvas, ink, bmp, x, baseline, box, color)
+    }
+
+    private fun argbFor(setting: Setting, color: Rgba): Int = if (setting.colored) color.toArgb() else 0
+
+    /** [f]'s raster at [bucket] for [color], painted now unless it is cached. Call holding the lock. */
+    private fun rasterLocked(e: Engine, f: Formula, bucket: Int, color: Rgba): Bitmap? {
+        var setting = settings.get(f)
+        var layout = layouts.get(f)
+        if (setting == null || (setting.box != null && layout == null)) {
+            val (s, l) = layOut(e, f)
+            setting = s
+            layout = l
+        }
+        val box = setting.box ?: return null
+        val key = RasterKey(f, bucket, argbFor(setting, color))
+        rasters.get(key)?.let { return it }
+        // The colours a formula paints in sit in its layout, so one that has its own is set again in
+        // the text colour; any other paints its mask from the layout it was measured with.
+        val painted = if (setting.colored) layoutIn(e, f, color) else layout
+        val bmp = painted?.let { paint(e, it, box, scaleOf(bucket), setting.colored) } ?: return null
+        rasters.put(key, bmp)
+        return bmp
+    }
+
+    private fun layoutIn(e: Engine, f: Formula, color: Rgba): Any? = runCatching {
+        LatexInternals.layout(LatexInternals.parse(source(f.latex, f.display)), config(e, f.sizePt, color), e.fonts, e.metrics, e.text, e.density)
+    }.getOrNull()
+
+    /** [layout] painted to fill [box] at [scale], as a mask unless it is [colored]. */
+    private fun paint(e: Engine, layout: Any, box: MathBox, scale: Float, colored: Boolean): Bitmap? {
+        val longest = max(box.width, box.height)
+        if (longest <= 0.0) return null
+        val s = min(scale.toDouble(), MAX_SIDE_PX / longest)
+        val w = ceil(box.width * s).toInt().coerceAtLeast(1)
+        val h = ceil(box.height * s).toInt().coerceAtLeast(1)
+        val bmp = runCatching {
+            Bitmap.createBitmap(w, h, if (colored) Bitmap.Config.ARGB_8888 else Bitmap.Config.ALPHA_8)
+        }.getOrNull() ?: return null
+        val canvas = Canvas(bmp)
+        canvas.scale((w / box.width).toFloat(), (h / box.height).toFloat())
+        val size = Size(box.width.toFloat(), box.height.toFloat())
+        CanvasDrawScope().draw(e.density, LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(canvas), size) {
+            LatexInternals.draw(this, layout)
+        }
+        return bmp
+    }
+
+    private fun blit(canvas: Canvas, ink: Ink, bmp: Bitmap, x: Double, baseline: Double, box: MathBox, color: Rgba) {
+        // A mask takes the text colour from the paint; a coloured raster already carries it.
+        ink.paint.color = if (bmp.config == Bitmap.Config.ALPHA_8) color.toArgb() else android.graphics.Color.BLACK
+        ink.rect.set(
+            x.toFloat(),
+            (baseline - box.ascent).toFloat(),
+            (x + box.width).toFloat(),
+            (baseline + box.descent).toFloat(),
         )
+        canvas.drawBitmap(bmp, null, ink.rect, ink.paint)
     }
 
     /**
@@ -167,8 +243,7 @@ object MathRendering : MathTypesetter {
         if (latex.isBlank() || e.spPx <= 0f) return false
         return synchronized(this) {
             runCatching {
-                val layout = LatexInternals.layout(source(latex, display), config(e, sizePt, color), e.fonts, e.text, e.density)
-                    ?: return@runCatching false
+                val layout = layoutIn(e, Formula(latex, sizePt, display), color) ?: return@runCatching false
                 val size = Size(LatexInternals.width(layout), LatexInternals.height(layout))
                 CanvasDrawScope().draw(e.density, LayoutDirection.Ltr, androidx.compose.ui.graphics.Canvas(canvas), size) {
                     LatexInternals.draw(this, layout)
@@ -179,15 +254,25 @@ object MathRendering : MathTypesetter {
     }
 
     /**
-     * The bitmap [draw] blits for [latex] and the box it fills, for a backend that places the
-     * image itself. The bitmap belongs to the cache: callers copy it and never recycle it.
+     * [latex] painted in [color] and the box it fills, for a backend that places the image itself.
+     * The bitmap is a fresh one the caller owns.
      */
     fun formulaBitmap(latex: String, sizePt: Double, color: Rgba, display: Boolean): Pair<Bitmap, MathBox>? {
         val e = engine ?: return null
-        val box = measure(latex, sizePt, display) ?: return null
-        val bmp = raster(e, source(latex, display), sizePt, color, box) ?: return null
-        return bmp to box
+        if (latex.isBlank() || e.spPx <= 0f) return null
+        return synchronized(this) {
+            val f = Formula(latex, sizePt, display)
+            val box = (settings.get(f) ?: layOut(e, f).first).box ?: return@synchronized null
+            val layout = layoutIn(e, f, color) ?: return@synchronized null
+            paint(e, layout, box, EXPORT_SCALE, colored = true)?.let { it to box }
+        }
     }
+
+    /** The power of two at least [scale], so a pinch rasters a formula again only at doublings. */
+    private fun bucketFor(scale: Float): Int =
+        ceil(log2(scale.coerceAtLeast(1e-3f).toDouble())).toInt().coerceIn(MIN_BUCKET, MAX_BUCKET)
+
+    private fun scaleOf(bucket: Int): Float = 2f.pow(bucket)
 
     /**
      * What actually goes to the renderer. Display form is asked for in LaTeX's own
@@ -197,45 +282,16 @@ object MathRendering : MathTypesetter {
     private fun source(latex: String, display: Boolean): String =
         if (display) "\\displaystyle $latex" else latex
 
-    private fun raster(e: Engine, latex: String, sizePt: Double, color: Rgba, box: MathBox): Bitmap? {
-        val key = "$latex|$sizePt|${color.toArgb()}"
-        bitmaps.get(key)?.let { return it }
-        return synchronized(this) {
-            bitmaps.get(key) ?: e.exporter.export(
-                latex = latex,
-                config = config(e, sizePt, color),
-                exportConfig = ExportConfig(scale = oversampleFor(box), transparentBackground = true),
-            )?.imageBitmap?.asAndroidBitmap()?.also { bitmaps.put(key, it) }
-        }
-    }
-
-    /**
-     * How far to oversample [box] before the bitmap grows unreasonable. A long
-     * formula across a page is already a thousand points wide, and three times
-     * that is a bitmap of tens of megabytes: the exporter answers a request that
-     * size with null, and a null bitmap is an equation that does not appear at
-     * all. Sharpness gives way before the equation does.
-     */
-    private fun oversampleFor(box: MathBox): Float {
-        val longest = maxOf(box.width, box.height)
-        if (longest <= 0.0) return OVERSAMPLE
-        return (MAX_BITMAP_PX / longest).coerceIn(MIN_OVERSAMPLE, OVERSAMPLE.toDouble()).toFloat()
-    }
-
     /**
      * Ask for the formula in page pixels rather than screen ones: dividing the
      * size back out of the measurer's own density is what keeps an equation the
      * same size on the page whatever the display or the reader's font scale.
      */
-    private fun config(e: Engine, sizePt: Double, color: Rgba?): LatexConfig {
+    private fun config(e: Engine, sizePt: Double, color: Rgba): LatexConfig {
         val px = sizePt * AndroidText.POINTS_TO_PX
         return LatexConfig(
             fontSize = (px / e.spPx).sp,
-            theme = if (color == null) {
-                LatexTheme.auto()
-            } else {
-                LatexTheme.light(color = Color(color.toArgb()), backgroundColor = Color.Transparent)
-            },
+            theme = LatexTheme.light(color = Color(color.toArgb()), backgroundColor = Color.Transparent),
         )
     }
 }
