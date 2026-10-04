@@ -3219,10 +3219,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             }
         }
         if (page.pdfPage == null) MarkupPainter.paint(r, page.markups, doc.dpi / 72.0)
-        // A closed note's flow is laid out locally (the published snapshot serves the open note only).
+        // A closed note's flow is laid out locally (the published snapshot serves the open note only),
+        // and only as far as this page, so a tile never sets the formulas further on.
         if (!doc.flow.isEmpty) {
             val frame = themedFlowLayout(doc.flow)
-                .layout(doc.flow, doc.pages.map { PageBox(it.width, it.height) }, doc.dpi)
+                .layout(doc.flow, doc.pages.map { PageBox(it.width, it.height) }, doc.dpi, throughPage = index)
             FlowPainter.paintPage(r, frame, index, Rect(0.0, 0.0, page.width, page.height))
         }
         for (item in itemsSnapshot(page)) item.paint(r)

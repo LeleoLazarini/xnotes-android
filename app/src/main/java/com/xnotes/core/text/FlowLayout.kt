@@ -471,9 +471,10 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
      * Lay the whole flow onto [pageBoxes]: break each paragraph at its page's
      * content width, fill pages top to bottom, re-break a paragraph remainder
      * when it continues onto a page of different width, and count how many
-     * virtual pages the tail overflowed past the real ones.
+     * virtual pages the tail overflowed past the real ones. Past [throughPage]
+     * it stops, for a caller painting only that far: nothing later is shaped.
      */
-    fun layout(flow: TextFlow, pageBoxes: List<PageBox>, dpi: Int): FlowFrame {
+    fun layout(flow: TextFlow, pageBoxes: List<PageBox>, dpi: Int, throughPage: Int = Int.MAX_VALUE): FlowFrame {
         val defColor = flow.defaultColor ?: autoColor() ?: TextFlow.DEFAULT_COLOR
         val cells = CellIndex(flow.paragraphs)
         if (pageBoxes.isEmpty()) return FlowFrame(emptyList(), flow.rev, 0, defColor, codeBackground(), cells)
@@ -488,6 +489,7 @@ class FlowLayout(private val measurer: TextMeasurer, private val math: MathTypes
         var ordinal = 0
         var skipTo = 0
         for ((paraIndex, para) in flow.paragraphs.withIndex()) {
+            if (page > throughPage) break
             if (paraIndex < skipTo) continue
             val block = cells.blockAt(paraIndex)
             if (block != null) {

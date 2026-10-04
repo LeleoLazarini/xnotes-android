@@ -135,4 +135,23 @@ class FlowPendingMathTest {
             r.ops,
         )
     }
+
+    @Test
+    fun aLayoutThroughOnePageMatchesItAndSetsNothingFurther() {
+        val math = object : com.xnotes.core.pal.MathTypesetter {
+            val asked = ArrayList<String>()
+            override fun measure(latex: String, sizePt: Double, display: Boolean): MathBox? {
+                asked += latex
+                return MathBox(40.0, 12.0, 4.0)
+            }
+        }
+        val flow = flowWith(*Array(40) { mathPara("f_{$it}") })
+        val boxes = listOf(PageBox(400.0, 120.0), PageBox(400.0, 120.0), PageBox(400.0, 120.0), PageBox(400.0, 120.0))
+        val whole = FlowLayout(FakeTextMeasurer(), math).layout(flow, boxes, 150)
+        math.asked.clear()
+        val first = FlowLayout(FakeTextMeasurer(), math).layout(flow, boxes, 150, throughPage = 0)
+        assertEquals(whole.pages[0].lines.map { it.top to it.paraIndex }, first.pages[0].lines.map { it.top to it.paraIndex })
+        assertTrue(math.asked.size < 40)
+        assertTrue(first.pages[2].lines.isEmpty())
+    }
 }
