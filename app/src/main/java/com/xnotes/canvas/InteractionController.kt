@@ -1187,11 +1187,12 @@ class InteractionController(
         val strokeWidth = stroke.config.baseWidth * SHAPE_PEN_PARITY
         val color = stroke.config.rgba // the as-drawn ink colour (not renderColor's alpha-scaled one)
         val dashed = stroke.tool == Tool.DASHED // a dashed pen snaps to a dashed shape
+        val fill = shapeConfig.fillFor(rec.kind, color)
         val verts = rec.vertices
         val shape = if (verts != null) {
             // Polygon/polyline: keep the recognized corners (neon/dash carried like the other kinds).
             ShapeItem.poly(
-                rec.kind, verts, color, strokeWidth, null, stroke.config.neon, stroke.config.neonStrength,
+                rec.kind, verts, color, strokeWidth, fill, stroke.config.neon, stroke.config.neonStrength,
                 dashed, stroke.config.dashLength, stroke.config.dashGap,
             )
         } else {
@@ -1201,7 +1202,7 @@ class InteractionController(
                 end = rec.end,
                 strokeRgba = color,
                 strokeWidth = strokeWidth,
-                fillRgba = null,
+                fillRgba = fill,
                 neon = stroke.config.neon, // a neon pen snaps to a neon shape (highlighter never snaps)
                 neonStrength = stroke.config.neonStrength,
                 dashed = dashed,
@@ -1779,7 +1780,7 @@ class InteractionController(
         clearSelection()
         val startLocal = state.toPageSpace(pageIndex, content)
         val kind = shapeConfig.shape
-        val fill = if (shapeConfig.fill && kind.isClosed) inkColor.scaleAlpha(shapeConfig.fillAlpha) else null
+        val fill = shapeConfig.fillFor(kind, inkColor)
         pendingShape = ShapeItem(
             kind, startLocal, startLocal, inkColor, shapeConfig.strokeWidth * SHAPE_PEN_PARITY, fill,
             shapeConfig.neon, shapeConfig.neonStrength,

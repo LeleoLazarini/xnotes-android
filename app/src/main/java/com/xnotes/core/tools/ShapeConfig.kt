@@ -1,5 +1,7 @@
 package com.xnotes.core.tools
 
+import com.xnotes.core.model.Rgba
+
 /** Shape kinds drawn by the shape tool (spec 02 §5.4, 04 §6). Polygon/polyline are
  *  vertex-list shapes produced only by hold-to-snap recognition, not the shape tool. */
 enum class ShapeKind(val id: String) {
@@ -44,6 +46,10 @@ data class ShapeConfig(
     val dashLength: Double = 10.0,
     val dashGap: Double = 8.0,
 ) {
+    /** The fill a [kind] outlined in [outline] gets, drawn or snapped; null when unfilled or open. */
+    fun fillFor(kind: ShapeKind, outline: Rgba): Rgba? =
+        if (fill && kind.isClosed) outline.scaleAlpha(fillAlpha) else null
+
     companion object {
         /** Default reduced opacity applied to the ink colour when a closed shape is filled. */
         const val FILL_ALPHA = 0.25

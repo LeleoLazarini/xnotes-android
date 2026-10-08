@@ -878,7 +878,7 @@ class InfiniteInteraction(
         val cfg = shapeConfig()
         val at = viewport.viewportToContent(Pt(vx, vy))
         val ink = inkColor()
-        val fill = if (cfg.fill && cfg.shape.isClosed) ink.scaleAlpha(cfg.fillAlpha) else null
+        val fill = cfg.fillFor(cfg.shape, ink)
         pendingShape = ShapeItem(
             cfg.shape, at, at, ink, cfg.strokeWidth * InteractionController.SHAPE_PEN_PARITY, fill,
             cfg.neon, cfg.neonStrength,
@@ -967,10 +967,11 @@ class InfiniteInteraction(
         val width = stroke.config.baseWidth * InteractionController.SHAPE_PEN_PARITY
         val color = stroke.config.rgba // the as-drawn colour, not the alpha-scaled render one
         val dashed = stroke.tool == Tool.DASHED // a dashed pen snaps to a dashed shape
+        val fill = shapeConfig().fillFor(rec.kind, color)
         val verts = rec.vertices
         val shape = if (verts != null) {
             ShapeItem.poly(
-                rec.kind, verts, color, width, null, stroke.config.neon, stroke.config.neonStrength,
+                rec.kind, verts, color, width, fill, stroke.config.neon, stroke.config.neonStrength,
                 dashed, stroke.config.dashLength, stroke.config.dashGap,
             )
         } else {
@@ -980,7 +981,7 @@ class InfiniteInteraction(
                 end = rec.end,
                 strokeRgba = color,
                 strokeWidth = width,
-                fillRgba = null,
+                fillRgba = fill,
                 neon = stroke.config.neon,
                 neonStrength = stroke.config.neonStrength,
                 dashed = dashed,

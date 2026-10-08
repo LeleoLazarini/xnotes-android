@@ -1,7 +1,9 @@
 package com.xnotes.core.tools
 
+import com.xnotes.core.model.Rgba
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -73,6 +75,17 @@ class ToolsTest {
         assertTrue(ShapeKind.ARROW.isOpen)
         assertEquals(ShapeKind.RECTANGLE, ShapeKind.fromId("nonsense"))
         assertEquals(ShapeKind.TRIANGLE, ShapeKind.fromId("triangle"))
+    }
+
+    @Test fun theShapeToolsFillReachesClosedKindsOnly() {
+        val ink = Rgba(10, 20, 30)
+        val on = ShapeConfig(fill = true, fillAlpha = 0.5)
+        assertEquals(Rgba(10, 20, 30, 127), on.fillFor(ShapeKind.POLYGON, ink))
+        assertEquals(Rgba(10, 20, 30, 127), on.fillFor(ShapeKind.ELLIPSE, ink))
+        assertNull(on.fillFor(ShapeKind.POLYLINE, ink))
+        assertNull(on.fillFor(ShapeKind.CURVE, ink))
+        assertNull(on.fillFor(ShapeKind.LINE, ink))
+        assertNull(ShapeConfig(fill = false).fillFor(ShapeKind.RECTANGLE, ink))
     }
 
     @Test fun toolIdRoundTrip() {
