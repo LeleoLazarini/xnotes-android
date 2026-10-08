@@ -36,9 +36,8 @@ internal object PdfItemRaster {
         is Stroke -> item.tool == Tool.HIGHLIGHTER ||
             (item.config.neon && item.tool != Tool.HIGHLIGHTER) ||
             item.renderColor.a < 255
-        is ShapeItem -> item.neon ||
-            item.strokeRgba.a < 255 ||
-            (item.fillRgba?.let { it.a < 255 } ?: false)
+        // A shape's fill and outline are single paths, so PDF transparency draws them as on screen.
+        is ShapeItem -> item.neon
         else -> false // text boxes are real text and images are image XObjects, both from the renderer
     }
 
