@@ -90,17 +90,17 @@ object ShapeIcons {
         }
     }.nodes
 
-    /** Where each kind sits on the grid: the proportions the hand-drawn glyphs had. */
-    private fun boxFor(kind: ShapeKind): Rect = when (kind) {
-        ShapeKind.LINE, ShapeKind.ARROW -> Rect(10.0, 10.0, 28.0, 28.0)
-        ShapeKind.RECTANGLE, ShapeKind.ROUNDED_RECT, ShapeKind.PARALLELOGRAM, ShapeKind.TRAPEZOID -> Rect(6.0, 12.0, 36.0, 24.0)
-        ShapeKind.ELLIPSE, ShapeKind.CAPSULE, ShapeKind.CLOUD -> Rect(5.0, 12.0, 38.0, 24.0)
-        ShapeKind.TRIANGLE, ShapeKind.RIGHT_TRIANGLE -> Rect(6.0, 8.0, 36.0, 30.0)
-        ShapeKind.SQUARE -> Rect(10.0, 10.0, 28.0, 28.0)
-        ShapeKind.HEART -> Rect(7.0, 8.0, 34.0, 32.0)
-        else -> Rect(7.0, 7.0, 34.0, 34.0)
+    /** Where a kind sits on the grid: centred, as big as its aspect allows inside 38 by 34. */
+    private fun boxFor(kind: ShapeKind): Rect {
+        if (kind.isEndpointShape) return Rect(10.0, 10.0, 28.0, 28.0)
+        val aspect = kind.iconAspect.coerceIn(0.3, 3.0)
+        val h = minOf(MAX_W / aspect, MAX_H)
+        val w = h * aspect
+        return Rect((GRID - w) / 2.0, (GRID - h) / 2.0, w, h)
     }
 
     private const val GRID = 48f
     private const val STROKE = 4.0
+    private const val MAX_W = 38.0
+    private const val MAX_H = 34.0
 }

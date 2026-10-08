@@ -64,7 +64,37 @@ object ShapePresets {
         ),
     )
 
-    val pages: List<ShapePage> = listOf(basic)
+    val flowchart = ShapePage(
+        "flowchart",
+        listOf(
+            ShapePreset("flow_process", ShapeKind.RECTANGLE),
+            ShapePreset("flow_alt_process", ShapeKind.ROUNDED_RECT),
+            ShapePreset("flow_decision", ShapeKind.DIAMOND),
+            ShapePreset("flow_data", ShapeKind.PARALLELOGRAM),
+            ShapePreset("flow_terminator", ShapeKind.CAPSULE),
+            ShapePreset("flow_preparation", FlowchartKinds.PREPARATION),
+            ShapePreset("flow_predefined", FlowchartKinds.PREDEFINED),
+            ShapePreset("flow_internal_storage", FlowchartKinds.INTERNAL_STORAGE),
+            ShapePreset("flow_document", FlowchartKinds.DOCUMENT),
+            ShapePreset("flow_multidocument", FlowchartKinds.MULTIDOCUMENT),
+            ShapePreset("flow_manual_input", FlowchartKinds.MANUAL_INPUT),
+            ShapePreset("flow_manual_operation", FlowchartKinds.MANUAL_OPERATION),
+            ShapePreset("flow_connector", ShapeKind.CIRCLE),
+            ShapePreset("flow_off_page", FlowchartKinds.OFF_PAGE),
+            ShapePreset("flow_database", FlowchartKinds.DATABASE),
+            ShapePreset("flow_direct_access", FlowchartKinds.DIRECT_ACCESS),
+            ShapePreset("flow_display", FlowchartKinds.DISPLAY),
+            ShapePreset("flow_delay", FlowchartKinds.DELAY),
+            ShapePreset("flow_stored_data", FlowchartKinds.STORED_DATA),
+            ShapePreset("flow_sort", FlowchartKinds.SORT),
+            ShapePreset("flow_merge", FlowchartKinds.MERGE),
+            ShapePreset("flow_extract", ShapeKind.TRIANGLE),
+            ShapePreset("flow_summing", FlowchartKinds.SUMMING),
+            ShapePreset("flow_or", FlowchartKinds.OR),
+        ),
+    )
+
+    val pages: List<ShapePage> = listOf(basic, flowchart)
 
     val all: List<ShapePreset> = pages.flatMap { it.presets }
 

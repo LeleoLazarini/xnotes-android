@@ -63,6 +63,9 @@ abstract class ShapeKind internal constructor(val id: String) {
     /** Square and circle: a corner drag keeps them as wide as they are tall. */
     open val keepsAspect: Boolean get() = false
 
+    /** The width-to-height its picker glyph is drawn at. */
+    open val iconAspect: Double get() = 1.0
+
     /** True when nothing the kind draws reaches outside its box, so the box bounds it. */
     open val staysInBox: Boolean get() = true
 
@@ -133,7 +136,7 @@ abstract class ShapeKind internal constructor(val id: String) {
             LINE, ARROW, RECTANGLE, ELLIPSE, CIRCLE, TRIANGLE, POLYGON, POLYLINE, CURVE,
             ROUNDED_RECT, SQUARE, CAPSULE, RIGHT_TRIANGLE, DIAMOND, PARALLELOGRAM, TRAPEZOID,
             REGULAR_POLYGON, STAR, CROSS, HEART, CLOUD, RING, PIE, ARC,
-        )
+        ) + FlowchartKinds.all
 
         private val byId: Map<String, ShapeKind> = all.associateBy { it.id }
 
@@ -200,6 +203,7 @@ private class EndpointKind(id: String, override val defaultHeadEnd: Head) : Shap
 
 internal class RectangleKind(id: String, override val keepsAspect: Boolean) : ShapeKind(id) {
     override val isClosed get() = true
+    override val iconAspect get() = if (keepsAspect) 1.0 else 4.0 / 3.0
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry {
         val corners = listOf(Pt(box.left, box.top), Pt(box.right, box.top), Pt(box.right, box.bottom), Pt(box.left, box.bottom))
         return ShapeGeometry(listOf(ShapePath.polygon(corners)), corners, polygonConnections(corners), inset(box))
@@ -208,6 +212,7 @@ internal class RectangleKind(id: String, override val keepsAspect: Boolean) : Sh
 
 private class EllipseKind(id: String, override val keepsAspect: Boolean) : ShapeKind(id) {
     override val isClosed get() = true
+    override val iconAspect get() = if (keepsAspect) 1.0 else 1.5
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry {
         val cx = box.centerX
         val cy = box.centerY
@@ -224,6 +229,7 @@ private class EllipseKind(id: String, override val keepsAspect: Boolean) : Shape
 /** Apex on the top edge, at the fraction of its width the one knob sets (the middle by default); base along the bottom. */
 private class TriangleKind(id: String) : ShapeKind(id) {
     override val isClosed get() = true
+    override val iconAspect get() = 1.2
     override val defaultAdj = doubleArrayOf(0.5)
     override val knobs = listOf(
         KnobDef(

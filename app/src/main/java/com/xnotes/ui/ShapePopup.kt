@@ -227,6 +227,7 @@ private fun StepButton(glyph: String, label: String, enabled: Boolean, onClick: 
 
 @StringRes
 private fun pageLabel(page: ShapePage): Int = when (page.key) {
+    "flowchart" -> R.string.shape_page_flowchart
     else -> R.string.shape_page_basic
 }
 
@@ -256,6 +257,30 @@ internal fun presetLabel(key: String): Int = when (key) {
     "pie" -> R.string.shape_pie
     "arc" -> R.string.shape_arc
     ShapePresets.FREE_POLYGON -> R.string.shape_free_polygon
+    "flow_process" -> R.string.shape_flow_process
+    "flow_alt_process" -> R.string.shape_flow_alt_process
+    "flow_decision" -> R.string.shape_flow_decision
+    "flow_data" -> R.string.shape_flow_data
+    "flow_terminator" -> R.string.shape_flow_terminator
+    "flow_preparation" -> R.string.shape_flow_preparation
+    "flow_predefined" -> R.string.shape_flow_predefined
+    "flow_internal_storage" -> R.string.shape_flow_internal_storage
+    "flow_document" -> R.string.shape_flow_document
+    "flow_multidocument" -> R.string.shape_flow_multidocument
+    "flow_manual_input" -> R.string.shape_flow_manual_input
+    "flow_manual_operation" -> R.string.shape_flow_manual_operation
+    "flow_connector" -> R.string.shape_flow_connector
+    "flow_off_page" -> R.string.shape_flow_off_page
+    "flow_database" -> R.string.shape_flow_database
+    "flow_direct_access" -> R.string.shape_flow_direct_access
+    "flow_display" -> R.string.shape_flow_display
+    "flow_delay" -> R.string.shape_flow_delay
+    "flow_stored_data" -> R.string.shape_flow_stored_data
+    "flow_sort" -> R.string.shape_flow_sort
+    "flow_merge" -> R.string.shape_flow_merge
+    "flow_extract" -> R.string.shape_flow_extract
+    "flow_summing" -> R.string.shape_flow_summing
+    "flow_or" -> R.string.shape_flow_or
     else -> R.string.shape_polygon
 }
 

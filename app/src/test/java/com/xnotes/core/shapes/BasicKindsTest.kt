@@ -40,7 +40,7 @@ class BasicKindsTest {
     )
 
     @Test fun everyKindDrawsInsideItsBox() {
-        for (k in basicKinds) {
+        for (k in ShapeKind.all.filter { !it.isLegacy && !it.isFree && it.staysInBox }) {
             val g = geom(k)
             val b = Rect.bounding(points(g))
             assertTrue("$k left its box: $b", b.left >= box.left - 1e-6 && b.top >= box.top - 1e-6 && b.right <= box.right + 1e-6 && b.bottom <= box.bottom + 1e-6)

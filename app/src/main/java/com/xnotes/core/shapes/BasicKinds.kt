@@ -22,6 +22,7 @@ import kotlin.math.tan
 /** A rectangle with round corners, the knob setting their radius as a share of the shorter side. */
 internal class RoundedRectKind(id: String, private val capsule: Boolean) : ShapeKind(id) {
     override val isClosed get() = true
+    override val iconAspect get() = if (capsule) 2.0 else 1.5
     override val defaultAdj = if (capsule) doubleArrayOf() else doubleArrayOf(1.0 / 6.0)
     override val knobs = if (capsule) emptyList() else listOf(
         KnobDef(
@@ -63,6 +64,7 @@ internal class RoundedRectKind(id: String, private val capsule: Boolean) : Shape
 /** Right angle at the bottom left, the long side running from the top left to the bottom right. */
 internal class RightTriangleKind(id: String) : ShapeKind(id) {
     override val isClosed get() = true
+    override val iconAspect get() = 1.2
     override fun mirroredAdj(adj: DoubleArray): DoubleArray? = null
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry {
         val corners = listOf(Pt(box.left, box.top), Pt(box.right, box.bottom), Pt(box.left, box.bottom))
@@ -74,6 +76,7 @@ internal class RightTriangleKind(id: String) : ShapeKind(id) {
 /** Corners on the middles of the box's sides. */
 internal class DiamondKind(id: String) : ShapeKind(id) {
     override val isClosed get() = true
+    override val iconAspect get() = 1.3
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry {
         val corners = listOf(Pt(box.centerX, box.top), Pt(box.right, box.centerY), Pt(box.centerX, box.bottom), Pt(box.left, box.centerY))
         val text = Rect(box.x + box.w / 4.0, box.y + box.h / 4.0, box.w / 2.0, box.h / 2.0)
@@ -84,6 +87,7 @@ internal class DiamondKind(id: String) : ShapeKind(id) {
 /** Leaning right: the knob slides the top edge along, as a share of the width. */
 internal class ParallelogramKind(id: String) : ShapeKind(id) {
     override val isClosed get() = true
+    override val iconAspect get() = 1.5
     override val defaultAdj = doubleArrayOf(0.25)
     override val knobs = listOf(
         KnobDef(
@@ -103,6 +107,7 @@ internal class ParallelogramKind(id: String) : ShapeKind(id) {
 /** Narrower on top: the knob pulls both top corners in, as a share of the width. */
 internal class TrapezoidKind(id: String) : ShapeKind(id) {
     override val isClosed get() = true
+    override val iconAspect get() = 1.5
     override val defaultAdj = doubleArrayOf(0.25)
     override val knobs = listOf(
         KnobDef(
@@ -251,6 +256,7 @@ internal class HeartKind(id: String) : ShapeKind(id) {
 /** A cloud: round bumps around an oval, each a curve meeting the next at a crease. */
 internal class CloudKind(id: String) : ShapeKind(id) {
     override val isClosed get() = true
+    override val iconAspect get() = 1.5
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry {
         // Uneven steps round the oval, so the bumps read as a cloud rather than a gear.
         val turns = doubleArrayOf(0.0, 0.11, 0.24, 0.36, 0.47, 0.6, 0.71, 0.83, 0.93)
