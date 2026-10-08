@@ -1953,13 +1953,7 @@ class InteractionController(
         // min-drag gate drops it), so dragging out a new shape also clears the old selection.
         clearSelection()
         val startLocal = state.toPageSpace(pageIndex, content)
-        val kind = shapeConfig.shape
-        val fill = shapeConfig.fillFor(kind, inkColor)
-        pendingShape = ShapeItem(
-            kind, startLocal, startLocal, inkColor, shapeConfig.strokeWidth * SHAPE_PEN_PARITY, fill,
-            shapeConfig.neon, shapeConfig.neonStrength,
-            dashed = shapeConfig.dashed, dashLength = shapeConfig.dashLength, dashGap = shapeConfig.dashGap,
-        )
+        pendingShape = shapeConfig.startShape(startLocal, inkColor, shapeConfig.strokeWidth * SHAPE_PEN_PARITY)
         shapePageIndex = pageIndex
         mode = PointerMode.SHAPE
         requestRender()
@@ -2549,6 +2543,37 @@ class InteractionController(
 
     /** The styles the selection's drawn items carry, for the restyle popup to open on. */
     fun selectionStyles(): List<DrawStyle> = selection.mapNotNull { DrawStyle.of(it.item) }
+
+    /** The fills of the selected shapes that have one. */
+    fun selectionFills(): List<Rgba> = selection.mapNotNull { (it.item as? ShapeItem)?.fillRgba }
+
+    /** Recolour the selected shapes' fills in [color], each keeping its opacity; null matches each outline. */
+    fun refillSelection(color: Rgba?) {
+        val entries = com.xnotes.core.history.RefillShapes.of(selection.mapNotNull { it.item as? ShapeItem }, color)
+        if (entries.isEmpty()) return
+        val cmd = com.xnotes.core.history.RefillShapes(entries)
+        cmd.redo()
+        history.push(cmd)
+        state.document.dirty = true
+        onContentChanged()
+        requestRender()
+    }
+
+    /** The lone selected shape whose points or sides a minus/plus can change, or null. */
+    fun countedShape(): ShapeItem? = (selection.singleOrNull()?.item as? ShapeItem)?.takeIf { it.shape.nRange != null }
+
+    /** Set the lone selected star's points or polygon's sides, as one undo step. */
+    fun setSelectionCount(n: Int) {
+        val shape = countedShape() ?: return
+        val range = shape.shape.nRange ?: return
+        val next = n.coerceIn(range.first, range.last)
+        if (next == shape.n) return
+        val before = shape.snapshotGeometry()
+        shape.n = next
+        commitPointEdit(shape, before)
+        refreshSelectionMenu()
+        requestRender()
+    }
 
     /** Styles held from the first [restyleSelection] preview, so a slider drag undoes in one step. */
     private var restyleBaseline: MutableMap<CanvasItem, DrawStyle>? = null

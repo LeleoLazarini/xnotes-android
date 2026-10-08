@@ -7,6 +7,8 @@ import com.xnotes.core.model.GeoHandle
 import com.xnotes.core.model.GeometrySnapshot
 import com.xnotes.core.model.Page
 import com.xnotes.core.model.Resizable
+import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.TextItem
 import com.xnotes.core.model.TextMarkup
 import com.xnotes.core.model.TextStyle
@@ -229,6 +231,30 @@ class RestyleItems(private val entries: List<Entry>) : Command {
     }
 
     override fun touched(locate: (CanvasItem) -> Page?) = pagedItems(entries.map { it.item }, locate)
+}
+
+/** Recolour shapes' fills, each keeping its own opacity: one step for the whole selection. */
+class RefillShapes(private val entries: List<Entry>) : Command {
+    class Entry(val shape: ShapeItem, val before: Rgba?, val after: Rgba?)
+
+    override fun redo() {
+        for (e in entries) e.shape.fillRgba = e.after
+    }
+
+    override fun undo() {
+        for (e in entries) e.shape.fillRgba = e.before
+    }
+
+    override fun touched(locate: (CanvasItem) -> Page?) = pagedItems(entries.map { it.shape }, locate)
+
+    companion object {
+        /** The entries that recolour [shapes]' fills in [color] (null: each in its outline's), unchanged ones left out. */
+        fun of(shapes: List<ShapeItem>, color: Rgba?): List<Entry> = shapes.mapNotNull { s ->
+            val f = s.fillRgba ?: return@mapNotNull null
+            val next = (color ?: s.strokeRgba).copy(a = f.a)
+            if (next == f) null else Entry(s, f, next)
+        }
+    }
 }
 
 /**

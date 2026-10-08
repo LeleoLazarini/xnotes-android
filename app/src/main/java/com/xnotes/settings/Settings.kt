@@ -384,23 +384,37 @@ data class Settings(
         }
 
         private fun shapeConfigJson(c: ShapeConfig) = JSONObject()
+            .put("preset", c.preset)
             .put("shape", c.shape.id).put("stroke_width", c.strokeWidth).put("fill", c.fill)
             .put("fill_alpha", c.fillAlpha)
+            .apply { c.fillColor?.let { put("fill_color", rgbaArr(it)) } }
             .put("neon", c.neon).put("neon_strength", c.neonStrength)
             .put("dashed", c.dashed).put("dash_length", c.dashLength).put("dash_gap", c.dashGap)
+            .put("n", c.n).put("head_start", c.headStart.id).put("head_end", c.headEnd.id)
+            .put("shape_page", c.shapePage)
 
-        private fun shapeConfig(o: JSONObject) = ShapeConfig(
-            shape = ShapeKind.fromId(o.optString("shape", "rectangle")),
-            strokeWidth = o.optDouble("stroke_width", 3.0),
-            fill = o.optBoolean("fill", false),
-            fillAlpha = o.optDouble("fill_alpha", ShapeConfig.FILL_ALPHA)
-                .coerceIn(ShapeConfig.FILL_ALPHA_MIN, ShapeConfig.FILL_ALPHA_MAX),
-            neon = o.optBoolean("neon", false),
-            neonStrength = o.optDouble("neon_strength", 0.6),
-            dashed = o.optBoolean("dashed", false),
-            dashLength = o.optDouble("dash_length", 10.0),
-            dashGap = o.optDouble("dash_gap", 8.0),
-        )
+        private fun shapeConfig(o: JSONObject): ShapeConfig {
+            // Settings from before chips name only a kind; its chip and that chip's heads stand in.
+            val chip = com.xnotes.core.shapes.ShapePresets.byKey(o.optString("preset", ""))
+                ?: com.xnotes.core.shapes.ShapePresets.forKind(ShapeKind.fromId(o.optString("shape", "rectangle")))
+            return ShapeConfig(
+                preset = chip.key,
+                strokeWidth = o.optDouble("stroke_width", 3.0),
+                fill = o.optBoolean("fill", false),
+                fillAlpha = o.optDouble("fill_alpha", ShapeConfig.FILL_ALPHA)
+                    .coerceIn(ShapeConfig.FILL_ALPHA_MIN, ShapeConfig.FILL_ALPHA_MAX),
+                fillColor = rgba(o.optJSONArray("fill_color")),
+                neon = o.optBoolean("neon", false),
+                neonStrength = o.optDouble("neon_strength", 0.6),
+                dashed = o.optBoolean("dashed", false),
+                dashLength = o.optDouble("dash_length", 10.0),
+                dashGap = o.optDouble("dash_gap", 8.0),
+                n = o.optInt("n", 0),
+                headStart = com.xnotes.core.shapes.Head.fromId(o.optString("head_start", chip.headStart.id)),
+                headEnd = com.xnotes.core.shapes.Head.fromId(o.optString("head_end", chip.headEnd.id)),
+                shapePage = o.optInt("shape_page", com.xnotes.core.shapes.ShapePresets.pageOf(chip)),
+            )
+        }
 
         private fun toolbarLayoutJson(layout: ToolbarLayout): JSONObject {
             val secArr = JSONArray()

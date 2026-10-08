@@ -91,6 +91,18 @@ interface SelectionMenuHost {
     /** The toolbar's ink swatches and recently picked colours, offered by the restyle popup. */
     val hostToolbarColors: List<Rgba>
     val hostRecentColors: List<Rgba>
+
+    /** The fills of the selected shapes that have one, for the restyle popup to open on. */
+    fun selectionFills(): List<Rgba>
+
+    /** Recolour the selected shapes' fills in [color], each keeping its opacity; null fills each in its outline's colour. */
+    fun refillSelection(color: Rgba?)
+
+    /** A lone selected star's points or polygon's sides and the counts it can take; null otherwise. */
+    fun selectionCount(): ShapeCount?
+
+    /** Set that count, as one undo step. */
+    fun setSelectionCount(n: Int)
 }
 
 /**
@@ -208,6 +220,44 @@ private fun SelectionStylePopup(host: SelectionMenuHost, onDismiss: () -> Unit) 
                     )
                 }
             }
+            val fills = remember { host.selectionFills() }
+            if (fills.isNotEmpty()) {
+                var fill by remember { mutableStateOf<Rgba?>(fills.first().copy(a = 255)) }
+                val outline = color
+                StyleCaption(stringResource(R.string.caption_fill_colour))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    MatchDot(outline, selected = fill == null || fill == outline) {
+                        fill = null
+                        host.refillSelection(null)
+                    }
+                    host.hostToolbarColors.forEach { c ->
+                        ColorDot(c.toComposeColor(), selected = fill == c && c != outline) {
+                            fill = c
+                            host.refillSelection(c)
+                        }
+                    }
+                    val shown = fill ?: outline
+                    ColorPickerDot(
+                        shown,
+                        custom = fill != null && fill !in host.hostToolbarColors,
+                        onPick = { fill = it; host.refillSelection(it) },
+                        dismissOnPick = false,
+                    ) { dismiss, pick ->
+                        ColorPickerPopup(initial = shown, recents = host.hostRecentColors, onDismiss = dismiss, onPick = pick)
+                    }
+                }
+            }
+            host.selectionCount()?.let { sc ->
+                val count = sc.n
+                val range = sc.range
+                Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    StyleCaption(stringResource(if (sc.points) R.string.caption_points else R.string.caption_sides))
+                    Spacer(Modifier.width(12.dp))
+                    StepDot("\u2212", stringResource(R.string.count_fewer), enabled = count > range.first) { host.setSelectionCount(count - 1) }
+                    Text("$count", color = palette.text.toComposeColor(), fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp))
+                    StepDot("+", stringResource(R.string.count_more), enabled = count < range.last) { host.setSelectionCount(count + 1) }
+                }
+            }
             Spacer(Modifier.size(8.dp))
             // The drag previews live and commits on release, so it is one undo step, not fifty.
             SliderRow(
@@ -224,6 +274,48 @@ private fun SelectionStylePopup(host: SelectionMenuHost, onDismiss: () -> Unit) 
                 color = palette.textDim.toComposeColor(),
                 fontSize = 11.sp,
             )
+        }
+    }
+}
+
+/** A star's [n] points or a polygon's [n] sides ([points] says which), and the counts it can take. */
+class ShapeCount(val n: Int, val range: IntRange, val points: Boolean) {
+    companion object {
+        fun of(shape: com.xnotes.core.model.ShapeItem?): ShapeCount? {
+            val s = shape ?: return null
+            val range = s.shape.nRange ?: return null
+            return ShapeCount(s.n.coerceIn(range.first, range.last), range, s.shape.countsPoints)
+        }
+    }
+}
+
+/** "Match outline" for a fill: the outline's colour with a link over it. */
+@Composable
+private fun MatchDot(outline: Rgba, selected: Boolean, onClick: () -> Unit) {
+    val palette = LocalPalette.current
+    Tooltip(stringResource(R.string.fill_match_outline)) {
+        Box(
+            Modifier.size(28.dp).clip(CircleShape).background(outline.toComposeColor())
+                .border(if (selected) 2.dp else 1.dp, (if (selected) palette.accent else palette.border).toComposeColor(), CircleShape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            val tint = if (outline.luminance() > 0.55) Rgba(0, 0, 0) else Rgba(255, 255, 255)
+            Icon(XnotesIcons.link, contentDescription = null, tint = tint.toComposeColor(), modifier = Modifier.size(14.dp))
+        }
+    }
+}
+
+@Composable
+private fun StepDot(glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) {
+    val palette = LocalPalette.current
+    Tooltip(label) {
+        Box(
+            Modifier.size(30.dp).clip(CircleShape).border(1.dp, palette.border.toComposeColor(), CircleShape)
+                .clickable(enabled = enabled, onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(glyph, color = (if (enabled) palette.text else palette.textDim).toComposeColor(), fontSize = 16.sp)
         }
     }
 }

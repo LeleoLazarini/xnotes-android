@@ -16,8 +16,11 @@ data class DrawStyle(val color: Rgba, val width: Double) {
                 item.invalidate() // the ribbon's half-widths are baked from the config
             }
             is ShapeItem -> {
-                // A fill is a tint of the outline colour, so it follows the hue and keeps its own alpha.
-                item.fillRgba = item.fillRgba?.let { color.copy(a = it.a) }
+                // A fill in the outline's own colour is a tint of it and follows it, keeping its alpha;
+                // a fill given a colour of its own keeps that.
+                item.fillRgba = item.fillRgba?.let { f ->
+                    if (f.r == item.strokeRgba.r && f.g == item.strokeRgba.g && f.b == item.strokeRgba.b) color.copy(a = f.a) else f
+                }
                 item.strokeRgba = color
                 item.strokeWidth = width
             }

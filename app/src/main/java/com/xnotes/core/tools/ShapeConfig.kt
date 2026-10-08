@@ -1,15 +1,23 @@
 package com.xnotes.core.tools
 
+import com.xnotes.core.geometry.Pt
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.shapes.Head
 import com.xnotes.core.shapes.ShapeKind
+import com.xnotes.core.shapes.ShapePreset
+import com.xnotes.core.shapes.ShapePresets
 
 /** The style carried by the shape tool (spec 04 §6); persisted between sessions. */
 data class ShapeConfig(
-    val shape: ShapeKind = ShapeKind.RECTANGLE,
+    /** The picker's chosen chip, by its preset key. */
+    val preset: String = "rectangle",
     val strokeWidth: Double = 3.0,
     val fill: Boolean = false,
-    /** Opacity of the fill in [0, 1], applied to the ink colour; used only when [fill]. */
+    /** Opacity of the fill in [0, 1], applied to its colour; used only when [fill]. */
     val fillAlpha: Double = FILL_ALPHA,
+    /** The fill's own colour, or null to fill in the outline's. */
+    val fillColor: Rgba? = null,
     /** Neon glow: a luminous halo + white-hot core on the shape's outline. */
     val neon: Boolean = false,
     /** Glow intensity in [0, 1] (halo size + brightness); used only when [neon]. */
@@ -18,10 +26,41 @@ data class ShapeConfig(
     val dashed: Boolean = false,
     val dashLength: Double = 10.0,
     val dashGap: Double = 8.0,
+    /** A counted chip's point or side count; 0 takes the chip's own. */
+    val n: Int = 0,
+    /** The heads an open chip draws with. */
+    val headStart: Head = Head.NONE,
+    val headEnd: Head = Head.NONE,
+    /** The picker page last shown. */
+    val shapePage: Int = 0,
 ) {
+    /** The chosen chip, or the rectangle for a key this version does not know. */
+    val chip: ShapePreset get() = ShapePresets.byKey(preset) ?: ShapePresets.forKind(ShapeKind.RECTANGLE)
+
+    val shape: ShapeKind get() = chip.kind
+
+    /** The point or side count a new shape gets. */
+    val count: Int get() = if (n > 0 && chip.counted) n else chip.n
+
+    /** This config with [chip] chosen: its own heads, and its own count until the minus/plus moves it. */
+    fun choose(chip: ShapePreset): ShapeConfig =
+        copy(preset = chip.key, n = 0, headStart = chip.headStart, headEnd = chip.headEnd)
+
     /** The fill a [kind] outlined in [outline] gets, drawn or snapped; null when unfilled or open. */
     fun fillFor(kind: ShapeKind, outline: Rgba): Rgba? =
-        if (fill && kind.isClosed) outline.scaleAlpha(fillAlpha) else null
+        if (fill && kind.isClosed) (fillColor ?: outline).scaleAlpha(fillAlpha) else null
+
+    /** A shape of the chosen chip, started at [at] in [outline] colour and [width] wide. */
+    fun startShape(at: Pt, outline: Rgba, width: Double): ShapeItem {
+        val kind = chip.kind
+        return ShapeItem(
+            kind, at, at, outline, width, fillFor(kind, outline), neon, neonStrength,
+            dashed = dashed, dashLength = dashLength, dashGap = dashGap,
+            adj = chip.adj.copyOf(), n = count,
+            headStart = if (kind.isOpen) headStart else Head.NONE,
+            headEnd = if (kind.isOpen) headEnd else Head.NONE,
+        )
+    }
 
     companion object {
         /** Default reduced opacity applied to the ink colour when a closed shape is filled. */

@@ -888,60 +888,6 @@ fun SelectConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
     }
 }
 
-/** Shape-tool configuration popup (spec 10 §3 / 04 §6): kind picker, WIDTH, FILL, DASHED, NEON. */
-@Composable
-fun ShapeConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
-    var kind by remember { mutableStateOf(editor.hostShapeConfig.shape) }
-    var width by remember { mutableStateOf(editor.hostShapeConfig.strokeWidth.toFloat()) }
-    var fill by remember { mutableStateOf(editor.hostShapeConfig.fill) }
-    var fillOpacity by remember { mutableStateOf((editor.hostShapeConfig.fillAlpha * 100).toFloat()) }
-    var glow by remember { mutableStateOf(editor.hostShapeConfig.neon) }
-    var glowIntensity by remember { mutableStateOf(ToolConversions.neonStrengthToIntensity(editor.hostShapeConfig.neonStrength).toFloat()) }
-    var dashed by remember { mutableStateOf(editor.hostShapeConfig.dashed) }
-    var dashLen by remember { mutableStateOf(editor.hostShapeConfig.dashLength.toFloat()) }
-    var gapLen by remember { mutableStateOf(editor.hostShapeConfig.dashGap.toFloat()) }
-
-    fun emit() = editor.updateShapeConfig(
-        ShapeConfig(
-            shape = kind,
-            strokeWidth = width.toDouble(),
-            fill = fill,
-            fillAlpha = (fillOpacity / 100.0).coerceIn(ShapeConfig.FILL_ALPHA_MIN, ShapeConfig.FILL_ALPHA_MAX),
-            neon = glow,
-            neonStrength = ToolConversions.intensityToNeonStrength(glowIntensity.toDouble()),
-            dashed = dashed,
-            dashLength = dashLen.toDouble(),
-            dashGap = gapLen.toDouble(),
-        ),
-    )
-
-    DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
-        Column(Modifier.width(284.dp).padding(horizontal = 14.dp, vertical = 8.dp)) {
-            PopupTitle(stringResource(R.string.title_shape))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ShapeKind.DRAW_TOOL_KINDS.forEach { k ->
-                    KindChip(shapeIcon(k), stringResource(k.labelRes), selected = kind == k) { kind = k; emit() }
-                }
-            }
-            SliderRow(stringResource(R.string.caption_width), width, 1f..20f) { width = it; emit() }
-            ToggleRow(stringResource(R.string.caption_fill), fill) { fill = it; emit() }
-            if (fill) {
-                val minPct = (ShapeConfig.FILL_ALPHA_MIN * 100).toFloat()
-                SliderRow(stringResource(R.string.caption_opacity), fillOpacity, minPct..100f) { fillOpacity = it; emit() }
-            }
-            ToggleRow(stringResource(R.string.caption_dashed), dashed) { dashed = it; emit() }
-            if (dashed) {
-                SliderRow(stringResource(R.string.caption_dash), dashLen, 2f..40f) { dashLen = it; emit() }
-                SliderRow(stringResource(R.string.caption_gap), gapLen, 2f..40f) { gapLen = it; emit() }
-            }
-            ToggleRow(stringResource(R.string.caption_neon), glow) { glow = it; emit() }
-            if (glow) {
-                SliderRow(stringResource(R.string.caption_glow_intensity), glowIntensity, 0f..100f) { glowIntensity = it; emit() }
-            }
-        }
-    }
-}
-
 /**
  * Text markup tool popup: what a drag over PDF text does (select it, or one of the four marks) and,
  * in Highlight mode, how deep it goes. A mark takes the toolbar's active ink colour.
@@ -1003,7 +949,7 @@ internal fun PopupTitle(text: String) {
 }
 
 @Composable
-private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+internal fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.width(220.dp)) {
         Text(label, color = LocalPalette.current.text.toComposeColor(), fontSize = 12.sp)
         Switch(checked = checked, onCheckedChange = onChange)
@@ -1035,11 +981,9 @@ internal fun SliderRow(
     }
 }
 
-/** Glyph shown in the shape-kind picker for each [ShapeKind], drawn from the kind itself. */
-private fun shapeIcon(kind: ShapeKind): ImageVector = ShapeIcons.of(kind)
 
 @Composable
-private fun KindChip(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+internal fun KindChip(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
     Tooltip(label) {
         Box(

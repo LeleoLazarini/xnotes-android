@@ -476,4 +476,21 @@ class SettingsTest {
         assertTrue(back.slashCommands)
     }
 
+
+    @Test fun theShapeToolsChipFillAndHeadsRoundTrip() {
+        val shape = com.xnotes.core.tools.ShapeConfig(
+            preset = "arrow", fill = true, fillColor = com.xnotes.core.model.Rgba(1, 2, 3),
+            headStart = com.xnotes.core.shapes.Head.FILLED_DIAMOND, headEnd = com.xnotes.core.shapes.Head.OPEN, n = 6, shapePage = 0,
+        )
+        val back = Settings.fromJson(Settings(shapeConfig = shape).toJson()).shapeConfig
+        assertEquals(shape, back)
+    }
+
+    @Test fun anOldShapeSettingPicksItsChip() {
+        val legacy = JSONObject().put("tools", JSONObject().put("shape", JSONObject().put("shape", "arrow").put("fill", true)))
+        val c = Settings.fromJson(legacy).shapeConfig
+        assertEquals("arrow", c.preset)
+        assertEquals(com.xnotes.core.shapes.Head.OPEN, c.headEnd)
+        assertTrue(c.fill)
+    }
 }

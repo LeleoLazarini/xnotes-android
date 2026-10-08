@@ -69,6 +69,12 @@ abstract class ShapeKind internal constructor(val id: String) {
     open val defaultAdj: DoubleArray get() = NO_ADJ
     open val defaultN: Int get() = 0
 
+    /** The point or side counts a minus/plus may set, for a star or a polygon; null for the rest. */
+    open val nRange: IntRange? get() = null
+
+    /** True when the count is of points (a star) rather than sides. */
+    open val countsPoints: Boolean get() = false
+
     /** The heads a new shape of this open kind starts with: an arrow ends in a chevron. */
     open val defaultHeadStart: Head get() = Head.NONE
     open val defaultHeadEnd: Head get() = Head.NONE

@@ -1020,13 +1020,7 @@ class InfiniteInteraction(
     private fun beginShape(vx: Double, vy: Double) {
         val cfg = shapeConfig()
         val at = viewport.viewportToContent(Pt(vx, vy))
-        val ink = inkColor()
-        val fill = cfg.fillFor(cfg.shape, ink)
-        pendingShape = ShapeItem(
-            cfg.shape, at, at, ink, cfg.strokeWidth * InteractionController.SHAPE_PEN_PARITY, fill,
-            cfg.neon, cfg.neonStrength,
-            dashed = cfg.dashed, dashLength = cfg.dashLength, dashGap = cfg.dashGap,
-        )
+        pendingShape = cfg.startShape(at, inkColor(), cfg.strokeWidth * InteractionController.SHAPE_PEN_PARITY)
         mode = CanvasPointerMode.SHAPE
         setInteractive(false, false)
         onPendingShape(pendingShape)

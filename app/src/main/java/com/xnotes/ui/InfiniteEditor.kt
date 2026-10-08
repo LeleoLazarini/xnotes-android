@@ -611,6 +611,38 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     override fun selectionStyles(): List<DrawStyle> = selection.items.mapNotNull { DrawStyle.of(it) }
 
+    override fun selectionFills(): List<Rgba> = selection.items.mapNotNull { (it as? ShapeItem)?.fillRgba }
+
+    override fun refillSelection(color: Rgba?) {
+        val entries = com.xnotes.core.history.RefillShapes.of(selection.items.mapNotNull { it as? ShapeItem }, color)
+        if (entries.isEmpty()) return
+        val cmd = OnCanvas(document, com.xnotes.core.history.RefillShapes(entries), entries.map { it.shape })
+        cmd.redo()
+        history.push(cmd)
+        color?.let { onColorRemembered?.invoke(it) }
+        markDirty()
+        refresh()
+        publishOverlay()
+    }
+
+    override fun selectionCount(): ShapeCount? = ShapeCount.of(selection.items.singleOrNull() as? ShapeItem)
+
+    override fun setSelectionCount(n: Int) {
+        val shape = (selection.items.singleOrNull() as? ShapeItem) ?: return
+        val range = shape.shape.nRange ?: return
+        val next = n.coerceIn(range.first, range.last)
+        if (next == shape.n) return
+        val before = shape.snapshotGeometry()
+        shape.n = next
+        val cmd = OnCanvas(document, com.xnotes.core.history.TransformItems(listOf(shape), listOf(before), listOf(shape.snapshotGeometry())), listOf(shape))
+        document.itemsChanged(listOf(shape))
+        history.push(cmd)
+        selection.refreshBox()
+        markDirty()
+        refresh()
+        publishOverlay()
+    }
+
     /** Styles held from the first restyle preview, so a slider drag undoes in one step. */
     private var restyleBaseline: MutableMap<CanvasItem, DrawStyle>? = null
 

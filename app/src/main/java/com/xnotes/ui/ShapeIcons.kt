@@ -11,7 +11,10 @@ import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.shapes.Head
+import com.xnotes.core.shapes.PathRole
 import com.xnotes.core.shapes.ShapeKind
+import com.xnotes.core.shapes.ShapePath
 import com.xnotes.core.vector.VectorSeg
 
 /**
@@ -24,43 +27,60 @@ object ShapeIcons {
     private val cache = HashMap<String, ImageVector>()
 
     fun of(kind: ShapeKind, n: Int = kind.defaultN, adj: DoubleArray = kind.defaultAdj): ImageVector =
-        cache.getOrPut("${kind.id}/$n/${adj.joinToString(",")}") { build(kind, n, adj) }
+        cache.getOrPut("${kind.id}/$n/${adj.joinToString(",")}") {
+            val box = boxFor(kind)
+            val start = if (kind.isEndpointShape) Pt(box.left, box.bottom) else box.topLeft
+            val end = if (kind.isEndpointShape) Pt(box.right, box.top) else Pt(box.right, box.bottom)
+            build("shape-${kind.id}", ShapeItem(kind, start, end, Rgba(255, 255, 255), STROKE, adj = adj.copyOf(), n = n))
+        }
 
-    private fun build(kind: ShapeKind, n: Int, adj: DoubleArray): ImageVector {
-        val box = boxFor(kind)
-        val start = if (kind.isEndpointShape) Pt(box.left, box.bottom) else box.topLeft
-        val end = if (kind.isEndpointShape) Pt(box.right, box.top) else Pt(box.right, box.bottom)
-        val item = ShapeItem(kind, start, end, Rgba(255, 255, 255), STROKE, adj = adj.copyOf(), n = n)
-        val nodes = PathBuilder().apply {
-            for (path in item.paths()) {
-                if (!path.role.strokes) continue
-                for (c in path.contours) {
-                    moveTo(c.start.x.toFloat(), c.start.y.toFloat())
-                    for (s in c.segments) when (s) {
-                        is VectorSeg.Line -> lineTo(s.end.x.toFloat(), s.end.y.toFloat())
-                        is VectorSeg.Cubic -> curveTo(
-                            s.c1.x.toFloat(), s.c1.y.toFloat(), s.c2.x.toFloat(), s.c2.y.toFloat(),
-                            s.end.x.toFloat(), s.end.y.toFloat(),
-                        )
-                    }
-                    if (c.closed) close()
-                }
-            }
-        }.nodes
-        return ImageVector.Builder(
-            name = "shape-${kind.id}",
+    /** A head picker's glyph: a short line ending in [head], at its left end for a start picker. */
+    fun head(head: Head, atStart: Boolean): ImageVector =
+        cache.getOrPut("head/${head.id}/$atStart") {
+            val line = ShapeItem(
+                ShapeKind.LINE, Pt(8.0, 24.0), Pt(40.0, 24.0), Rgba(255, 255, 255), STROKE,
+                headStart = if (atStart) head else Head.NONE, headEnd = if (atStart) Head.NONE else head,
+            )
+            build("head-${head.id}", line)
+        }
+
+    private fun build(name: String, item: ShapeItem): ImageVector {
+        val paths = item.paths()
+        val builder = ImageVector.Builder(
+            name = name,
             defaultWidth = 24.dp,
             defaultHeight = 24.dp,
             viewportWidth = GRID,
             viewportHeight = GRID,
-        ).addPath(
-            pathData = nodes,
+        )
+        builder.addPath(
+            pathData = nodes(paths.filter { it.role.strokes }),
             stroke = SolidColor(Color.White),
             strokeLineWidth = STROKE.toFloat(),
             strokeLineCap = StrokeCap.Round,
             strokeLineJoin = StrokeJoin.Round,
-        ).build()
+        )
+        // A filled head is solid in the glyph too.
+        val solid = paths.filter { it.role == PathRole.HEAD_FILLED }
+        if (solid.isNotEmpty()) builder.addPath(pathData = nodes(solid), fill = SolidColor(Color.White))
+        return builder.build()
     }
+
+    private fun nodes(paths: List<ShapePath>) = PathBuilder().apply {
+        for (path in paths) {
+            for (c in path.contours) {
+                moveTo(c.start.x.toFloat(), c.start.y.toFloat())
+                for (s in c.segments) when (s) {
+                    is VectorSeg.Line -> lineTo(s.end.x.toFloat(), s.end.y.toFloat())
+                    is VectorSeg.Cubic -> curveTo(
+                        s.c1.x.toFloat(), s.c1.y.toFloat(), s.c2.x.toFloat(), s.c2.y.toFloat(),
+                        s.end.x.toFloat(), s.end.y.toFloat(),
+                    )
+                }
+                if (c.closed) close()
+            }
+        }
+    }.nodes
 
     /** Where each kind sits on the grid: the proportions the hand-drawn glyphs had. */
     private fun boxFor(kind: ShapeKind): Rect = when (kind) {

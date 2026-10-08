@@ -5463,7 +5463,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     fun setShapeKind(kind: com.xnotes.core.shapes.ShapeKind) {
-        shapeConfig = shapeConfig.copy(shape = kind)
+        shapeConfig = shapeConfig.choose(com.xnotes.core.shapes.ShapePresets.forKind(kind))
         controller.shapeConfig = shapeConfig
     }
 
@@ -5838,6 +5838,17 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     fun selectAll() = controller.selectAll()
     override fun bringToFront() = controller.bringToFront()
     override fun selectionStyles() = controller.selectionStyles()
+
+    override fun selectionFills() = controller.selectionFills()
+
+    override fun refillSelection(color: Rgba?) {
+        controller.refillSelection(color)
+        color?.let { settings = settings.rememberColor(it) }
+    }
+
+    override fun selectionCount() = ShapeCount.of(controller.countedShape())
+
+    override fun setSelectionCount(n: Int) = controller.setSelectionCount(n)
 
     override fun restyleSelection(color: Rgba?, width: Double?, preview: Boolean) {
         controller.restyleSelection(color, width, preview)
