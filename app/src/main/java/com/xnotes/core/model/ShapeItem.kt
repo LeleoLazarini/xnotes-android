@@ -220,6 +220,22 @@ class ShapeItem(
     /** How far past the frame the outline itself reaches: half its width, and a pixel to spare. */
     val framePad: Double get() = strokeWidth / 2.0 + 1.0
 
+    /** True when the knobs and point count are the kind's own defaults, as every older file's are. */
+    private fun hasDefaultParams(): Boolean = n == shape.defaultN &&
+        shape.defaultAdj.indices.all { abs(shape.adjOf(adj, it) - shape.defaultAdj[it]) < 1e-12 }
+
+    // --- knobs ---
+
+    /** Where the kind's knobs sit on the page; none for a free outline, a line or an arrow. */
+    fun knobDots(): List<Pt> =
+        if (shape.isEndpointShape) emptyList() else shape.knobs.map { toPage(it.position(box, adj, n)) }
+
+    /** Drag knob [index] to page point [to]: the kind turns that into new knob values. */
+    fun dragKnob(index: Int, to: Pt) {
+        val knob = shape.knobs.getOrNull(index) ?: return
+        adj = knob.drag(toLocal(to), box, adj, n)
+    }
+
     // --- point editing ---
 
     /** The outline a point edit works on: a free kind's own, or the curves a box kind would become. */
@@ -513,13 +529,16 @@ class ShapeItem(
         val ux = Pt(t.a * cs + t.c * sn, t.b * cs + t.d * sn)
         val uy = Pt(-t.a * sn + t.c * cs, -t.b * sn + t.d * cs)
         val square = abs(ux.x * uy.x + ux.y * uy.y) <= 1e-9 * ux.length() * uy.length()
+        // A flip keeps the frame only for a kind whose knobs can draw it mirrored.
+        val mirrored = if (square && t.determinant < 0.0) shape.mirroredAdj(adj) else adj
         when {
             isFree -> refit(FreePath.map(FreePath.place(path.orEmpty(), b)) { t.apply(toPage(it)) }, atan2(ux.y, ux.x))
-            square -> {
-                // The turn is read off the height axis, so a mirrored triangle keeps its apex.
+            square && mirrored != null -> {
+                // The turn is read off the height axis, so a flip mirrors left to right only.
+                adj = mirrored
                 setFrame(t.apply(b.center), ux.length() * b.w, uy.length() * b.h, atan2(uy.y, uy.x) - PI / 2.0)
             }
-            shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE -> {
+            !square && (shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE) -> {
                 // The ellipse is the unit circle under A = M diag(rx, ry); its axes are A's singular pairs.
                 val rx = b.w / 2.0
                 val ry = b.h / 2.0
@@ -590,7 +609,8 @@ class ShapeItem(
      */
     fun legacyOutline(): List<Pt>? {
         if (shape.isEndpointShape) return null
-        val plain = shape.isLegacy && rotation == 0.0 && (!isFree || path?.let(FreePath::isVertexList) != false)
+        val plain = shape.isLegacy && rotation == 0.0 && hasDefaultParams() &&
+            (!isFree || path?.let(FreePath::isVertexList) != false)
         if (plain) return null
         if (shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE) return ellipsePolygon(LEGACY_ELLIPSE_POINTS).map(::toPage)
         val outer = localGeometry().paths

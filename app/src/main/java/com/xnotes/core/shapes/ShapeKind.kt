@@ -24,6 +24,16 @@ class ShapeGeometry(
     val textRect: Rect,
 )
 
+/**
+ * One of a kind's knobs (PowerPoint's yellow adjust handles): where it sits for the given box and
+ * parameters, and the knob values a drag of it to a point makes. Both work in the unturned frame;
+ * [drag] clamps to what the kind can draw.
+ */
+class KnobDef(
+    val position: (box: Rect, adj: DoubleArray, n: Int) -> Pt,
+    val drag: (to: Pt, box: Rect, adj: DoubleArray, n: Int) -> DoubleArray,
+)
+
 /** What a kind builds from beside its box: knob values, a point or side count, and a free outline. */
 class ShapeParams(
     val adj: DoubleArray = DoubleArray(0),
@@ -58,6 +68,18 @@ abstract class ShapeKind internal constructor(val id: String) {
 
     open val defaultAdj: DoubleArray get() = NO_ADJ
     open val defaultN: Int get() = 0
+
+    /** The knobs a shape of this kind shows; none for most. */
+    open val knobs: List<KnobDef> get() = emptyList()
+
+    /**
+     * The knob values that draw this kind mirrored left to right, for a flip that keeps its frame;
+     * null when no knob setting can, and the shape must become a free outline instead.
+     */
+    open fun mirroredAdj(adj: DoubleArray): DoubleArray? = adj
+
+    /** Knob value [i] out of [adj], falling back to the default for one a file left out. */
+    fun adjOf(adj: DoubleArray, i: Int): Double = adj.getOrNull(i)?.takeIf { it.isFinite() } ?: defaultAdj[i]
 
     val isLegacy: Boolean get() = id in LEGACY_IDS
 
@@ -177,12 +199,21 @@ private class EllipseKind(id: String, override val keepsAspect: Boolean) : Shape
     }
 }
 
-/** Isosceles: apex at the top edge's middle, base along the bottom edge. */
+/** Apex on the top edge, at the fraction of its width the one knob sets (the middle by default); base along the bottom. */
 private class TriangleKind(id: String) : ShapeKind(id) {
     override val isClosed get() = true
+    override val defaultAdj = doubleArrayOf(0.5)
+    override val knobs = listOf(
+        KnobDef(
+            position = { box, adj, _ -> Pt(box.left + box.w * adjOf(adj, 0), box.top) },
+            drag = { to, box, _, _ -> doubleArrayOf(if (box.w > 0.0) ((to.x - box.left) / box.w).coerceIn(0.0, 1.0) else 0.5) },
+        ),
+    )
+    override fun mirroredAdj(adj: DoubleArray) = doubleArrayOf(1.0 - adjOf(adj, 0))
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry {
-        val corners = listOf(Pt(box.centerX, box.top), Pt(box.right, box.bottom), Pt(box.left, box.bottom))
-        // The widest box an isosceles triangle holds is half its width and half its height, on the base.
+        val apex = Pt(box.left + box.w * adjOf(p.adj, 0), box.top)
+        val corners = listOf(apex, Pt(box.right, box.bottom), Pt(box.left, box.bottom))
+        // The widest box a triangle holds is half its width and half its height, on the base.
         val text = Rect(box.x + box.w / 4.0, box.y + box.h / 2.0, box.w / 2.0, box.h / 2.0)
         return ShapeGeometry(listOf(ShapePath.polygon(corners)), corners, polygonConnections(corners), text)
     }

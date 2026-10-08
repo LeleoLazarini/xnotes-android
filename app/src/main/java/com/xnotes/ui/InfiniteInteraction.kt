@@ -181,6 +181,9 @@ class InfiniteInteraction(
     private var vertexMoved = false
     private var vertexWasEdge = false
 
+    // Set when the point drag is a knob's rather than a vertex's.
+    private var knobIndex = -1
+
     // The last tap on a vertex dot, for the double tap that deletes it.
     private var lastVertexTap: com.xnotes.core.shapes.PathSpot? = null
     private var lastVertexTapAt = 0L
@@ -640,6 +643,9 @@ class InfiniteInteraction(
         val grip = sel.rotateGrip(OverlayTessellator.GRIP_ARM_PX / viewport.zoom, margin)
         if (grip != null && at.distanceTo(grip) <= tolerance) return true
         if (sel.hitHandle(at, tolerance, margin) != null) return true
+        // A knob can sit outside the box, out on a callout's tail.
+        val reach = OverlayTessellator.DOT_TOUCH_PX / viewport.zoom
+        if ((sel.items.singleOrNull() as? ShapeItem)?.knobDots()?.any { it.distanceTo(at) <= reach } == true) return true
         return sel.contains(at, margin)
     }
 
@@ -913,6 +919,23 @@ class InfiniteInteraction(
     private fun tryGrabDot(sel: CanvasSelection, at: Pt): Boolean {
         val shape = sel.items.singleOrNull() as? ShapeItem ?: return false
         val reach = OverlayTessellator.DOT_TOUCH_PX / viewport.zoom
+        // Knobs first: one can sit right on a vertex, and the knob is the finer control.
+        val knob = shape.knobDots().withIndex().minByOrNull { it.value.distanceTo(at) }?.takeIf { it.value.distanceTo(at) <= reach }
+        if (knob != null) {
+            sel.beginTransform()
+            vertexBefore = shape.snapshotGeometry()
+            vertexBase = vertexBefore
+            vertexShape = shape
+            vertexSpot = null
+            knobIndex = knob.index
+            vertexDownAt = at
+            vertexMoved = false
+            vertexWasEdge = false
+            mode = CanvasPointerMode.VERTEX
+            onSelectionChanged()
+            requestRender()
+            return true
+        }
         val vertex = shape.vertexDots().minByOrNull { it.at.distanceTo(at) }?.takeIf { it.at.distanceTo(at) <= reach }
         val edge = if (vertex != null) null else {
             shape.edgeDots(OverlayTessellator.EDGE_DOT_MIN_PX / viewport.zoom)
@@ -937,14 +960,13 @@ class InfiniteInteraction(
 
     private fun extendVertex(vx: Double, vy: Double) {
         val shape = vertexShape ?: return
-        val spot = vertexSpot ?: return
         val base = vertexBase ?: return
         val at = viewport.viewportToContent(Pt(vx, vy))
         // A dot is small: a press that wobbles a pixel or two is still a tap, not an edit.
         if (!vertexMoved && (at.distanceTo(vertexDownAt) * viewport.zoom) < InteractionController.LONG_PRESS_SLOP) return
         vertexMoved = true
         shape.restoreGeometry(base)
-        shape.moveVertex(spot, at)
+        if (knobIndex >= 0) shape.dragKnob(knobIndex, at) else shape.moveVertex(vertexSpot ?: return, at)
         selection()?.itemChanged(shape)
         onSelectionChanged()
         requestRender()
@@ -960,7 +982,7 @@ class InfiniteInteraction(
             lastVertexTap = null
         } else {
             vertexBefore?.let { shape.restoreGeometry(it) }
-            if (!vertexWasEdge && spot != null && spot == lastVertexTap &&
+            if (knobIndex < 0 && !vertexWasEdge && spot != null && spot == lastVertexTap &&
                 eventTime - lastVertexTapAt <= InteractionController.DOUBLE_TAP_MS
             ) {
                 lastVertexTap = null
@@ -990,6 +1012,7 @@ class InfiniteInteraction(
         vertexBefore = null
         vertexBase = null
         vertexMoved = false
+        knobIndex = -1
     }
 
     // --- shapes ---

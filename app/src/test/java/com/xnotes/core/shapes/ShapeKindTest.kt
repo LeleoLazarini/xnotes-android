@@ -77,4 +77,18 @@ class ShapeKindTest {
         assertEquals(PathRole.OUTLINE, g.paths.single().role)
         assertEquals(PathRole.STROKE_ONLY, ShapeKind.POLYLINE.build(box, ShapeParams(path = unit)).paths.single().role)
     }
+
+    @Test fun aTrianglesKnobSlidesItsApexAlongTheTop() {
+        val k = ShapeKind.TRIANGLE.knobs.single()
+        assertPt(Pt(60.0, 20.0), k.position(box, ShapeKind.TRIANGLE.defaultAdj, 0))
+        val adj = k.drag(Pt(35.0, 70.0), box, ShapeKind.TRIANGLE.defaultAdj, 0)
+        assertEquals(0.25, adj[0], 1e-12)
+        assertPt(Pt(35.0, 20.0), ShapeKind.TRIANGLE.build(box, ShapeParams(adj)).corners[0])
+        assertEquals("clamped to the top edge", 1.0, k.drag(Pt(500.0, 0.0), box, adj, 0)[0], 0.0)
+    }
+
+    @Test fun aMirrorFlipsTheApexAcross() {
+        assertEquals(0.75, ShapeKind.TRIANGLE.mirroredAdj(doubleArrayOf(0.25))!![0], 1e-12)
+        assertEquals("a missing value reads as the default", 0.5, ShapeKind.TRIANGLE.adjOf(DoubleArray(0), 0), 0.0)
+    }
 }

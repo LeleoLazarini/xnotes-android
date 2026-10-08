@@ -694,4 +694,18 @@ class CanvasCodecTest {
         val again = manifestText(readManifest(manifest))
         assertTrue(again, again.contains("\"items\":[$item]"))
     }
+
+    @Test fun aTrianglesKnobRoundTripsBehindAStandIn() {
+        val t = ShapeItem(ShapeKind.TRIANGLE, Pt(0.0, 0.0), Pt(100.0, 60.0), ink, 2.0)
+        t.dragKnob(0, Pt(20.0, 0.0))
+        val doc = InfiniteDocument()
+        doc.add(t)
+        val text = manifestText(doc)
+        assertTrue(text, text.contains("\"shape\":\"polygon\""))
+        assertTrue(text, text.contains("\"adj\":[0.2]"))
+        val back = roundTrip(doc).items[0] as ShapeItem
+        assertEquals(ShapeKind.TRIANGLE, back.shape)
+        assertEquals(0.2, back.adj[0], 1e-12)
+        assertNull(back.path)
+    }
 }

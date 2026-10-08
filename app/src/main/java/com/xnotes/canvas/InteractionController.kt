@@ -374,6 +374,7 @@ class InteractionController(
     private var vertexDownAt = Pt.ZERO
     private var vertexMoved = false
     private var vertexWasEdge = false
+    private var knobIndex = -1 // set when the point drag is a knob's rather than a vertex's
 
     // The last tap on a vertex dot, for the double tap that deletes it.
     private var lastVertexTap: com.xnotes.core.shapes.PathSpot? = null
@@ -1458,6 +1459,14 @@ class InteractionController(
         val tol = HANDLE_HIT / state.zoom
         selectionRotatePoint()?.let { if (it.distanceTo(content) <= tol) return true }
         if (ResizeMath.hitHandle(selectionResizeHandles(), content, tol) != null) return true
+        // A knob can sit outside the box, out on a callout's tail.
+        framedShape()?.let { sel ->
+            val reach = com.xnotes.core.infinite.OverlayTessellator.DOT_TOUCH_PX / state.zoom
+            if (state.pageRects.getOrNull(sel.pageIndex) != null) {
+                val local = state.toPageSpace(sel.pageIndex, content)
+                if ((sel.item as ShapeItem).knobDots().any { it.distanceTo(local) <= reach }) return true
+            }
+        }
         return selectionChromeBox()?.contains(content) == true
     }
 
@@ -1732,6 +1741,22 @@ class InteractionController(
         if (state.pageRects.getOrNull(sel.pageIndex) == null) return false
         val local = state.toPageSpace(sel.pageIndex, content)
         val reach = com.xnotes.core.infinite.OverlayTessellator.DOT_TOUCH_PX / state.zoom
+        // Knobs first: one can sit right on a vertex, and the knob is the finer control.
+        val knob = shape.knobDots().withIndex().minByOrNull { it.value.distanceTo(local) }?.takeIf { it.value.distanceTo(local) <= reach }
+        if (knob != null) {
+            vertexBefore = shape.snapshotGeometry()
+            vertexBase = vertexBefore
+            vertexSel = sel
+            vertexSpot = null
+            knobIndex = knob.index
+            vertexDownAt = content
+            vertexMoved = false
+            vertexWasEdge = false
+            mode = PointerMode.VERTEX
+            onSelectionMenu(null)
+            requestRender()
+            return true
+        }
         val vertex = shape.vertexDots().minByOrNull { it.at.distanceTo(local) }?.takeIf { it.at.distanceTo(local) <= reach }
         val edge = if (vertex != null) null else {
             shape.edgeDots(com.xnotes.core.infinite.OverlayTessellator.EDGE_DOT_MIN_PX / state.zoom)
@@ -1756,14 +1781,14 @@ class InteractionController(
     private fun extendVertex(content: Pt) {
         val sel = vertexSel ?: return
         val shape = sel.item as? ShapeItem ?: return
-        val spot = vertexSpot ?: return
         val base = vertexBase ?: return
         if (state.pageRects.getOrNull(sel.pageIndex) == null) return
         // A dot is small: a press that wobbles a pixel or two is still a tap, not an edit.
         if (!vertexMoved && content.distanceTo(vertexDownAt) * state.zoom < LONG_PRESS_SLOP) return
         vertexMoved = true
         shape.restoreGeometry(base)
-        shape.moveVertex(spot, state.toPageSpace(sel.pageIndex, content))
+        val local = state.toPageSpace(sel.pageIndex, content)
+        if (knobIndex >= 0) shape.dragKnob(knobIndex, local) else shape.moveVertex(vertexSpot ?: return, local)
         selObb = selectionBox()
         requestRender()
     }
@@ -1780,7 +1805,9 @@ class InteractionController(
                 lastVertexTap = null
             } else {
                 shape.restoreGeometry(before)
-                if (!vertexWasEdge && spot != null && spot == lastVertexTap && eventTime - lastVertexTapAt <= DOUBLE_TAP_MS) {
+                if (knobIndex < 0 && !vertexWasEdge && spot != null && spot == lastVertexTap &&
+                    eventTime - lastVertexTapAt <= DOUBLE_TAP_MS
+                ) {
                     lastVertexTap = null
                     shape.toFree()
                     if (shape.deleteVertex(spot)) commitPointEdit(shape, before) else shape.restoreGeometry(before)
@@ -1816,6 +1843,7 @@ class InteractionController(
         vertexBefore = null
         vertexBase = null
         vertexMoved = false
+        knobIndex = -1
     }
 
     /** A lone shape's point dots over its chrome: faint ones halfway along edges, solid ones on vertices. */
@@ -1833,6 +1861,11 @@ class InteractionController(
             val c = state.fromPageSpace(sel.pageIndex, d.at)
             r.fillCircle(c, ot.VERTEX_DOT_PX / 2.0 / state.zoom, accent)
             r.fillCircle(c, ot.VERTEX_CORE_PX / 2.0 / state.zoom, ot.DOT_CORE)
+        }
+        for (k in shape.knobDots()) {
+            val diamond = ot.knobDiamond(state.fromPageSpace(sel.pageIndex, k), ot.KNOB_PX / 2.0 / state.zoom)
+            r.fillPolygon(diamond, ot.KNOB_FILL)
+            r.strokePolygon(diamond, Pen(ot.KNOB_EDGE, ot.KNOB_EDGE_PX, cosmetic = true))
         }
     }
 

@@ -1037,6 +1037,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
                 handles = selection.handles(margin).map { it.content },
                 vertexDots = shape?.vertexDots()?.map { it.at }.orEmpty(),
                 edgeDots = shape?.edgeDots(OverlayTessellator.EDGE_DOT_MIN_PX / zoom)?.map { it.at }.orEmpty(),
+                knobs = shape?.knobDots().orEmpty(),
             )
             val b = OverlayTessellator.selectionBounds(box, zoom)
             bounds = bounds?.union(b) ?: b

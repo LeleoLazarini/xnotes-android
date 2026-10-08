@@ -50,6 +50,17 @@ object OverlayTessellator {
     /** How close a press has to land to a dot to grab it, in device pixels. */
     const val DOT_TOUCH_PX = 20.0
 
+    /** A knob diamond's diagonal and its edge, in device pixels. */
+    const val KNOB_PX = 14.0
+    const val KNOB_EDGE_PX = 1.2
+
+    /** Knobs are amber, PowerPoint's colour for them, so they never read as a handle or a vertex. */
+    val KNOB_FILL = Rgba(255, 196, 0, 255)
+    val KNOB_EDGE = Rgba(110, 72, 0, 255)
+
+    /** A knob diamond centred on [c] with half-diagonal [r]. */
+    fun knobDiamond(c: Pt, r: Double): List<Pt> = listOf(Pt(c.x, c.y - r), Pt(c.x + r, c.y), Pt(c.x, c.y + r), Pt(c.x - r, c.y))
+
     /**
      * Dash on/off runs for every marquee, in dp, so chrome reads the same on any screen. Both
      * canvases draw from these, which is what keeps a band, a lasso and a selection box looking
@@ -72,6 +83,7 @@ object OverlayTessellator {
         handles: List<Pt>? = null,
         vertexDots: List<Pt> = emptyList(),
         edgeDots: List<Pt> = emptyList(),
+        knobs: List<Pt> = emptyList(),
     ): List<MeshPart> {
         if (zoom <= 0.0) return emptyList()
         val outline = MeshBuilder()
@@ -109,6 +121,19 @@ object OverlayTessellator {
             }
             parts.add(MeshPart(dots.build(), accent, InkPass.OPAQUE))
             parts.add(MeshPart(cores.build(), DOT_CORE, InkPass.OPAQUE))
+        }
+        if (knobs.isNotEmpty()) {
+            val fill = MeshBuilder()
+            val edge = MeshBuilder()
+            for (k in knobs) {
+                val d = knobDiamond(k, KNOB_PX / zoom / 2.0)
+                val v = d.map { fill.vertex(it.x, it.y) }
+                fill.triangle(v[0], v[1], v[2])
+                fill.triangle(v[0], v[2], v[3])
+                edge.polylineRibbon(d, KNOB_EDGE_PX / zoom / 2.0, closed = true, tolerance = tolerance)
+            }
+            parts.add(MeshPart(fill.build(), KNOB_FILL, InkPass.OPAQUE))
+            parts.add(MeshPart(edge.build(), KNOB_EDGE, InkPass.OPAQUE))
         }
         return parts
     }
