@@ -228,6 +228,7 @@ private fun StepButton(glyph: String, label: String, enabled: Boolean, onClick: 
 @StringRes
 private fun pageLabel(page: ShapePage): Int = when (page.key) {
     "flowchart" -> R.string.shape_page_flowchart
+    "arrows" -> R.string.shape_page_arrows
     else -> R.string.shape_page_basic
 }
 
@@ -281,6 +282,30 @@ internal fun presetLabel(key: String): Int = when (key) {
     "flow_extract" -> R.string.shape_flow_extract
     "flow_summing" -> R.string.shape_flow_summing
     "flow_or" -> R.string.shape_flow_or
+    "arrow_right" -> R.string.shape_arrow_right
+    "arrow_left" -> R.string.shape_arrow_left
+    "arrow_up" -> R.string.shape_arrow_up
+    "arrow_down" -> R.string.shape_arrow_down
+    "arrow_left_right" -> R.string.shape_arrow_left_right
+    "arrow_up_down" -> R.string.shape_arrow_up_down
+    "arrow_quad" -> R.string.shape_arrow_quad
+    "arrow_bent" -> R.string.shape_arrow_bent
+    "arrow_u_turn" -> R.string.shape_arrow_u_turn
+    "arrow_chevron" -> R.string.shape_arrow_chevron
+    "arrow_pentagon" -> R.string.shape_arrow_pentagon
+    "arrow_notched" -> R.string.shape_arrow_notched
+    "arrow_curved_right" -> R.string.shape_arrow_curved_right
+    "arrow_curved_left" -> R.string.shape_arrow_curved_left
+    "arrow_circular" -> R.string.shape_arrow_circular
+    "arrow_striped" -> R.string.shape_arrow_striped
+    "arrow_bent_up" -> R.string.shape_arrow_bent_up
+    "arrow_left_up" -> R.string.shape_arrow_left_up
+    "callout_rect" -> R.string.shape_callout_rect
+    "callout_round" -> R.string.shape_callout_round
+    "callout_oval" -> R.string.shape_callout_oval
+    "callout_thought" -> R.string.shape_callout_thought
+    "callout_line" -> R.string.shape_callout_line
+    "burst" -> R.string.shape_burst
     else -> R.string.shape_polygon
 }
 

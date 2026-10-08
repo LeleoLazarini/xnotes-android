@@ -131,14 +131,19 @@ abstract class ShapeKind internal constructor(val id: String) {
         val PIE: ShapeKind = SliceKind("pie", pie = true)
         val ARC: ShapeKind = SliceKind("arc", pie = false)
 
-        /** Every kind, in a stable order. */
-        val all: List<ShapeKind> = listOf(
-            LINE, ARROW, RECTANGLE, ELLIPSE, CIRCLE, TRIANGLE, POLYGON, POLYLINE, CURVE,
-            ROUNDED_RECT, SQUARE, CAPSULE, RIGHT_TRIANGLE, DIAMOND, PARALLELOGRAM, TRAPEZOID,
-            REGULAR_POLYGON, STAR, CROSS, HEART, CLOUD, RING, PIE, ARC,
-        ) + FlowchartKinds.all
+        /**
+         * Every kind, in a stable order. Lazy, because the page families are objects whose own
+         * kinds initialize this class: whichever loads first, the list is only read once both have.
+         */
+        val all: List<ShapeKind> by lazy {
+            listOf(
+                LINE, ARROW, RECTANGLE, ELLIPSE, CIRCLE, TRIANGLE, POLYGON, POLYLINE, CURVE,
+                ROUNDED_RECT, SQUARE, CAPSULE, RIGHT_TRIANGLE, DIAMOND, PARALLELOGRAM, TRAPEZOID,
+                REGULAR_POLYGON, STAR, CROSS, HEART, CLOUD, RING, PIE, ARC,
+            ) + FlowchartKinds.all + ArrowKinds.all
+        }
 
-        private val byId: Map<String, ShapeKind> = all.associateBy { it.id }
+        private val byId: Map<String, ShapeKind> by lazy { all.associateBy { it.id } }
 
         /** Kinds the shape tool offers; polygon/polyline/curve arrive only from recognition. */
         val DRAW_TOOL_KINDS = listOf(LINE, ARROW, RECTANGLE, ELLIPSE, CIRCLE, TRIANGLE)

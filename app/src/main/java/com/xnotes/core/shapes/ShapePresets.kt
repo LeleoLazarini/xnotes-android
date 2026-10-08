@@ -94,7 +94,37 @@ object ShapePresets {
         ),
     )
 
-    val pages: List<ShapePage> = listOf(basic, flowchart)
+    val arrows = ShapePage(
+        "arrows",
+        listOf(
+            ShapePreset("arrow_right", ArrowKinds.RIGHT),
+            ShapePreset("arrow_left", ArrowKinds.LEFT),
+            ShapePreset("arrow_up", ArrowKinds.UP),
+            ShapePreset("arrow_down", ArrowKinds.DOWN),
+            ShapePreset("arrow_left_right", ArrowKinds.LEFT_RIGHT),
+            ShapePreset("arrow_up_down", ArrowKinds.UP_DOWN),
+            ShapePreset("arrow_quad", ArrowKinds.QUAD),
+            ShapePreset("arrow_bent", ArrowKinds.BENT),
+            ShapePreset("arrow_u_turn", ArrowKinds.U_TURN),
+            ShapePreset("arrow_chevron", ArrowKinds.CHEVRON),
+            ShapePreset("arrow_pentagon", ArrowKinds.PENTAGON),
+            ShapePreset("arrow_notched", ArrowKinds.NOTCHED),
+            ShapePreset("arrow_curved_right", ArrowKinds.CURVED_RIGHT),
+            ShapePreset("arrow_curved_left", ArrowKinds.CURVED_LEFT),
+            ShapePreset("arrow_circular", ArrowKinds.CIRCULAR),
+            ShapePreset("arrow_striped", ArrowKinds.STRIPED),
+            ShapePreset("arrow_bent_up", ArrowKinds.BENT_UP),
+            ShapePreset("arrow_left_up", ArrowKinds.LEFT_UP),
+            ShapePreset("callout_rect", ArrowKinds.RECT_CALLOUT),
+            ShapePreset("callout_round", ArrowKinds.ROUND_CALLOUT),
+            ShapePreset("callout_oval", ArrowKinds.OVAL_CALLOUT),
+            ShapePreset("callout_thought", ArrowKinds.THOUGHT),
+            ShapePreset("callout_line", ArrowKinds.LINE_CALLOUT),
+            ShapePreset("burst", ArrowKinds.BURST),
+        ),
+    )
+
+    val pages: List<ShapePage> = listOf(basic, flowchart, arrows)
 
     val all: List<ShapePreset> = pages.flatMap { it.presets }
 

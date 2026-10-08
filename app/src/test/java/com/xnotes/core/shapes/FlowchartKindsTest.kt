@@ -55,6 +55,6 @@ class FlowchartKindsTest {
         assertEquals(24, keys.size)
         assertEquals(listOf("flow_process", "flow_alt_process", "flow_decision", "flow_data", "flow_terminator", "flow_preparation"), keys.take(6))
         assertEquals(ShapeKind.CIRCLE, ShapePresets.byKey("flow_connector")!!.kind)
-        assertEquals(2, ShapePresets.pages.size)
+        assertEquals("the second page", ShapePresets.flowchart, ShapePresets.pages[1])
     }
 }
