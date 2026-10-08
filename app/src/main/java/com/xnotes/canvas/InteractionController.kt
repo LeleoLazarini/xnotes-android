@@ -74,7 +74,7 @@ import kotlin.math.sin
 /** The pointer state machine modes (spec 06 §1). */
 enum class PointerMode {
     IDLE, DRAW, ERASE, BAND, LASSO_DRAW, SHOT, SHAPE, MOVE, RESIZE, TRANSFORM, PAN, PINCH, FLOW_TEXT,
-    TEXT_DRAG, RULER_MOVE, RULER_TRANSFORM, RULER_ROTATE, PDF_TEXT, VERTEX,
+    TEXT_DRAG, RULER_MOVE, RULER_TRANSFORM, RULER_ROTATE, PDF_TEXT, VERTEX, POLYGON,
 }
 
 /**
@@ -449,6 +449,7 @@ class InteractionController(
         commitTextEdit()
         if (t != Tool.TEXT) flowText?.endSession()
         abortGesture()
+        finishPolygonDraft()
         clearSelection()
         clearScreenshot()
         eraserCursor = null
@@ -701,6 +702,10 @@ class InteractionController(
             return
         }
 
+        // A draft only lives through Free polygon presses; anything else that draws or edits ends it.
+        if (polygonDraft != null && effectiveTool != Tool.PAN && !(effectiveTool == Tool.SHAPE && shapeConfig.placesCorners)) {
+            finishPolygonDraft()
+        }
         when {
             effectiveTool == Tool.PAN -> beginPan(vx, vy, fromPenButton = buttonHeld && penButtonTool == Tool.PAN)
             effectiveTool.isStroke -> beginDraw(content, resolvePressure(e, 0, toolType), effectiveTool, e.eventTime, Pt(vx, vy))
@@ -712,6 +717,7 @@ class InteractionController(
             effectiveTool == Tool.SELECT -> beginSelect(content)
             effectiveTool == Tool.LASSO -> beginLasso(content)
             effectiveTool == Tool.SCREENSHOT -> beginScreenshot(content)
+            effectiveTool == Tool.SHAPE && shapeConfig.placesCorners -> beginPolygonTap(content)
             effectiveTool == Tool.SHAPE -> beginShape(content)
             effectiveTool == Tool.TEXT -> beginTextGesture(content, Pt(vx, vy))
             effectiveTool == Tool.TEXT_BOX -> beginTextBoxGesture(content)
@@ -720,7 +726,9 @@ class InteractionController(
         }
         // The flow caret owns its own long press (word selection), mid text-drag it is suppressed so
         // a hold-then-drag still sizes a box, and a markup drag held still is just a slow drag.
-        if (mode != PointerMode.FLOW_TEXT && mode != PointerMode.TEXT_DRAG && mode != PointerMode.PDF_TEXT) {
+        if (mode != PointerMode.FLOW_TEXT && mode != PointerMode.TEXT_DRAG && mode != PointerMode.PDF_TEXT &&
+            mode != PointerMode.POLYGON
+        ) {
             armLongPress(Pt(vx, vy), content, isFinger, free)
         }
     }
@@ -780,6 +788,7 @@ class InteractionController(
             PointerMode.RESIZE -> extendResize(content)
             PointerMode.TRANSFORM -> extendTransform(content)
             PointerMode.VERTEX -> extendVertex(content)
+            PointerMode.POLYGON -> showPolygonDraft(content)
             PointerMode.SHAPE -> extendShape(content)
             PointerMode.FLOW_TEXT ->
                 // A plain drag with the text tool scrolls the document; only a long-pressed
@@ -855,6 +864,7 @@ class InteractionController(
             PointerMode.RESIZE -> endResize()
             PointerMode.TRANSFORM -> endTransform()
             PointerMode.VERTEX -> endVertex(e.eventTime)
+            PointerMode.POLYGON -> endPolygonTap(content, e.eventTime)
             PointerMode.SHAPE -> endShape()
             PointerMode.FLOW_TEXT -> {
                 mode = PointerMode.IDLE
@@ -2014,6 +2024,70 @@ class InteractionController(
         requestRender()
     }
 
+    // --- FREE POLYGON ---
+
+    private var polygonDraft: com.xnotes.core.shapes.PolygonDraft? = null
+    private var polygonPage: Int? = null
+
+    /** A press with the Free polygon chip: the first starts a draft on its page, each one a corner on release. */
+    private fun beginPolygonTap(content: Pt) {
+        if (polygonDraft == null) {
+            polygonPage = state.pageIndexAtContent(content) ?: return
+            polygonDraft = com.xnotes.core.shapes.PolygonDraft()
+            clearSelection()
+        }
+        mode = PointerMode.POLYGON
+        showPolygonDraft(content)
+    }
+
+    /** Show the draft as a line through its corners, with a band out to [content] while pressed. */
+    private fun showPolygonDraft(content: Pt?) {
+        val draft = polygonDraft ?: return
+        val pi = polygonPage ?: return
+        if (state.pageRects.getOrNull(pi) == null) return
+        val pts = draft.preview(content?.let { state.toPageSpace(pi, it) })
+        pendingShape = if (pts.size >= 2) shapeConfig.copy(fill = false).placedShape(pts, false, inkColor, shapeConfig.strokeWidth * SHAPE_PEN_PARITY) else null
+        shapePageIndex = pi
+        requestRender()
+    }
+
+    private fun endPolygonTap(content: Pt, eventTime: Long) {
+        val draft = polygonDraft ?: return
+        val pi = polygonPage ?: return
+        mode = PointerMode.IDLE
+        if (state.pageRects.getOrNull(pi) == null) return
+        val reach = com.xnotes.core.infinite.OverlayTessellator.DOT_TOUCH_PX / state.zoom
+        when (draft.tap(state.toPageSpace(pi, content), eventTime, reach, DOUBLE_TAP_MS)) {
+            com.xnotes.core.shapes.PolygonDraft.Outcome.CONTINUE -> showPolygonDraft(null)
+            com.xnotes.core.shapes.PolygonDraft.Outcome.CLOSED -> commitPolygon(closed = true)
+            com.xnotes.core.shapes.PolygonDraft.Outcome.OPEN -> commitPolygon(closed = false)
+        }
+    }
+
+    private fun commitPolygon(closed: Boolean) {
+        val draft = polygonDraft
+        val pi = polygonPage
+        polygonDraft = null
+        polygonPage = null
+        pendingShape = null
+        shapePageIndex = null
+        if (draft != null && pi != null && draft.points.size >= (if (closed) 3 else 2)) {
+            val page = state.document.pages[pi]
+            val shape = shapeConfig.placedShape(draft.points, closed, inkColor, shapeConfig.strokeWidth * SHAPE_PEN_PARITY)
+            page.items.add(shape)
+            state.appendToCache(page, shape)
+            history.push(AddItem(page, shape))
+            state.document.dirty = true
+            onContentChanged()
+        }
+        requestRender()
+    }
+
+    /** End a draft something else interrupts: two corners or more stay, as an open line. */
+    fun finishPolygonDraft() {
+        if (polygonDraft != null) commitPolygon(closed = false)
+    }
+
     // --- TEXT ---
 
     /**
@@ -3163,6 +3237,7 @@ class InteractionController(
         clearOverscroll()
         if (mode == PointerMode.ERASE) endErase() // what a cancelled erase took stays one undo step
         if (mode == PointerMode.VERTEX) abandonVertex()
+        if (mode == PointerMode.POLYGON) showPolygonDraft(null)
         pushStrokeEdit(null) // a cancelled crossing still left segments on the pages behind it
         liveStroke = null
         strokePageIndex = null

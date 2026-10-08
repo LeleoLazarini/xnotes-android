@@ -62,6 +62,21 @@ data class ShapeConfig(
         )
     }
 
+    /** True when the chosen chip places a polygon corner by corner rather than dragging a box. */
+    val placesCorners: Boolean get() = preset == ShapePresets.FREE_POLYGON
+
+    /** A polygon (closed) or polyline (open) through page-space [points], in this style. */
+    fun placedShape(points: List<Pt>, closed: Boolean, outline: Rgba, width: Double): ShapeItem {
+        val kind = if (closed) ShapeKind.POLYGON else ShapeKind.POLYLINE
+        return ShapeItem.poly(kind, points, outline, width, fillFor(kind, outline), neon, neonStrength, dashed, dashLength, dashGap)
+            .also {
+                if (!closed) {
+                    it.headStart = headStart
+                    it.headEnd = headEnd
+                }
+            }
+    }
+
     companion object {
         /** Default reduced opacity applied to the ink colour when a closed shape is filled. */
         const val FILL_ALPHA = 0.25

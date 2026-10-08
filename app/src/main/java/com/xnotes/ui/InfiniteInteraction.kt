@@ -38,7 +38,7 @@ import kotlin.math.exp
 import kotlin.math.max
 
 /** What the current gesture is doing. */
-enum class CanvasPointerMode { IDLE, PAN, PINCH, DRAW, ERASE, SHAPE, BAND, LASSO, MOVE, RESIZE, ROTATE, VERTEX }
+enum class CanvasPointerMode { IDLE, PAN, PINCH, DRAW, ERASE, SHAPE, BAND, LASSO, MOVE, RESIZE, ROTATE, VERTEX, POLYGON }
 
 /**
  * Gestures on the infinite canvas.
@@ -122,6 +122,11 @@ class InfiniteInteraction(
 
     /** The armed tool. */
     var tool: Tool = Tool.PEN
+        set(value) {
+            // Leaving the shape tool ends a polygon placed corner by corner, keeping what is down.
+            if (value != field && value != Tool.SHAPE) finishPolygonDraft()
+            field = value
+        }
 
     /** Whether a finger draws, or pans instead. Mirrors the paged canvas's preference. */
     var fingerDraws: Boolean = false
@@ -314,9 +319,13 @@ class InfiniteInteraction(
 
         armLongPress(Pt(vx, vy), onSelection, toolType == MotionEvent.TOOL_TYPE_FINGER)
 
+        // A draft only lives through Free polygon presses; anything else that draws or edits ends it.
+        val placing = effective == Tool.SHAPE && shapeConfig().placesCorners
+        if (polygonDraft != null && !placing && effective != Tool.PAN) finishPolygonDraft()
         when {
             effective.isStroke -> beginDraw(vx, vy, effective, e)
             effective == Tool.ERASER -> beginErase(vx, vy)
+            placing -> beginPolygonTap(vx, vy)
             effective == Tool.SHAPE -> beginShape(vx, vy)
             effective == Tool.SELECT -> beginSelect(vx, vy)
             effective == Tool.LASSO -> beginLasso(vx, vy)
@@ -434,6 +443,7 @@ class InfiniteInteraction(
             CanvasPointerMode.RESIZE -> extendResize(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.ROTATE -> extendRotate(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.VERTEX -> extendVertex(e.getX(0).toDouble(), e.getY(0).toDouble())
+            CanvasPointerMode.POLYGON -> showPolygonDraft(viewport.viewportToContent(Pt(e.getX(0).toDouble(), e.getY(0).toDouble())))
             CanvasPointerMode.IDLE -> Unit
         }
     }
@@ -474,6 +484,7 @@ class InfiniteInteraction(
             CanvasPointerMode.MOVE -> endMove()
             CanvasPointerMode.RESIZE, CanvasPointerMode.ROTATE -> endTransform()
             CanvasPointerMode.VERTEX -> endVertex(e.eventTime)
+            CanvasPointerMode.POLYGON -> endPolygonTap(viewport.viewportToContent(Pt(e.getX(0).toDouble(), e.getY(0).toDouble())), e.eventTime)
             else -> Unit
         }
         mode = CanvasPointerMode.IDLE
@@ -499,6 +510,7 @@ class InfiniteInteraction(
             onSelectionChanged()
         }
         if (mode == CanvasPointerMode.VERTEX) abandonVertex()
+        if (mode == CanvasPointerMode.POLYGON) showPolygonDraft(null)
         if ((mode == CanvasPointerMode.ROTATE || mode == CanvasPointerMode.RESIZE) && liftedTransform) {
             selection()?.previewBack()
             if (bakedInLift.isNotEmpty()) selection()?.applyLiveTo(bakedInLift, Affine.IDENTITY)
@@ -1013,6 +1025,59 @@ class InfiniteInteraction(
         vertexBase = null
         vertexMoved = false
         knobIndex = -1
+    }
+
+    // --- free polygon ---
+
+    private var polygonDraft: com.xnotes.core.shapes.PolygonDraft? = null
+
+    /** A press with the Free polygon chip: the first starts a draft, each one puts down a corner on release. */
+    private fun beginPolygonTap(vx: Double, vy: Double) {
+        cancelLongPress()
+        if (polygonDraft == null) polygonDraft = com.xnotes.core.shapes.PolygonDraft()
+        mode = CanvasPointerMode.POLYGON
+        showPolygonDraft(viewport.viewportToContent(Pt(vx, vy)))
+    }
+
+    /** Show the draft as a line through its corners, with a band out to [at] while pressed. */
+    private fun showPolygonDraft(at: Pt?) {
+        val draft = polygonDraft ?: return
+        val cfg = shapeConfig()
+        val pts = draft.preview(at)
+        pendingShape = if (pts.size >= 2) {
+            cfg.copy(fill = false).placedShape(pts, false, inkColor(), cfg.strokeWidth * InteractionController.SHAPE_PEN_PARITY)
+        } else {
+            null
+        }
+        onPendingShape(pendingShape)
+        requestRender()
+    }
+
+    private fun endPolygonTap(at: Pt, eventTime: Long) {
+        val draft = polygonDraft ?: return
+        val reach = OverlayTessellator.DOT_TOUCH_PX / viewport.zoom
+        when (draft.tap(at, eventTime, reach, InteractionController.DOUBLE_TAP_MS)) {
+            com.xnotes.core.shapes.PolygonDraft.Outcome.CONTINUE -> showPolygonDraft(null)
+            com.xnotes.core.shapes.PolygonDraft.Outcome.CLOSED -> commitPolygon(closed = true)
+            com.xnotes.core.shapes.PolygonDraft.Outcome.OPEN -> commitPolygon(closed = false)
+        }
+    }
+
+    private fun commitPolygon(closed: Boolean) {
+        val draft = polygonDraft ?: return
+        polygonDraft = null
+        pendingShape = null
+        onPendingShape(null)
+        if (draft.points.size >= (if (closed) 3 else 2)) {
+            val cfg = shapeConfig()
+            onCommitShape(cfg.placedShape(draft.points, closed, inkColor(), cfg.strokeWidth * InteractionController.SHAPE_PEN_PARITY))
+        }
+        requestRender()
+    }
+
+    /** End a draft something else interrupts: two corners or more stay, as an open line. */
+    fun finishPolygonDraft() {
+        if (polygonDraft != null) commitPolygon(closed = false)
     }
 
     // --- shapes ---
