@@ -1,6 +1,7 @@
 package com.xnotes.format
 
 import com.xnotes.core.FakeImageCodec
+import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.infinite.CanvasBackground
@@ -19,6 +20,7 @@ import com.xnotes.core.tools.ToolConfig
 import com.xnotes.core.tools.ToolDefaults
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
@@ -520,5 +522,138 @@ class CanvasCodecTest {
         assertThrows(CanvasCodec.WriteCancelled::class.java) {
             codec.write(doc, ByteArrayOutputStream()) { true }
         }
+    }
+
+    // --- turned shapes ---
+
+    private val ink = Rgba(1, 2, 3, 255)
+
+    private fun turned(kind: ShapeKind, angle: Double = 0.5) =
+        ShapeItem(kind, Pt(10.0, 20.0), Pt(110.0, 120.0), ink, 2.0).apply {
+            applyTransform(Affine.rotateAbout(box.center, angle))
+        }
+
+    private fun outline(s: ShapeItem): List<Pt> =
+        s.paths().first().contours.first().let { c -> listOf(c.start) + c.segments.map { it.end } }
+
+    private fun assertSameCorners(want: List<Pt>, got: List<Pt>) {
+        assertEquals(want.size, got.size)
+        for (w in want) assertTrue("missing $w", got.any { it.distanceTo(w) < 1e-6 })
+    }
+
+    private fun withoutNewFields(manifest: String) =
+        manifest.replace(Regex(",\"geom\":\"[a-z]+\""), "")
+            .replace(Regex(",\"rect\":\\[[^\\]]*\\],\"angle\":[-0-9.eE]+"), "")
+
+    @Test fun aTurnedShapeRoundTripsAsItself() {
+        for (kind in listOf(ShapeKind.RECTANGLE, ShapeKind.ELLIPSE, ShapeKind.CIRCLE, ShapeKind.TRIANGLE)) {
+            val doc = InfiniteDocument()
+            val s = turned(kind)
+            doc.add(s)
+            val back = roundTrip(doc).items[0] as ShapeItem
+            assertEquals(kind, back.shape)
+            assertEquals(s.rotation, back.rotation, 1e-12)
+            assertEquals(s.box.x, back.box.x, 1e-9)
+            assertEquals(s.box.w, back.box.w, 1e-9)
+            assertNull(back.points)
+        }
+    }
+
+    @Test fun anOlderReaderDrawsATurnedShapesStandIn() {
+        val doc = InfiniteDocument()
+        val s = turned(ShapeKind.RECTANGLE)
+        doc.add(s)
+        val text = manifestText(doc)
+        assertTrue(text.contains("\"shape\":\"polygon\""))
+        assertTrue(text.contains("\"geom\":\"rectangle\""))
+        val legacy = withoutNewFields(text)
+        assertFalse(legacy.contains("\"angle\""))
+        assertSameCorners(outline(s), outline(readManifest(legacy).items[0] as ShapeItem))
+    }
+
+    @Test fun aTurnedEllipsesStandInLiesOnTheEllipse() {
+        val doc = InfiniteDocument()
+        val s = turned(ShapeKind.ELLIPSE, 0.3).also { it.applyTransform(Affine.scaleAlongAxes(it.box.center, 0.3, 1.0, 0.5)) }
+        doc.add(s)
+        val back = readManifest(withoutNewFields(manifestText(doc))).items[0] as ShapeItem
+        assertEquals(ShapeKind.POLYGON, back.shape)
+        val rx = s.box.w / 2.0
+        val ry = s.box.h / 2.0
+        for (v in back.vertices()!!) {
+            val q = s.toLocal(v)
+            val e = ((q.x - s.box.centerX) / rx).let { it * it } + ((q.y - s.box.centerY) / ry).let { it * it }
+            assertEquals(1.0, e, 1e-9)
+        }
+    }
+
+    @Test fun anUprightShapeWritesNothingNew() {
+        val doc = InfiniteDocument()
+        doc.add(ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(50.0, 30.0), ink, 2.0))
+        doc.add(ShapeItem.poly(ShapeKind.POLYGON, listOf(Pt(0.0, 0.0), Pt(9.0, 1.0), Pt(4.0, 7.0)), ink))
+        val text = manifestText(doc)
+        assertFalse(text, text.contains("\"geom\""))
+        assertFalse(text, text.contains("\"angle\""))
+        assertFalse(text, text.contains("\"rect\""))
+    }
+
+    @Test fun aTurnedPolygonKeepsItsFrame() {
+        val verts = listOf(Pt(0.0, 0.0), Pt(80.0, 10.0), Pt(60.0, 70.0), Pt(-10.0, 40.0))
+        val s = ShapeItem.poly(ShapeKind.POLYGON, verts, ink).apply {
+            applyTransform(Affine.rotateAbout(Pt(20.0, 20.0), 0.7))
+        }
+        val doc = InfiniteDocument()
+        doc.add(s)
+        assertFalse(manifestText(doc).contains("geom"))
+        val back = roundTrip(doc).items[0] as ShapeItem
+        assertEquals(ShapeKind.POLYGON, back.shape)
+        assertEquals(0.7, back.rotation, 1e-12)
+        val want = s.vertices()!!
+        val got = back.vertices()!!
+        for (i in want.indices) assertEquals(0.0, want[i].distanceTo(got[i]), 1e-9)
+    }
+
+    @Test fun anOldBakedRectangleComesBackAsARectangle() {
+        // What earlier versions saved for a turned rectangle: a polygon of its four corners.
+        val turn = Affine.rotateAbout(Pt(50.0, 25.0), 0.6)
+        val corners = listOf(Pt(0.0, 0.0), Pt(100.0, 0.0), Pt(100.0, 50.0), Pt(0.0, 50.0)).map(turn::apply)
+        val doc = InfiniteDocument()
+        doc.add(ShapeItem.poly(ShapeKind.POLYGON, corners, ink))
+        val back = roundTrip(doc).items[0] as ShapeItem
+        assertEquals(ShapeKind.RECTANGLE, back.shape)
+        assertEquals(0.6, back.rotation, 1e-9)
+        assertEquals(100.0, back.box.w, 1e-9)
+        assertEquals(50.0, back.box.h, 1e-9)
+        assertSameCorners(corners, outline(back))
+    }
+
+    @Test fun anOldBakedEllipseComesBackAsAnEllipse() {
+        val turn = Affine.rotateAbout(Pt(50.0, 25.0), 0.6)
+        val ellipse = ShapeItem(ShapeKind.ELLIPSE, Pt(0.0, 0.0), Pt(100.0, 50.0), ink, 2.0)
+        val circle = ShapeItem(ShapeKind.CIRCLE, Pt(0.0, 0.0), Pt(50.0, 50.0), ink, 2.0)
+        val doc = InfiniteDocument()
+        doc.add(ShapeItem.poly(ShapeKind.POLYGON, ellipse.ellipsePolygon().map(turn::apply), ink))
+        doc.add(ShapeItem.poly(ShapeKind.POLYGON, circle.ellipsePolygon().map(turn::apply), ink))
+        val back = roundTrip(doc).items.map { it as ShapeItem }
+        assertEquals(ShapeKind.ELLIPSE, back[0].shape)
+        assertEquals(0.6, back[0].rotation, 1e-9)
+        assertEquals(100.0, back[0].box.w, 1e-6)
+        assertEquals(50.0, back[0].box.h, 1e-6)
+        assertEquals(ShapeKind.CIRCLE, back[1].shape)
+    }
+
+    @Test fun aQuadThatIsNotQuiteARectangleStaysAPolygon() {
+        val doc = InfiniteDocument()
+        doc.add(ShapeItem.poly(ShapeKind.POLYGON, listOf(Pt(0.0, 0.0), Pt(100.0, 0.0), Pt(100.0, 50.0), Pt(0.0, 50.5)), ink))
+        assertEquals(ShapeKind.POLYGON, (roundTrip(doc).items[0] as ShapeItem).shape)
+    }
+
+    @Test fun anUnknownGeomFallsBackToTheStandIn() {
+        val doc = InfiniteDocument()
+        val s = turned(ShapeKind.TRIANGLE)
+        doc.add(s)
+        val text = manifestText(doc).replace("\"geom\":\"triangle\"", "\"geom\":\"hexagram\"")
+        val back = readManifest(text).items[0] as ShapeItem
+        assertEquals(ShapeKind.POLYGON, back.shape)
+        assertSameCorners(outline(s), outline(back))
     }
 }

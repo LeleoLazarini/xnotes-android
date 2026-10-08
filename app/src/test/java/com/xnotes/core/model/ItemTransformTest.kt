@@ -74,18 +74,18 @@ class ItemTransformTest {
         assertEquals(before[0].distanceTo(before[2]), after[0].distanceTo(after[2]), 1e-9)
     }
 
-    @Test fun rotateRectangleBecomesPolygon() {
+    @Test fun aQuarterTurnLeavesAnUprightRectangle() {
         val s = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(100.0, 50.0), Rgba(0, 0, 0), 3.0)
         s.applyTransform(Affine.rotateAbout(Pt(50.0, 25.0), PI / 2)) // about the box centre
-        assertEquals(ShapeKind.POLYGON, s.shape)
-        assertNotNull(s.points)
-        assertEquals(4, s.points!!.size)
+        assertEquals(ShapeKind.RECTANGLE, s.shape)
+        assertEquals(0.0, s.rotation, 0.0)
+        assertNull(s.points)
         assertEquals(3.0, s.strokeWidth, 1e-9) // rotation keeps the width
-        // A 100x50 rect turned 90 degrees about its centre bounds to 50x100 at (25,-25).
-        assertEquals(25.0, s.start.x, 1e-9)
-        assertEquals(-25.0, s.start.y, 1e-9)
-        assertEquals(75.0, s.end.x, 1e-9)
-        assertEquals(75.0, s.end.y, 1e-9)
+        // A 100x50 rect turned 90 degrees about its centre is the upright 50x100 one at (25,-25).
+        assertEquals(25.0, s.box.left, 1e-9)
+        assertEquals(-25.0, s.box.top, 1e-9)
+        assertEquals(75.0, s.box.right, 1e-9)
+        assertEquals(75.0, s.box.bottom, 1e-9)
     }
 
     @Test fun rotateLineKeepsKind() {
@@ -96,13 +96,15 @@ class ItemTransformTest {
         assertEquals(10.0, s.end.y, 1e-9)
     }
 
-    @Test fun shapeSnapshotRestoresKindAfterRotation() {
+    @Test fun shapeSnapshotRestoresKindAfterAShear() {
         val s = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(100.0, 50.0), Rgba(0, 0, 0), 3.0)
         val snap = s.snapshotGeometry()
         s.applyTransform(Affine.rotateAbout(Pt(50.0, 25.0), PI / 4))
+        s.applyTransform(Affine.scaleAbout(Pt.ZERO, 2.0, 1.0))
         assertEquals(ShapeKind.POLYGON, s.shape)
         s.restoreGeometry(snap)
         assertEquals(ShapeKind.RECTANGLE, s.shape)
+        assertEquals(0.0, s.rotation, 0.0)
         assertNull(s.points)
         assertEquals(Pt(100.0, 50.0), s.end)
     }

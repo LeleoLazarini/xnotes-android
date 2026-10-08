@@ -43,6 +43,24 @@ class ShapePath(
     val role: PathRole = PathRole.OUTLINE,
     val fillRule: FillRule = FillRule.NONZERO,
 ) {
+    /** This path with every point, control points included, moved by [f]; exact for any affine. */
+    fun mapped(f: (Pt) -> Pt): ShapePath = ShapePath(
+        contours.map { c ->
+            VectorContour(
+                f(c.start),
+                c.segments.map { seg ->
+                    when (seg) {
+                        is VectorSeg.Line -> VectorSeg.Line(f(seg.end))
+                        is VectorSeg.Cubic -> VectorSeg.Cubic(f(seg.c1), f(seg.c2), f(seg.end))
+                    }
+                },
+                c.closed,
+            )
+        },
+        role,
+        fillRule,
+    )
+
     companion object {
         /** A closed run of straight edges through [points]. */
         fun polygon(points: List<Pt>, role: PathRole = PathRole.OUTLINE): ShapePath =

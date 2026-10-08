@@ -12,6 +12,7 @@ import com.xnotes.core.history.MoveItems
 import com.xnotes.core.history.TransformItems
 import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.GeometrySnapshot
+import com.xnotes.core.model.ShapeItem
 
 /**
  * What is selected on the canvas, and the arithmetic of moving, scaling and rotating it.
@@ -46,7 +47,7 @@ class CanvasSelection(private val doc: InfiniteDocument) {
 
     fun select(next: List<CanvasItem>) {
         items = next
-        box = boundsOf(next)?.let { Obb.fromAabb(it) }
+        box = boxOf(next)
     }
 
     fun clear() {
@@ -63,11 +64,17 @@ class CanvasSelection(private val doc: InfiniteDocument) {
      * The box comes back upright, because item bounds are axis aligned and cannot say what angle
      * the content is at. Keeping the old angle and tilting the fresh bounds was worse than useless:
      * every rotation grew the box by its own turn, so a selection ballooned and skewed the moment
-     * the finger came off the grip.
+     * the finger came off the grip. A lone shape is the exception: it knows its own frame.
      */
     fun refreshBox() {
-        box = boundsOf(items)?.let { Obb.fromAabb(it) }
+        box = boxOf(items)
     }
+
+    /** True when the selection is one shape boxed by its own frame, which a drag keeps turned. */
+    val isFramedShape: Boolean get() = (items.singleOrNull() as? ShapeItem)?.frameObb() != null
+
+    private fun boxOf(of: List<CanvasItem>): Obb? =
+        (of.singleOrNull() as? ShapeItem)?.frameObb() ?: boundsOf(of)?.let { Obb.fromAabb(it) }
 
     /** True when [p] is inside the selection, so a press there grabs it rather than starting a band. */
     fun contains(p: Pt): Boolean = box?.contains(p) == true

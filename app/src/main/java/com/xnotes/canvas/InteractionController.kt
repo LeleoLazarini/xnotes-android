@@ -1694,7 +1694,7 @@ class InteractionController(
         resizeHandle = null
         resizeOldGeom = null
         // The endpoint resize (a single line/arrow) reshapes the box; refit it upright.
-        selObb = selectionBoundsContent()?.let { Obb.fromAabb(it) }
+        selObb = selectionBox()
         mode = PointerMode.IDLE
         refreshSelectionMenu()
         requestRender()
@@ -1765,6 +1765,8 @@ class InteractionController(
         txSnaps = emptyList()
         txStartObb = null
         txHandle = null
+        // A lone shape knows its own frame, so its box is refound rather than kept as dragged.
+        if ((selection.singleOrNull()?.item as? ShapeItem)?.frameObb() != null) selObb = selectionBox()
         mode = PointerMode.IDLE
         refreshSelectionMenu()
         requestRender()
@@ -2192,8 +2194,8 @@ class InteractionController(
         val touched = selection + items
         selection.clear()
         selection.addAll(items)
-        // A fresh selection starts upright: its box is the items' AABB, angle 0.
-        selObb = selectionBoundsContent()?.let { Obb.fromAabb(it) }
+        // A fresh selection starts upright around the items, unless it is a lone shape in its frame.
+        selObb = selectionBox()
         repairRegions(dirtyRegions(touched))
         onSelectionChanged(selection.isNotEmpty())
         requestRender()
@@ -2301,6 +2303,17 @@ class InteractionController(
             }
         }
         return if (best >= 0) best else nearest.takeIf { it >= 0 }
+    }
+
+    /** A lone shape's own turned frame, or else the upright box around everything selected. */
+    private fun selectionBox(): Obb? {
+        val one = selection.singleOrNull()
+        val frame = (one?.item as? ShapeItem)?.frameObb()
+        if (one != null && frame != null && state.pageRects.getOrNull(one.pageIndex) != null) {
+            val turn = frame.angle + Math.toRadians(state.rotationDeg.toDouble())
+            return Obb(state.fromPageSpace(one.pageIndex, frame.center), frame.halfW, frame.halfH, turn)
+        }
+        return selectionBoundsContent()?.let { Obb.fromAabb(it) }
     }
 
     private fun selectionBoundsContent(): Rect? {

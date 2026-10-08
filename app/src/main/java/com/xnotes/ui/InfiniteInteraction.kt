@@ -865,9 +865,10 @@ class InfiniteInteraction(
         // A resize of an upright box snaps onto the real bounds, which is what keeps the chrome
         // honest around a text box that refused to shrink past its own text. A turned box cannot be
         // re-derived at all: item bounds are axis aligned, so measuring one and then tilting the
-        // result grew the box by its own rotation and made every release jump.
+        // result grew the box by its own rotation and made every release jump. A lone shape is the
+        // exception, since it carries its own frame.
         val upright = sel.box?.let { kotlin.math.abs(it.angle) < 1e-9 } == true
-        if (wasResize && upright) sel.refreshBox()
+        if ((wasResize && upright) || sel.isFramedShape) sel.refreshBox()
         onSelectionChanged()
         requestRender()
     }

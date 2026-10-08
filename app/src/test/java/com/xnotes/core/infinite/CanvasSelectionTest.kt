@@ -258,6 +258,41 @@ class CanvasSelectionTest {
         assertEquals(Pt(100.0, 100.0), r.end)
     }
 
+    @Test fun aLoneShapeIsBoxedByItsOwnTurnedFrame() {
+        val r = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(100.0, 50.0), Rgba(0, 0, 0), 2.0)
+        r.applyTransform(Affine.rotateAbout(Pt(50.0, 25.0), 0.5))
+        val sel = CanvasSelection(docOf(r))
+        sel.select(listOf(r))
+        val box = sel.box!!
+        assertEquals(0.5, box.angle, 1e-12)
+        assertEquals("half the width plus the stroke pad", 52.0, box.halfW, 1e-9)
+        assertTrue(sel.isFramedShape)
+    }
+
+    @Test fun resizingATurnedShapeByItsOwnHandleKeepsItARectangle() {
+        val r = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(100.0, 50.0), Rgba(0, 0, 0), 2.0)
+        r.applyTransform(Affine.rotateAbout(Pt(50.0, 25.0), 0.5))
+        val sel = CanvasSelection(docOf(r))
+        sel.select(listOf(r))
+        sel.beginTransform()
+        val box = sel.box!!
+        sel.resizeLive(HandleId.R, box.localToWorld(Pt(box.halfW + 40.0, 0.0)))
+        assertEquals(ShapeKind.RECTANGLE, r.shape)
+        assertEquals(0.5, r.rotation, 1e-9)
+        assertTrue(r.box.w > 130.0)
+        assertEquals(50.0, r.box.h, 1e-9)
+    }
+
+    @Test fun aGroupKeepsTheUprightBox() {
+        val r = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(100.0, 50.0), Rgba(0, 0, 0), 2.0)
+        r.applyTransform(Affine.rotateAbout(Pt(50.0, 25.0), 0.5))
+        val s = line(0.0, 200.0)
+        val sel = CanvasSelection(docOf(r, s))
+        sel.select(listOf(r, s))
+        assertEquals(0.0, sel.box!!.angle, 0.0)
+        assertTrue(!sel.isFramedShape)
+    }
+
     // --- rotating ---
 
     @Test fun aRotationTurnsTheBox() {

@@ -3,6 +3,7 @@ package com.xnotes.format
 import com.xnotes.core.FakeImageCodec
 import com.xnotes.core.model.ImageData
 import com.xnotes.core.FakeTextMeasurer
+import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.Bookmark
@@ -813,5 +814,24 @@ class DocumentCodecTest {
             assertEquals(1650.0, page.height, 1e-9)
             assertNull(page.pdfPage)
         }
+    }
+
+    @Test fun turnedShapesRoundTripInANote() {
+        val doc = Document(dpi = 150)
+        val page = Page(1240.0, 1754.0)
+        val rect = ShapeItem(ShapeKind.RECTANGLE, Pt(10.0, 20.0), Pt(110.0, 70.0), Rgba(1, 2, 3, 255), 2.0)
+        rect.applyTransform(Affine.rotateAbout(rect.box.center, 0.4))
+        val oval = ShapeItem(ShapeKind.ELLIPSE, Pt(10.0, 20.0), Pt(110.0, 70.0), Rgba(1, 2, 3, 255), 2.0, Rgba(1, 2, 3, 64))
+        oval.applyTransform(Affine.rotateAbout(Pt.ZERO, -1.0))
+        page.items.add(rect)
+        page.items.add(oval)
+        doc.pages.add(page)
+        val back = roundTrip(doc).pages[0].items.map { it as ShapeItem }
+        assertEquals(ShapeKind.RECTANGLE, back[0].shape)
+        assertEquals(0.4, back[0].rotation, 1e-12)
+        assertEquals(ShapeKind.ELLIPSE, back[1].shape)
+        assertEquals(oval.rotation, back[1].rotation, 1e-12)
+        assertEquals(oval.box.centerX, back[1].box.centerX, 1e-9)
+        assertEquals(Rgba(1, 2, 3, 64), back[1].fillRgba)
     }
 }

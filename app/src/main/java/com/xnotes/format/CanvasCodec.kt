@@ -238,21 +238,30 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
     }
 
     private fun writeShape(j: JsonWrite, s: ShapeItem) {
+        // A turned shape goes down as the polygon older readers draw, its real geometry after.
+        val standIn = s.legacyOutline()
+        val drawn = standIn?.let { Rect.bounding(it) }
         j.beginObject()
         j.name("kind").value(ShapeItem.KIND)
-        j.name("shape").value(s.shape.id)
-        j.name("start").beginArray().value(s.start.x).value(s.start.y).endArray()
-        j.name("end").beginArray().value(s.end.x).value(s.end.y).endArray()
+        j.name("shape").value(if (standIn != null && !s.isFree) ShapeKind.POLYGON.id else s.shape.id)
+        j.name("start").beginArray().value(drawn?.left ?: s.start.x).value(drawn?.top ?: s.start.y).endArray()
+        j.name("end").beginArray().value(drawn?.right ?: s.end.x).value(drawn?.bottom ?: s.end.y).endArray()
         j.name("stroke_rgba")
         writeRgba(j, s.strokeRgba)
         j.name("stroke_width").value(s.strokeWidth)
         j.name("fill_rgba")
         s.fillRgba?.let { writeRgba(j, it) } ?: j.nullValue()
         // Polygon/polyline carry their vertices (absolute content px); other kinds omit them.
-        s.vertices()?.let { verts ->
+        (standIn ?: s.vertices())?.let { verts ->
             j.name("points").beginArray()
             for (p in verts) j.beginArray().value(p.x).value(p.y).endArray()
             j.endArray()
+        }
+        if (standIn != null) {
+            if (!s.isFree) j.name("geom").value(s.shape.id)
+            val f = s.box
+            j.name("rect").beginArray().value(f.x).value(f.y).value(f.w).value(f.h).endArray()
+            j.name("angle").value(s.rotation)
         }
         if (s.neon) {
             j.name("neon").value(true)
@@ -497,6 +506,7 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
         var orientation = 0
         var angle = 0.0
         var shape: String? = null
+        var geom: String? = null
         var start: Pt? = null
         var end: Pt? = null
         var strokeRgba: Rgba? = null
@@ -548,6 +558,7 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
                 "orientation" -> s.orientation = intOr(p, 0)
                 "angle" -> s.angle = doubleOr(p, 0.0)
                 "shape" -> s.shape = stringOr(p, "")
+                "geom" -> s.geom = stringOrNull(p)
                 "start" -> s.start = ptOrNull(p)
                 "end" -> s.end = ptOrNull(p)
                 "stroke_rgba" -> s.strokeRgba = rgbaOrNull(p)
@@ -611,6 +622,18 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
     }
 
     private fun buildShape(s: ItemScratch): ShapeItem {
+        val shape = buildDrawnShape(s)
+        // The real geometry behind a stand-in polygon; or else an old file's baked turn.
+        val frame = s.rect
+        if (frame != null && (s.geom != null || s.angle != 0.0)) {
+            shape.restoreFrame(ShapeKind.fromIdOrNull(s.geom), frame, s.angle)
+        } else {
+            shape.unbake()
+        }
+        return shape
+    }
+
+    private fun buildDrawnShape(s: ItemScratch): ShapeItem {
         val kind = ShapeKind.fromId(s.shape)
         val strokeRgba = s.strokeRgba ?: DEFAULT_SHAPE_STROKE
         s.points?.let { verts ->
