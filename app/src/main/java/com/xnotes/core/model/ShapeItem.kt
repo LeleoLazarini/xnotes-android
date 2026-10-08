@@ -640,6 +640,13 @@ class ShapeItem(
         val finite = frame.x.isFinite() && frame.y.isFinite() && frame.w.isFinite() && frame.h.isFinite()
         if (target.isEndpointShape || !finite || !turn.isFinite()) return
         val pagePoints = vertices()
+        if (target != shape) {
+            // The stand-in's own parameters mean nothing to the real kind; the file's come after.
+            adj = target.defaultAdj.copyOf()
+            n = target.defaultN
+            headStart = target.defaultHeadStart
+            headEnd = target.defaultHeadEnd
+        }
         shape = target
         start = frame.topLeft
         end = Pt(frame.right, frame.bottom)

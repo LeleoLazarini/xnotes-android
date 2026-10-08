@@ -15,6 +15,7 @@ import com.xnotes.core.shapes.Head
 import com.xnotes.core.shapes.PathRole
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.shapes.ShapePath
+import com.xnotes.core.shapes.ShapePreset
 import com.xnotes.core.vector.VectorSeg
 
 /**
@@ -27,12 +28,19 @@ object ShapeIcons {
     private val cache = HashMap<String, ImageVector>()
 
     fun of(kind: ShapeKind, n: Int = kind.defaultN, adj: DoubleArray = kind.defaultAdj): ImageVector =
-        cache.getOrPut("${kind.id}/$n/${adj.joinToString(",")}") {
-            val box = boxFor(kind)
-            val start = if (kind.isEndpointShape) Pt(box.left, box.bottom) else box.topLeft
-            val end = if (kind.isEndpointShape) Pt(box.right, box.top) else Pt(box.right, box.bottom)
-            build("shape-${kind.id}", ShapeItem(kind, start, end, Rgba(255, 255, 255), STROKE, adj = adj.copyOf(), n = n))
-        }
+        cache.getOrPut("${kind.id}/$n/${adj.joinToString(",")}") { glyph(kind, n, adj, null) }
+
+    /** A chip's glyph, a free kind's drawn from the outline the chip carries for it. */
+    fun of(preset: ShapePreset): ImageVector =
+        if (preset.iconPath == null) of(preset.kind, preset.n, preset.adj)
+        else cache.getOrPut("preset/${preset.key}") { glyph(preset.kind, preset.n, preset.adj, preset.iconPath) }
+
+    private fun glyph(kind: ShapeKind, n: Int, adj: DoubleArray, path: List<com.xnotes.core.vector.VectorContour>?): ImageVector {
+        val box = boxFor(kind)
+        val start = if (kind.isEndpointShape) Pt(box.left, box.bottom) else box.topLeft
+        val end = if (kind.isEndpointShape) Pt(box.right, box.top) else Pt(box.right, box.bottom)
+        return build("shape-${kind.id}", ShapeItem(kind, start, end, Rgba(255, 255, 255), STROKE, path = path, adj = adj.copyOf(), n = n))
+    }
 
     /** A head picker's glyph: a short line ending in [head], at its left end for a start picker. */
     fun head(head: Head, atStart: Boolean): ImageVector =
@@ -85,10 +93,12 @@ object ShapeIcons {
     /** Where each kind sits on the grid: the proportions the hand-drawn glyphs had. */
     private fun boxFor(kind: ShapeKind): Rect = when (kind) {
         ShapeKind.LINE, ShapeKind.ARROW -> Rect(10.0, 10.0, 28.0, 28.0)
-        ShapeKind.RECTANGLE -> Rect(8.0, 12.0, 32.0, 24.0)
-        ShapeKind.ELLIPSE -> Rect(6.0, 12.0, 36.0, 24.0)
-        ShapeKind.TRIANGLE -> Rect(6.0, 8.0, 36.0, 30.0)
-        else -> Rect(8.0, 8.0, 32.0, 32.0)
+        ShapeKind.RECTANGLE, ShapeKind.ROUNDED_RECT, ShapeKind.PARALLELOGRAM, ShapeKind.TRAPEZOID -> Rect(6.0, 12.0, 36.0, 24.0)
+        ShapeKind.ELLIPSE, ShapeKind.CAPSULE, ShapeKind.CLOUD -> Rect(5.0, 12.0, 38.0, 24.0)
+        ShapeKind.TRIANGLE, ShapeKind.RIGHT_TRIANGLE -> Rect(6.0, 8.0, 36.0, 30.0)
+        ShapeKind.SQUARE -> Rect(10.0, 10.0, 28.0, 28.0)
+        ShapeKind.HEART -> Rect(7.0, 8.0, 34.0, 32.0)
+        else -> Rect(7.0, 7.0, 34.0, 34.0)
     }
 
     private const val GRID = 48f

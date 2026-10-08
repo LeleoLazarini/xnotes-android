@@ -104,7 +104,7 @@ abstract class ShapeKind internal constructor(val id: String) {
 
         val LINE: ShapeKind = EndpointKind("line", Head.NONE)
         val ARROW: ShapeKind = EndpointKind("arrow", Head.OPEN)
-        val RECTANGLE: ShapeKind = RectangleKind("rectangle")
+        val RECTANGLE: ShapeKind = RectangleKind("rectangle", keepsAspect = false)
         val ELLIPSE: ShapeKind = EllipseKind("ellipse", keepsAspect = false)
         val CIRCLE: ShapeKind = EllipseKind("circle", keepsAspect = true)
         val TRIANGLE: ShapeKind = TriangleKind("triangle")
@@ -112,8 +112,28 @@ abstract class ShapeKind internal constructor(val id: String) {
         val POLYLINE: ShapeKind = FreeKind("polyline", closed = false)
         val CURVE: ShapeKind = FreeKind("curve", closed = false)
 
+        val ROUNDED_RECT: ShapeKind = RoundedRectKind("rounded_rect", capsule = false)
+        val SQUARE: ShapeKind = RectangleKind("square", keepsAspect = true)
+        val CAPSULE: ShapeKind = RoundedRectKind("capsule", capsule = true)
+        val RIGHT_TRIANGLE: ShapeKind = RightTriangleKind("right_triangle")
+        val DIAMOND: ShapeKind = DiamondKind("diamond")
+        val PARALLELOGRAM: ShapeKind = ParallelogramKind("parallelogram")
+        val TRAPEZOID: ShapeKind = TrapezoidKind("trapezoid")
+        val REGULAR_POLYGON: ShapeKind = RegularPolygonKind("regular_polygon")
+        val STAR: ShapeKind = StarKind("star")
+        val CROSS: ShapeKind = CrossKind("cross")
+        val HEART: ShapeKind = HeartKind("heart")
+        val CLOUD: ShapeKind = CloudKind("cloud")
+        val RING: ShapeKind = RingKind("ring")
+        val PIE: ShapeKind = SliceKind("pie", pie = true)
+        val ARC: ShapeKind = SliceKind("arc", pie = false)
+
         /** Every kind, in a stable order. */
-        val all: List<ShapeKind> = listOf(LINE, ARROW, RECTANGLE, ELLIPSE, CIRCLE, TRIANGLE, POLYGON, POLYLINE, CURVE)
+        val all: List<ShapeKind> = listOf(
+            LINE, ARROW, RECTANGLE, ELLIPSE, CIRCLE, TRIANGLE, POLYGON, POLYLINE, CURVE,
+            ROUNDED_RECT, SQUARE, CAPSULE, RIGHT_TRIANGLE, DIAMOND, PARALLELOGRAM, TRAPEZOID,
+            REGULAR_POLYGON, STAR, CROSS, HEART, CLOUD, RING, PIE, ARC,
+        )
 
         private val byId: Map<String, ShapeKind> = all.associateBy { it.id }
 
@@ -178,7 +198,7 @@ private class EndpointKind(id: String, override val defaultHeadEnd: Head) : Shap
         ShapeGeometry(listOf(ShapePath.polyline(listOf(box.topLeft, Pt(box.right, box.bottom)))), textRect = box)
 }
 
-private class RectangleKind(id: String) : ShapeKind(id) {
+internal class RectangleKind(id: String, override val keepsAspect: Boolean) : ShapeKind(id) {
     override val isClosed get() = true
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry {
         val corners = listOf(Pt(box.left, box.top), Pt(box.right, box.top), Pt(box.right, box.bottom), Pt(box.left, box.bottom))
@@ -193,15 +213,7 @@ private class EllipseKind(id: String, override val keepsAspect: Boolean) : Shape
         val cy = box.centerY
         val rx = box.w / 2.0
         val ry = box.h / 2.0
-        // Eight glue points round the outline, each facing out along the ellipse's own normal.
-        val connections = (0 until 8).map { k ->
-            val a = k * PI / 4.0
-            val at = Pt(cx + rx * cos(a), cy + ry * sin(a))
-            val nx = if (rx > 0.0) cos(a) / rx else 0.0
-            val ny = if (ry > 0.0) sin(a) / ry else 0.0
-            val len = hypot(nx, ny)
-            ConnectionPoint(at, listOf(if (len > 0.0) Pt(nx / len, ny / len) else Pt.ZERO))
-        }
+        val connections = ellipseConnections(box)
         // The biggest box inside an ellipse is the one inscribed at 45 degrees.
         val k = 1.0 / sqrt(2.0)
         val text = Rect(cx - rx * k, cy - ry * k, 2 * rx * k, 2 * ry * k)

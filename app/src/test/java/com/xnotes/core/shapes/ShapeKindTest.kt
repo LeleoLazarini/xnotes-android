@@ -25,7 +25,7 @@ class ShapeKindTest {
         for (k in ShapeKind.all) assertSame(k, ShapeKind.fromId(k.id))
         assertSame(ShapeKind.RECTANGLE, ShapeKind.fromId("hexagram"))
         assertNull(ShapeKind.fromIdOrNull("hexagram"))
-        assertTrue(ShapeKind.all.all { it.isLegacy })
+        assertEquals("the nine the first versions wrote", 9, ShapeKind.all.count { it.isLegacy })
     }
 
     @Test fun kindsSayHowTheyBehave() {

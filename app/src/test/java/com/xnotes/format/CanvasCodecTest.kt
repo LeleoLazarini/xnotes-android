@@ -542,7 +542,7 @@ class CanvasCodecTest {
     }
 
     private fun withoutNewFields(manifest: String) =
-        manifest.replace(Regex(",\"geom\":\"[a-z]+\""), "")
+        manifest.replace(Regex(",\"geom\":\"[a-z_]+\""), "")
             .replace(Regex(",\"rect\":\\[[^\\]]*\\],\"angle\":[-0-9.eE]+"), "")
 
     @Test fun aTurnedShapeRoundTripsAsItself() {
@@ -719,5 +719,29 @@ class CanvasCodecTest {
         assertEquals(com.xnotes.core.shapes.Head.OPEN, back[0].headEnd)
         assertEquals(com.xnotes.core.shapes.Head.FILLED_DIAMOND, back[1].headStart)
         assertEquals(com.xnotes.core.shapes.Head.HOLLOW_TRIANGLE, back[1].headEnd)
+    }
+
+    @Test fun everyBasicKindRoundTripsBehindAStandIn() {
+        val kinds = ShapeKind.all.filter { !it.isLegacy }
+        val doc = InfiniteDocument()
+        for (k in kinds) {
+            val s = ShapeItem(k, Pt(0.0, 0.0), Pt(120.0, 80.0), ink, 2.0, n = if (k.nRange != null) 7 else k.defaultN)
+            k.knobs.firstOrNull()?.let { s.dragKnob(0, Pt(30.0, 10.0)) }
+            doc.add(s)
+        }
+        val text = manifestText(doc)
+        val back = roundTrip(doc).items.map { it as ShapeItem }
+        for ((i, k) in kinds.withIndex()) {
+            val want = doc.items[i] as ShapeItem
+            assertEquals(k, back[i].shape)
+            assertEquals("$k count", want.n, back[i].n)
+            assertTrue("$k knobs", want.adj.contentEquals(back[i].adj))
+        }
+        // Older readers see each as the polygon or polyline it looks like, never a stray rectangle.
+        val legacy = readManifest(withoutNewFields(text).replace(Regex(",\"adj\":\\[[^\\]]*\\]"), "").replace(Regex(",\"n\":[0-9]+"), ""))
+        for (item in legacy.items.map { it as ShapeItem }) {
+            val ok = item.shape == ShapeKind.POLYGON || item.shape == ShapeKind.POLYLINE || (item.shape == ShapeKind.RECTANGLE && item.vertices() == null)
+            assertTrue("an older reader would see ${item.shape} with ${item.vertices()?.size} points", ok)
+        }
     }
 }

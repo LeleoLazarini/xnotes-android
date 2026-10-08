@@ -125,7 +125,7 @@ private fun ShapePager(config: ShapeConfig, onPage: (Int) -> Unit, onPick: (Shap
             for (row in pages[page].presets.chunked(ShapePresets.COLUMNS)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(GAP.dp)) {
                     for (p in row) {
-                        KindChip(ShapeIcons.of(p.kind, p.n, p.adj), stringResource(presetLabel(p.key)), selected = p.key == config.preset) {
+                        KindChip(ShapeIcons.of(p), stringResource(presetLabel(p.key)), selected = p.key == config.preset) {
                             onPick(p)
                         }
                     }
@@ -235,9 +235,27 @@ internal fun presetLabel(key: String): Int = when (key) {
     "line" -> R.string.shape_line
     "arrow" -> R.string.shape_arrow
     "rectangle" -> R.string.shape_rectangle
+    "rounded_rect" -> R.string.shape_rounded_rect
+    "square" -> R.string.shape_square
+    "capsule" -> R.string.shape_capsule
     "ellipse" -> R.string.shape_ellipse
     "circle" -> R.string.shape_circle
     "triangle" -> R.string.shape_triangle
+    "right_triangle" -> R.string.shape_right_triangle
+    "diamond" -> R.string.shape_diamond
+    "parallelogram" -> R.string.shape_parallelogram
+    "trapezoid" -> R.string.shape_trapezoid
+    "pentagon" -> R.string.shape_pentagon
+    "hexagon" -> R.string.shape_hexagon
+    "octagon" -> R.string.shape_octagon
+    "star" -> R.string.shape_star
+    "cross" -> R.string.shape_cross
+    "heart" -> R.string.shape_heart
+    "cloud" -> R.string.shape_cloud
+    "ring" -> R.string.shape_ring
+    "pie" -> R.string.shape_pie
+    "arc" -> R.string.shape_arc
+    ShapePresets.FREE_POLYGON -> R.string.shape_free_polygon
     else -> R.string.shape_polygon
 }
 

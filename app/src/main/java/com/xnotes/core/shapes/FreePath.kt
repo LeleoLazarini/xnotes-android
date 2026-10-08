@@ -44,10 +44,40 @@ object FreePath {
     fun isVertexList(contours: List<VectorContour>): Boolean =
         contours.size == 1 && contours[0].segments.all { it is VectorSeg.Line }
 
-    /** The tight bounds of what [contours] draw: curves flattened, so control points never pad them. */
+    /** The exact bounds of what [contours] draw: a curve counts by its extremes, never its handles. */
     fun bounds(contours: List<VectorContour>): Rect? {
-        val pts = contours.flatMap { PathFlattener.flatten(it, BOUNDS_TOLERANCE) }
+        val pts = ArrayList<Pt>()
+        for (c in contours) {
+            pts.add(c.start)
+            var from = c.start
+            for (s in c.segments) {
+                pts.add(s.end)
+                if (s is VectorSeg.Cubic) extremes(from, s.c1, s.c2, s.end, pts)
+                from = s.end
+            }
+        }
         return if (pts.isEmpty()) null else Rect.bounding(pts)
+    }
+
+    /** Add the points where a cubic turns back in x or in y: the roots of its derivative in (0, 1). */
+    private fun extremes(p0: Pt, p1: Pt, p2: Pt, p3: Pt, out: MutableList<Pt>) {
+        fun roots(a0: Double, a1: Double, a2: Double, a3: Double): List<Double> {
+            val d0 = a1 - a0
+            val d1 = a2 - a1
+            val d2 = a3 - a2
+            val a = d0 - 2 * d1 + d2
+            val b = 2 * (d1 - d0)
+            if (kotlin.math.abs(a) < 1e-12) return if (kotlin.math.abs(b) < 1e-12) emptyList() else listOf(-d0 / b)
+            val disc = b * b - 4 * a * d0
+            if (disc < 0.0) return emptyList()
+            val sq = kotlin.math.sqrt(disc)
+            return listOf((-b + sq) / (2 * a), (-b - sq) / (2 * a))
+        }
+        for (t in roots(p0.x, p1.x, p2.x, p3.x) + roots(p0.y, p1.y, p2.y, p3.y)) {
+            if (t <= 0.0 || t >= 1.0) continue
+            val u = 1.0 - t
+            out.add(p0 * (u * u * u) + p1 * (3 * u * u * t) + p2 * (3 * u * t * t) + p3 * (t * t * t))
+        }
     }
 
     /** [contours] as SVG path data (absolute M, L, C and Z), the form files store a free outline in. */
@@ -117,6 +147,4 @@ object FreePath {
     }
 
     private val TOKEN = Regex("[MLCZ]|-?[0-9]*\\.?[0-9]+(?:[eE][-+]?[0-9]+)?")
-
-    private const val BOUNDS_TOLERANCE = 0.05
 }
