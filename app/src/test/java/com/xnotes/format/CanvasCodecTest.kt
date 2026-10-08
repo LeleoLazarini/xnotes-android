@@ -14,7 +14,7 @@ import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.stroke.Sample
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
 import com.xnotes.core.tools.ToolDefaults
@@ -252,13 +252,13 @@ class CanvasCodecTest {
 
     @Test fun everyShapeKindRoundTrips() {
         val doc = InfiniteDocument()
-        for (k in ShapeKind.entries) {
+        for (k in ShapeKind.all) {
             if (k == ShapeKind.POLYGON || k == ShapeKind.POLYLINE) continue
             doc.add(ShapeItem(k, Pt(0.0, 0.0), Pt(30.0, 20.0), Rgba(9, 9, 9, 255), 2.0))
         }
         val back = roundTrip(doc)
         assertEquals(
-            ShapeKind.entries.filter { it != ShapeKind.POLYGON && it != ShapeKind.POLYLINE },
+            ShapeKind.all.filter { it != ShapeKind.POLYGON && it != ShapeKind.POLYLINE },
             back.items.map { (it as ShapeItem).shape },
         )
     }
@@ -555,7 +555,7 @@ class CanvasCodecTest {
             assertEquals(s.rotation, back.rotation, 1e-12)
             assertEquals(s.box.x, back.box.x, 1e-9)
             assertEquals(s.box.w, back.box.w, 1e-9)
-            assertNull(back.points)
+            assertNull(back.path)
         }
     }
 
@@ -655,5 +655,43 @@ class CanvasCodecTest {
         val back = readManifest(text).items[0] as ShapeItem
         assertEquals(ShapeKind.POLYGON, back.shape)
         assertSameCorners(outline(s), outline(back))
+    }
+
+    // --- free outlines ---
+
+    @Test fun aCurveRoundTripsAsItsCubic() {
+        val controls = listOf(Pt(0.0, 0.0), Pt(30.0, 120.0), Pt(140.0, 110.0), Pt(160.0, 10.0))
+        val curve = ShapeItem.free(
+            ShapeKind.CURVE,
+            listOf(com.xnotes.core.vector.VectorContour(controls[0], listOf(com.xnotes.core.vector.VectorSeg.Cubic(controls[1], controls[2], controls[3])), false)),
+            ink, 2.0,
+        )
+        val doc = InfiniteDocument()
+        doc.add(curve)
+        val text = manifestText(doc)
+        assertTrue(text.contains("\"shape\":\"curve\""))
+        assertTrue(text.contains("\"path\":\"M"))
+        val back = roundTrip(doc).items[0] as ShapeItem
+        assertEquals(ShapeKind.CURVE, back.shape)
+        val seg = back.paths().single().contours.single().segments.single() as com.xnotes.core.vector.VectorSeg.Cubic
+        assertEquals(0.0, seg.c1.distanceTo(controls[1]), 1e-3)
+        assertEquals(0.0, seg.end.distanceTo(controls[3]), 1e-3)
+        // An older reader sees a polyline through the curve.
+        val legacy = readManifest(text.replace(Regex(",\"rect\":\\[[^\\]]*\\]"), "").replace(Regex(",\"path\":\"[^\"]*\""), ""))
+        val pts = (legacy.items[0] as ShapeItem).vertices()!!
+        assertTrue(pts.size > 8)
+        assertEquals(0.0, pts.last().distanceTo(controls[3]), 1e-6)
+    }
+
+    @Test fun oldFreeShapesWriteBackByteForByte() {
+        val item = "{\"kind\":\"shape\",\"shape\":\"curve\",\"start\":[0,0],\"end\":[30,20]," +
+            "\"stroke_rgba\":[9,9,9,255],\"stroke_width\":2,\"fill_rgba\":null," +
+            "\"points\":[[0,0],[10,15],[20,20],[30,5]]}," +
+            "{\"kind\":\"shape\",\"shape\":\"polygon\",\"start\":[0,0],\"end\":[9,7]," +
+            "\"stroke_rgba\":[1,2,3,255],\"stroke_width\":3,\"fill_rgba\":[1,2,3,64]," +
+            "\"points\":[[0,0],[9,1],[4,7]]}"
+        val manifest = "{\"format\":\"xcanvas\",\"version\":1,\"dpi\":150,\"items\":[$item]}"
+        val again = manifestText(readManifest(manifest))
+        assertTrue(again, again.contains("\"items\":[$item]"))
     }
 }

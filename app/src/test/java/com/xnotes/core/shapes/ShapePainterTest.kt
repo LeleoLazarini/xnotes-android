@@ -6,7 +6,7 @@ import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.pal.Pen
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.shapes.ShapeKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -67,7 +67,7 @@ class ShapePainterTest {
     }
 
     @Test fun anOpenShapeNeverFillsEvenWithAFillSet() {
-        val line = ShapeItem(ShapeKind.POLYLINE, Pt(0.0, 0.0), Pt(10.0, 10.0), ink, 3.0, fill, points = listOf(Pt(0.0, 0.0), Pt(1.0, 1.0)))
+        val line = ShapeItem.poly(ShapeKind.POLYLINE, listOf(Pt(0.0, 0.0), Pt(10.0, 10.0)), ink, 3.0, fill)
         val r = FakeRenderer()
         line.paint(r)
         assertEquals(listOf("strokePath"), r.ops)

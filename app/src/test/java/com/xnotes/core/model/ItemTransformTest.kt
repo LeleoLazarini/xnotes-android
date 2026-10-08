@@ -5,7 +5,7 @@ import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.stroke.Sample
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
 import org.junit.Assert.assertEquals
@@ -61,7 +61,7 @@ class ItemTransformTest {
         assertEquals(Pt(0.0, 0.0), s.start)
         assertEquals(Pt(200.0, 100.0), s.end)
         assertEquals(3.0, s.strokeWidth, 1e-9) // a shape keeps its outline width
-        assertNull(s.points)
+        assertNull(s.path)
     }
 
     @Test fun scaleArrowKeepsItsHeadSize() {
@@ -79,7 +79,7 @@ class ItemTransformTest {
         s.applyTransform(Affine.rotateAbout(Pt(50.0, 25.0), PI / 2)) // about the box centre
         assertEquals(ShapeKind.RECTANGLE, s.shape)
         assertEquals(0.0, s.rotation, 0.0)
-        assertNull(s.points)
+        assertNull(s.path)
         assertEquals(3.0, s.strokeWidth, 1e-9) // rotation keeps the width
         // A 100x50 rect turned 90 degrees about its centre is the upright 50x100 one at (25,-25).
         assertEquals(25.0, s.box.left, 1e-9)
@@ -105,7 +105,7 @@ class ItemTransformTest {
         s.restoreGeometry(snap)
         assertEquals(ShapeKind.RECTANGLE, s.shape)
         assertEquals(0.0, s.rotation, 0.0)
-        assertNull(s.points)
+        assertNull(s.path)
         assertEquals(Pt(100.0, 50.0), s.end)
     }
 

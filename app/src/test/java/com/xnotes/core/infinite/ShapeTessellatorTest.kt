@@ -8,7 +8,7 @@ import com.xnotes.core.pal.FillRule
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.shapes.PathRole
 import com.xnotes.core.shapes.ShapePath
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.vector.PathFlattener
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -193,7 +193,7 @@ class ShapeTessellatorTest {
     }
 
     @Test fun everyIndexPointsAtARealVertex() {
-        for (kind in ShapeKind.entries) {
+        for (kind in ShapeKind.all) {
             val s = if (kind == ShapeKind.POLYGON || kind == ShapeKind.POLYLINE) {
                 ShapeItem.poly(
                     kind, listOf(Pt(0.0, 0.0), Pt(40.0, 5.0), Pt(20.0, 40.0)),

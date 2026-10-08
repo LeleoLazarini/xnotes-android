@@ -57,7 +57,7 @@ import com.xnotes.core.stroke.StrokeSimplify
 import com.xnotes.core.tools.EraseMode
 import com.xnotes.core.tools.InkPalette
 import com.xnotes.core.tools.ShapeConfig
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.MarkupMode
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
@@ -1187,29 +1187,11 @@ class InteractionController(
         val strokeWidth = stroke.config.baseWidth * SHAPE_PEN_PARITY
         val color = stroke.config.rgba // the as-drawn ink colour (not renderColor's alpha-scaled one)
         val dashed = stroke.tool == Tool.DASHED // a dashed pen snaps to a dashed shape
-        val fill = shapeConfig.fillFor(rec.kind, color)
-        val verts = rec.vertices
-        val shape = if (verts != null) {
-            // Polygon/polyline: keep the recognized corners (neon/dash carried like the other kinds).
-            ShapeItem.poly(
-                rec.kind, verts, color, strokeWidth, fill, stroke.config.neon, stroke.config.neonStrength,
-                dashed, stroke.config.dashLength, stroke.config.dashGap,
-            )
-        } else {
-            ShapeItem(
-                shape = rec.kind,
-                start = rec.start,
-                end = rec.end,
-                strokeRgba = color,
-                strokeWidth = strokeWidth,
-                fillRgba = fill,
-                neon = stroke.config.neon, // a neon pen snaps to a neon shape (highlighter never snaps)
-                neonStrength = stroke.config.neonStrength,
-                dashed = dashed,
-                dashLength = stroke.config.dashLength,
-                dashGap = stroke.config.dashGap,
-            )
-        }
+        // A neon pen snaps to a neon shape (the highlighter never snaps).
+        val shape = rec.toShape(
+            color, strokeWidth, shapeConfig.fillFor(rec.kind, color), stroke.config.neon, stroke.config.neonStrength,
+            dashed, stroke.config.dashLength, stroke.config.dashGap,
+        )
         page.items.add(shape)
         state.appendToCache(page, shape)
         history.push(AddItem(page, shape))
@@ -1666,7 +1648,7 @@ class InteractionController(
             is ShapeItem -> {
                 val (s, en) = when {
                     item.shape.isEndpointShape -> ResizeMath.resizeOpenShape(item.start, item.end, handle, local)
-                    item.shape == ShapeKind.CIRCLE -> ResizeMath.resizeSquareShape(item.start, item.end, handle, local)
+                    item.shape.keepsAspect -> ResizeMath.resizeSquareShape(item.start, item.end, handle, local)
                     else -> ResizeMath.resizeClosedShape(item.start, item.end, handle, local)
                 }
                 item.setGeometry(ShapeHandle(s, en))
@@ -1802,7 +1784,7 @@ class InteractionController(
             // Line/arrow: pin the dragged end flat when it lands near an axis.
             shape.shape.isEndpointShape -> snapAxisEndpoint(shape.start, raw)
             // Circle: keep the box square so it stays a perfect circle.
-            shape.shape == ShapeKind.CIRCLE -> squareCorner(shape.start, raw)
+            shape.shape.keepsAspect -> squareCorner(shape.start, raw)
             else -> raw
         }
         requestRender()

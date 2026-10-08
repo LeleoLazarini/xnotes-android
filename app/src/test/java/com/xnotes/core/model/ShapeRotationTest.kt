@@ -2,7 +2,7 @@ package com.xnotes.core.model
 
 import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Pt
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.shapes.ShapeKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

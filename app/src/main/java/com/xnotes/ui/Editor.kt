@@ -5462,7 +5462,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         toolbarColors.getOrNull(index)?.let { settings = settings.rememberColor(it) }
     }
 
-    fun setShapeKind(kind: com.xnotes.core.tools.ShapeKind) {
+    fun setShapeKind(kind: com.xnotes.core.shapes.ShapeKind) {
         shapeConfig = shapeConfig.copy(shape = kind)
         controller.shapeConfig = shapeConfig
     }

@@ -60,7 +60,7 @@ import com.xnotes.core.pal.FontFace
 import com.xnotes.core.tools.EraseMode
 import com.xnotes.core.tools.MarkupMode
 import com.xnotes.core.tools.ShapeConfig
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
 import com.xnotes.core.tools.ToolConversions
@@ -1035,15 +1035,8 @@ internal fun SliderRow(
     }
 }
 
-/** Glyph shown in the shape-kind picker for each [ShapeKind]. */
-private fun shapeIcon(kind: ShapeKind): ImageVector = when (kind) {
-    ShapeKind.LINE, ShapeKind.POLYLINE, ShapeKind.CURVE -> XnotesIcons.shapeLine
-    ShapeKind.ARROW -> XnotesIcons.shapeArrow
-    ShapeKind.RECTANGLE -> XnotesIcons.shapeRect
-    ShapeKind.ELLIPSE -> XnotesIcons.shapeEllipse
-    ShapeKind.CIRCLE -> XnotesIcons.shapeCircle
-    ShapeKind.TRIANGLE, ShapeKind.POLYGON -> XnotesIcons.shapeTriangle
-}
+/** Glyph shown in the shape-kind picker for each [ShapeKind], drawn from the kind itself. */
+private fun shapeIcon(kind: ShapeKind): ImageVector = ShapeIcons.of(kind)
 
 @Composable
 private fun KindChip(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {

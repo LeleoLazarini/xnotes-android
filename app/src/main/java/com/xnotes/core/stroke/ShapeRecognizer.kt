@@ -3,7 +3,11 @@ package com.xnotes.core.stroke
 import com.xnotes.core.geometry.Geometry
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.shapes.ShapeKind
+import com.xnotes.core.vector.VectorContour
+import com.xnotes.core.vector.VectorSeg
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.acos
@@ -19,14 +23,45 @@ import kotlin.math.sqrt
  * A geometric shape inferred from a freehand stroke (the "hold to snap" gesture).
  * [start]/[end] are opposite corners of the bounding box (or the two endpoints for
  * [ShapeKind.LINE]); [vertices] carries the corner list (content px) for the
- * [ShapeKind.POLYGON] and [ShapeKind.POLYLINE] kinds and is null for the rest.
+ * [ShapeKind.POLYGON] and [ShapeKind.POLYLINE] kinds, and [controls] the four control
+ * points of a [ShapeKind.CURVE]; both are null for the rest.
  */
 data class RecognizedShape(
     val kind: ShapeKind,
     val start: Pt,
     val end: Pt,
     val vertices: List<Pt>? = null,
-)
+    val controls: List<Pt>? = null,
+) {
+    /** The shape this stands for, in the style of the stroke it replaces. */
+    fun toShape(
+        color: Rgba,
+        width: Double,
+        fill: Rgba?,
+        neon: Boolean,
+        neonStrength: Double,
+        dashed: Boolean,
+        dashLength: Double,
+        dashGap: Double,
+    ): ShapeItem {
+        val c = controls
+        val v = vertices
+        val shape = when {
+            c != null && c.size == 4 ->
+                ShapeItem.free(kind, listOf(VectorContour(c[0], listOf(VectorSeg.Cubic(c[1], c[2], c[3])), false)), color, width)
+            v != null -> ShapeItem.poly(kind, v, color, width)
+            else -> ShapeItem(kind, start, end, color, width)
+        }
+        return shape.also {
+            it.fillRgba = fill
+            it.neon = neon
+            it.neonStrength = neonStrength
+            it.dashed = dashed
+            it.dashLength = dashLength
+            it.dashGap = dashGap
+        }
+    }
+}
 
 /**
  * Classifies a freehand stroke into a clean shape, or `null` when it is not a confident
@@ -203,10 +238,9 @@ object ShapeRecognizer {
     }
 
     private fun curveFrom(path: List<Pt>, diag: Double): RecognizedShape? {
-        val curve = CubicFit.fitSampled(path, CURVE_FIT_TOL_FRAC * diag, CURVE_SAMPLES) ?: return null
-        if (curve.size < 3) return null
-        val box = Rect.bounding(curve)
-        return RecognizedShape(ShapeKind.CURVE, box.topLeft, Pt(box.right, box.bottom), curve)
+        val controls = CubicFit.fit(path, CURVE_FIT_TOL_FRAC * diag) ?: return null
+        val box = Rect.bounding(CubicFit.sample(controls, CURVE_SAMPLES))
+        return RecognizedShape(ShapeKind.CURVE, box.topLeft, Pt(box.right, box.bottom), controls = controls)
     }
 
     // --- closed paths: polygon (incl. rectangle) or ellipse/circle ---

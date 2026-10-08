@@ -13,7 +13,7 @@ import com.xnotes.core.model.PageSize
 import com.xnotes.core.pal.FontFace
 import com.xnotes.core.text.TableBorders
 import com.xnotes.core.tools.MarkupMode
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolbarItem
 import com.xnotes.platform.FontCatalog
@@ -68,6 +68,7 @@ val ShapeKind.labelRes: Int
         ShapeKind.POLYGON -> R.string.shape_polygon
         ShapeKind.POLYLINE -> R.string.shape_polyline
         ShapeKind.CURVE -> R.string.shape_curve
+        else -> R.string.shape_polygon
     }
 
 @get:StringRes

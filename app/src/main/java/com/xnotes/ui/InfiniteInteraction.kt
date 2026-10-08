@@ -29,7 +29,7 @@ import com.xnotes.core.stroke.StrokeSimplify
 import com.xnotes.core.tools.EraseMode
 import com.xnotes.core.tools.InkPalette
 import com.xnotes.core.tools.ShapeConfig
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
 import kotlin.math.abs
@@ -898,7 +898,7 @@ class InfiniteInteraction(
             // Line and arrow pin flat when the dragged end lands near an axis.
             shape.shape.isEndpointShape -> snapAxisEndpoint(shape.start, raw)
             // Circle keeps its box square, so it stays a circle rather than becoming an ellipse.
-            shape.shape == ShapeKind.CIRCLE -> squareCorner(shape.start, raw)
+            shape.shape.keepsAspect -> squareCorner(shape.start, raw)
             else -> raw
         }
         onPendingShape(shape)
@@ -968,28 +968,10 @@ class InfiniteInteraction(
         val width = stroke.config.baseWidth * InteractionController.SHAPE_PEN_PARITY
         val color = stroke.config.rgba // the as-drawn colour, not the alpha-scaled render one
         val dashed = stroke.tool == Tool.DASHED // a dashed pen snaps to a dashed shape
-        val fill = shapeConfig().fillFor(rec.kind, color)
-        val verts = rec.vertices
-        val shape = if (verts != null) {
-            ShapeItem.poly(
-                rec.kind, verts, color, width, fill, stroke.config.neon, stroke.config.neonStrength,
-                dashed, stroke.config.dashLength, stroke.config.dashGap,
-            )
-        } else {
-            ShapeItem(
-                shape = rec.kind,
-                start = rec.start,
-                end = rec.end,
-                strokeRgba = color,
-                strokeWidth = width,
-                fillRgba = fill,
-                neon = stroke.config.neon,
-                neonStrength = stroke.config.neonStrength,
-                dashed = dashed,
-                dashLength = stroke.config.dashLength,
-                dashGap = stroke.config.dashGap,
-            )
-        }
+        val shape = rec.toShape(
+            color, width, shapeConfig().fillFor(rec.kind, color), stroke.config.neon, stroke.config.neonStrength,
+            dashed, stroke.config.dashLength, stroke.config.dashGap,
+        )
         // The stroke was never committed, so dropping it makes the wet ink vanish the moment it
         // snaps; the eventual pen up then commits nothing.
         liveStroke = null

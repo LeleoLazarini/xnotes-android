@@ -7,10 +7,16 @@ import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.Renderer
+import com.xnotes.core.shapes.FreePath
 import com.xnotes.core.shapes.PathRole
+import com.xnotes.core.shapes.ShapeGeometry
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.shapes.ShapePainter
+import com.xnotes.core.shapes.ShapeParams
 import com.xnotes.core.shapes.ShapePath
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.vector.PathFlattener
+import com.xnotes.core.vector.VectorContour
+import com.xnotes.core.vector.VectorSeg
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -23,13 +29,12 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * An editable geometric shape (spec 02 §5.4): open (line/arrow, two endpoints)
- * or closed (rectangle/ellipse/triangle, drawn inside the normalized AABB of
- * start/end). Polygon/polyline additionally carry a vertex list in [points].
- * Every kind but line/arrow is drawn in that box and then turned by [rotation]
- * about its centre, so a turned shape keeps its kind and its own frame.
- * Closed shapes are stroked and optionally filled. Shapes erase like ink: whole
- * on contact in STROKE mode, and cut into outline fragments by the AREA eraser.
+ * An editable geometric shape (spec 02 §5.4). Its [shape] kind builds the outline inside the box
+ * spanned by [start]/[end], and [rotation] turns the result about the box centre, so a turned
+ * shape keeps its kind and its own frame. Line and arrow are drawn from their two ends instead;
+ * polygon, polyline and curve carry their own outline in [path]. Closed shapes are stroked and
+ * optionally filled. Shapes erase like ink: whole on contact in STROKE mode, and cut into outline
+ * fragments by the AREA eraser.
  */
 class ShapeItem(
     var shape: ShapeKind,
@@ -42,17 +47,18 @@ class ShapeItem(
     var neon: Boolean = false,
     /** Glow intensity in [0, 1] (halo size + brightness); used only when [neon]. */
     var neonStrength: Double = 0.6,
-    /**
-     * Vertices for [ShapeKind.POLYGON]/[ShapeKind.POLYLINE], stored normalized to the
-     * unit box so they scale with [start]/[end] for free; null for every other kind.
-     */
-    var points: List<Pt>? = null,
+    /** A free kind's outline, normalized to [box] so it reshapes with it; null for every other kind. */
+    var path: List<VectorContour>? = null,
     /** Stroke the outline dashed (dash/gap run lengths in content px). */
     var dashed: Boolean = false,
     var dashLength: Double = 10.0,
     var dashGap: Double = 8.0,
     /** Turn about the box centre in radians, clockwise on screen; always zero for line/arrow. */
     var rotation: Double = 0.0,
+    /** Knob values, as the kind defines them. */
+    var adj: DoubleArray = shape.defaultAdj.copyOf(),
+    /** A star's points or a polygon's sides; 0 for kinds without. */
+    var n: Int = shape.defaultN,
 ) : CanvasItem, Resizable {
 
     override val kind = KIND
@@ -62,8 +68,8 @@ class ShapeItem(
     /** Normalized AABB of the two drag points: the shape's frame before [rotation] turns it. */
     val box: Rect get() = Rect.fromPoints(start, end)
 
-    /** True for the kinds that hold their outline as [points] rather than drawing it from the box. */
-    val isFree: Boolean get() = shape == ShapeKind.POLYGON || shape == ShapeKind.POLYLINE || shape == ShapeKind.CURVE
+    /** True for the kinds that hold their outline in [path] rather than drawing it from the box. */
+    val isFree: Boolean get() = shape.isFree
 
     /** [p] from the shape's unturned frame onto the page: turned by [rotation] about the box centre. */
     fun toPage(p: Pt): Pt {
@@ -87,24 +93,27 @@ class ShapeItem(
         return Pt(c.x + dx * cs + dy * sn, c.y - dx * sn + dy * cs)
     }
 
-    /** Polygon/polyline vertices mapped from normalized storage into the unturned frame. */
-    internal fun absPoints(): List<Pt> {
-        val pts = points ?: return emptyList()
-        val b = box
-        return pts.map { Pt(b.left + it.x * b.w, b.top + it.y * b.h) }
+    /** A free kind's vertices on the page (every contour's start and segment ends); null for the rest. */
+    fun vertices(): List<Pt>? {
+        if (!isFree) return null
+        val contours = path ?: return null
+        return FreePath.place(contours, box).flatMap { FreePath.vertices(it) }.map(::toPage)
     }
-
-    /** Page-space vertices for polygon/polyline kinds, turned; null for the rest. */
-    fun vertices(): List<Pt>? = if (points == null) null else absPoints().map(::toPage)
 
     /** The outline pen the shape's style describes, before any role adjusts it. */
     internal fun pen() =
         Pen(color = strokeRgba, width = strokeWidth, cosmetic = false, dashed = dashed, dashOn = dashLength, dashGap = dashGap)
 
-    /** Triangle vertices: apex at top-edge midpoint, base along the bottom edge. */
-    internal fun triangleVertices(): List<Pt> {
-        val b = box
-        return listOf(Pt(b.centerX, b.top), Pt(b.left, b.bottom), Pt(b.right, b.bottom))
+    /**
+     * The kind's geometry in the shape's unturned frame (map it with [toPage]): its paths, vertex
+     * dots, glue points and label area. A line or arrow is built from its two ends.
+     */
+    fun localGeometry(): ShapeGeometry {
+        if (!shape.isEndpointShape) return shape.build(box, ShapeParams(adj, n, path))
+        val shaft = ShapePath.polyline(listOf(start, end))
+        val head = if (shape == ShapeKind.ARROW) arrowHead() else emptyList()
+        val paths = if (head.size == 3) listOf(shaft, ShapePath.polyline(head, PathRole.HEAD)) else listOf(shaft)
+        return ShapeGeometry(paths, textRect = Rect.fromPoints(start, end))
     }
 
     /** Open ">" arrowhead as the chevron polyline barbLeft -> tip -> barbRight (stroked, not filled),
@@ -138,26 +147,8 @@ class ShapeItem(
      * solid on a dashed arrow.
      */
     fun paths(): List<ShapePath> {
-        val local = localPaths()
+        val local = localGeometry().paths
         return if (rotation == 0.0) local else local.map { it.mapped(::toPage) }
-    }
-
-    private fun localPaths(): List<ShapePath> {
-        val b = box
-        return when (shape) {
-            ShapeKind.LINE -> listOf(ShapePath.polyline(listOf(start, end)))
-            ShapeKind.ARROW -> {
-                val head = arrowHead()
-                val shaft = ShapePath.polyline(listOf(start, end))
-                if (head.size == 3) listOf(shaft, ShapePath.polyline(head, PathRole.HEAD)) else listOf(shaft)
-            }
-            ShapeKind.RECTANGLE -> listOf(ShapePath.rect(b))
-            ShapeKind.ELLIPSE, ShapeKind.CIRCLE -> listOf(ShapePath.ellipse(b.centerX, b.centerY, b.w / 2.0, b.h / 2.0))
-            ShapeKind.TRIANGLE -> listOf(ShapePath.polygon(triangleVertices()))
-            ShapeKind.POLYGON -> absPoints().takeIf { it.size >= 2 }?.let { listOf(ShapePath.polygon(it)) }.orEmpty()
-            ShapeKind.POLYLINE, ShapeKind.CURVE ->
-                absPoints().takeIf { it.size >= 2 }?.let { listOf(ShapePath.polyline(it)) }.orEmpty()
-        }
     }
 
     override fun paint(r: Renderer) {
@@ -226,7 +217,7 @@ class ShapeItem(
 
     /** The turned outline's page-space bounds, before the stroke's own width. */
     private fun outlineBounds(): Rect {
-        if (rotation == 0.0) return box
+        if (rotation == 0.0 && shape.staysInBox) return box
         if (shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE) {
             val b = box
             val cs = cos(rotation)
@@ -235,8 +226,8 @@ class ShapeItem(
             val ey = hypot(b.w / 2.0 * sn, b.h / 2.0 * cs)
             return Rect(b.centerX - ex, b.centerY - ey, 2.0 * ex, 2.0 * ey)
         }
-        val outline = localOutline()
-        return if (outline.isEmpty()) box else Rect.bounding(outline.map(::toPage))
+        val pts = localGeometry().paths.flatMap { p -> p.contours.flatMap { PathFlattener.flatten(it, BOUNDS_FLATTEN) } }
+        return if (pts.isEmpty()) box else Rect.bounding(pts.map(::toPage))
     }
 
     override fun translate(dx: Double, dy: Double) {
@@ -244,39 +235,37 @@ class ShapeItem(
         end = Pt(end.x + dx, end.y + dy)
     }
 
-    override fun contains(p: Pt): Boolean = containsLocal(toLocal(p))
+    override fun contains(p: Pt): Boolean = hits(toLocal(p), max(strokeWidth / 2.0, HIT_TOLERANCE))
 
-    private fun containsLocal(p: Pt): Boolean {
-        val tol = max(strokeWidth / 2.0, HIT_TOLERANCE)
-        return when (shape) {
-            ShapeKind.LINE, ShapeKind.ARROW -> Geometry.distancePointToSegment(p, start, end) <= tol
-            ShapeKind.RECTANGLE -> if (fillRgba != null) box.contains(p) else nearRectOutline(p, tol)
-            ShapeKind.TRIANGLE -> {
-                val v = triangleVertices()
-                if (fillRgba != null) Geometry.pointInPolygon(v, p) else nearPolyOutline(v, p, tol)
+    override fun centroid(): Pt = bounds().center
+
+    /** True if an eraser circle of [radius] at (cx,cy) touches the shape's geometry. */
+    override fun intersectsCircle(cx: Double, cy: Double, radius: Double): Boolean {
+        if (bounds().distanceTo(Pt(cx, cy)) > radius) return false // cheap AABB reject
+        // A circle turns into itself, so the test runs in the unturned frame.
+        return hits(toLocal(Pt(cx, cy)), radius + strokeWidth / 2.0)
+    }
+
+    /** Does [p] (unturned frame) land within [tol] of a stroked edge, or inside the fill? */
+    private fun hits(p: Pt, tol: Double): Boolean {
+        for (path in localGeometry().paths) {
+            val rings = path.contours.map { PathFlattener.flatten(it, HIT_FLATTEN) }
+            if (fillRgba != null && path.role.fills) {
+                // Inside an odd number of the path's rings: in the fill, holes left out.
+                var inside = false
+                for (ring in rings) if (ring.size >= 3 && Geometry.pointInPolygon(ring, p)) inside = !inside
+                if (inside) return true
             }
-            ShapeKind.ELLIPSE, ShapeKind.CIRCLE -> {
-                val poly = ellipsePolygon()
-                if (fillRgba != null) Geometry.pointInPolygon(poly, p) else nearPolyOutline(poly, p, tol)
+            if (path.role.strokes) {
+                for (i in rings.indices) if (nearPolyOutline(rings[i], p, tol, path.contours[i].closed)) return true
             }
-            ShapeKind.POLYGON -> {
-                val v = absPoints()
-                if (fillRgba != null) Geometry.pointInPolygon(v, p) else nearPolyOutline(v, p, tol)
-            }
-            ShapeKind.POLYLINE, ShapeKind.CURVE -> nearPolyOutline(absPoints(), p, tol, closed = false)
         }
+        return false
     }
 
-    private fun nearRectOutline(p: Pt, tol: Double): Boolean {
-        val b = box
-        val corners = listOf(
-            Pt(b.left, b.top), Pt(b.right, b.top), Pt(b.right, b.bottom), Pt(b.left, b.bottom),
-        )
-        return nearPolyOutline(corners, p, tol)
-    }
-
-    private fun nearPolyOutline(verts: List<Pt>, p: Pt, tol: Double, closed: Boolean = true): Boolean {
+    private fun nearPolyOutline(verts: List<Pt>, p: Pt, tol: Double, closed: Boolean): Boolean {
         if (verts.isEmpty()) return false
+        if (verts.size == 1) return verts[0].distanceTo(p) <= tol
         val edges = if (closed) verts.size else verts.size - 1
         for (i in 0 until edges) {
             val a = verts[i]
@@ -286,54 +275,42 @@ class ShapeItem(
         return false
     }
 
-    override fun centroid(): Pt = bounds().center
-
-    /** True if an eraser circle of [radius] at (cx,cy) touches the shape's geometry. */
-    override fun intersectsCircle(cx: Double, cy: Double, radius: Double): Boolean {
-        if (bounds().distanceTo(Pt(cx, cy)) > radius) return false // cheap AABB reject
-        val p = toLocal(Pt(cx, cy)) // a circle turns into itself, so the test runs unturned
-        val tol = radius + strokeWidth / 2.0
-        return when (shape) {
-            ShapeKind.LINE, ShapeKind.ARROW -> Geometry.distancePointToSegment(p, start, end) <= tol
-            ShapeKind.RECTANGLE ->
-                if (fillRgba != null && box.contains(p)) true else nearRectOutline(p, tol)
-            ShapeKind.TRIANGLE -> {
-                val v = triangleVertices()
-                if (fillRgba != null && Geometry.pointInPolygon(v, p)) true else nearPolyOutline(v, p, tol)
-            }
-            ShapeKind.ELLIPSE, ShapeKind.CIRCLE -> {
-                val poly = ellipsePolygon()
-                if (fillRgba != null && Geometry.pointInPolygon(poly, p)) true else nearPolyOutline(poly, p, tol)
-            }
-            ShapeKind.POLYGON -> {
-                val v = absPoints()
-                if (fillRgba != null && Geometry.pointInPolygon(v, p)) true else nearPolyOutline(v, p, tol)
-            }
-            ShapeKind.POLYLINE, ShapeKind.CURVE -> nearPolyOutline(absPoints(), p, tol, closed = false)
-        }
-    }
-
     /**
      * AREA-erase: the outline parts that survive an eraser circle (page-local [cx], [cy],
      * [radius]), cut cleanly at the circle boundary — the same contract as [Stroke.erasedBy]:
      *  - `null`      — untouched (keep the original)
      *  - empty list  — remove the whole shape
      *  - fragments   — the surviving outline runs, as polyline shapes keeping this style
-     * A filled shape erases whole on any hit: a cut outline cannot hold its fill.
+     * A filled shape erases whole on any hit: a cut outline cannot hold its fill. An arrow is cut
+     * by its shaft alone, so a cut arrow loses its head.
      */
     fun erasedBy(cx: Double, cy: Double, radius: Double): List<ShapeItem>? {
         val c = Pt(cx, cy)
         if (bounds().distanceTo(c) > radius) return null
         if (fillRgba != null) return if (intersectsCircle(cx, cy, radius)) emptyList() else null
-        val verts = when (shape) {
-            // The arrow clips by its shaft, like its hit tests; a cut arrow loses its head.
-            ShapeKind.LINE, ShapeKind.ARROW -> listOf(start, end)
-            else -> localOutline().map(::toPage)
+        val outlines = paths().filter { it.role == PathRole.OUTLINE || it.role == PathRole.STROKE_ONLY }
+            .flatMap { p -> p.contours.map { PathFlattener.flatten(it, ERASE_FLATTEN) to it.closed } }
+            .filter { it.first.size >= 2 }
+        if (outlines.isEmpty()) return if (intersectsCircle(cx, cy, radius)) emptyList() else null
+        var touched = false
+        val runs = ArrayList<List<Pt>>()
+        for ((pts, closed) in outlines) {
+            val (hit, survivors) = cut(pts, closed, c, radius)
+            touched = touched || hit
+            runs.addAll(survivors)
         }
-        if (verts.size < 2) return if (intersectsCircle(cx, cy, radius)) emptyList() else null
-        val closed = shape.isClosed
-        val pts = if (closed) verts + verts.first() else verts
+        if (!touched) return null
+        return runs.map {
+            poly(
+                ShapeKind.POLYLINE, it, strokeRgba, strokeWidth, null, neon, neonStrength,
+                dashed, dashLength, dashGap,
+            )
+        }
+    }
 
+    /** One outline cut by the eraser circle: whether it was touched, and the runs left outside it. */
+    private fun cut(verts: List<Pt>, closed: Boolean, c: Pt, radius: Double): Pair<Boolean, List<List<Pt>>> {
+        val pts = if (closed) verts + verts.first() else verts
         var touched = false
         val runs = mutableListOf<MutableList<Pt>>()
         var current = mutableListOf<Pt>()
@@ -367,11 +344,10 @@ class ShapeItem(
             }
         }
         flush()
-        if (!touched) return null
 
         // A closed outline cut away from the seam vertex leaves the seam intact in two runs;
         // join them so the survivor is one continuous polyline instead of splitting at v0.
-        if (closed && runs.size >= 2) {
+        if (touched && closed && runs.size >= 2) {
             val first = runs.first()
             val last = runs.last()
             if (first.first().distanceTo(pts.first()) < 1e-9 && last.last().distanceTo(pts.first()) < 1e-9) {
@@ -379,12 +355,7 @@ class ShapeItem(
                 runs[0] = (last + first.drop(1)).toMutableList()
             }
         }
-        return runs.map {
-            poly(
-                ShapeKind.POLYLINE, it, strokeRgba, strokeWidth, null, neon, neonStrength,
-                dashed, dashLength, dashGap,
-            )
-        }
+        return touched to runs
     }
 
     /** Sub-intervals of the segment [a]→[b] (as fractions) lying outside the circle at [c]. */
@@ -426,24 +397,26 @@ class ShapeItem(
         }
     }
 
-    override fun snapshotGeometry(): GeometrySnapshot = ShapeSnapshot(shape, start, end, points, rotation)
+    override fun snapshotGeometry(): GeometrySnapshot = ShapeSnapshot(shape, start, end, path, rotation, adj.copyOf(), n)
 
     override fun restoreGeometry(snap: GeometrySnapshot) {
         if (snap !is ShapeSnapshot) return
         shape = snap.shape
         start = snap.start
         end = snap.end
-        points = snap.points
+        path = snap.path
         rotation = snap.rotation
+        adj = snap.adj.copyOf()
+        n = snap.n
     }
 
     /**
      * Bake a transform into the shape, keeping its kind wherever the result is still that kind. A
      * line/arrow moves its two endpoints. A box kind whose axes stay square to each other (any
      * scale along them, any turn) gets a new box and [rotation]; an ellipse sheared by a stretch
-     * across its axes is still an ellipse, refound from the map's singular values; a sheared
-     * rectangle or triangle is a parallelogram's worth of corners, kept as a polygon. Polygon and
-     * polyline points map exactly. The outline keeps its width: a shape is redrawn, not magnified.
+     * across its axes is still an ellipse, refound from the map's singular values; any other
+     * sheared kind becomes a free outline of its own curves. Free outlines map exactly. The
+     * outline keeps its width: a shape is redrawn, not magnified.
      */
     override fun applyTransform(t: Affine) {
         if (shape.isEndpointShape) {
@@ -459,7 +432,7 @@ class ShapeItem(
         val uy = Pt(-t.a * sn + t.c * cs, -t.b * sn + t.d * cs)
         val square = abs(ux.x * uy.x + ux.y * uy.y) <= 1e-9 * ux.length() * uy.length()
         when {
-            isFree -> refit(absPoints().map { t.apply(toPage(it)) }, atan2(ux.y, ux.x))
+            isFree -> refit(FreePath.map(FreePath.place(path.orEmpty(), b)) { t.apply(toPage(it)) }, atan2(ux.y, ux.x))
             square -> {
                 // The turn is read off the height axis, so a mirrored triangle keeps its apex.
                 setFrame(t.apply(b.center), ux.length() * b.w, uy.length() * b.h, atan2(uy.y, uy.x) - PI / 2.0)
@@ -478,9 +451,13 @@ class ShapeItem(
                 setFrame(t.apply(b.center), 2.0 * major, 2.0 * minor, 0.5 * atan2(2.0 * q, p - r))
             }
             else -> {
-                val corners = localOutline().map { t.apply(toPage(it)) }
-                shape = ShapeKind.POLYGON
-                refit(corners, atan2(ux.y, ux.x))
+                val outline = localGeometry().paths
+                    .filter { it.role == PathRole.OUTLINE || it.role == PathRole.STROKE_ONLY }
+                    .flatMap { it.contours }
+                shape = if (shape.isClosed) ShapeKind.POLYGON else ShapeKind.POLYLINE
+                adj = shape.defaultAdj.copyOf()
+                n = shape.defaultN
+                refit(FreePath.map(outline) { t.apply(toPage(it)) }, atan2(ux.y, ux.x))
             }
         }
         if (shape == ShapeKind.CIRCLE && abs(box.w - box.h) > 1e-9 * max(box.w, box.h)) shape = ShapeKind.ELLIPSE
@@ -493,7 +470,8 @@ class ShapeItem(
         var a = normalizeTurn(turn)
         val quarters = round(a / (PI / 2.0))
         // A rectangle or ellipse turned a whole number of quarters is just an upright one.
-        if (abs(a - quarters * PI / 2.0) < TURN_SNAP && shape != ShapeKind.TRIANGLE) {
+        val symmetric = shape == ShapeKind.RECTANGLE || shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE
+        if (symmetric && abs(a - quarters * PI / 2.0) < TURN_SNAP) {
             if (quarters.toInt() % 2 != 0) {
                 ww = h
                 hh = w
@@ -506,40 +484,53 @@ class ShapeItem(
         rotation = a
     }
 
-    /** Re-derive the box and normalized points from page-space [pts], in a frame turned by [turn]. */
-    private fun refit(pts: List<Pt>, turn: Double) {
-        if (pts.isEmpty()) return
+    /** Re-derive the box and the normalized [path] from page-space [contours], in a frame turned by [turn]. */
+    private fun refit(contours: List<VectorContour>, turn: Double) {
+        if (contours.isEmpty()) return
         var a = normalizeTurn(turn)
         val quarters = round(a / (PI / 2.0))
         if (abs(a - quarters * PI / 2.0) < TURN_SNAP) a = 0.0 // bounds read the same either way
         val cs = cos(a)
         val sn = sin(a)
-        val unturned = pts.map { Pt(it.x * cs + it.y * sn, -it.x * sn + it.y * cs) }
-        val lb = Rect.bounding(unturned)
+        val unturned = FreePath.map(contours) { Pt(it.x * cs + it.y * sn, -it.x * sn + it.y * cs) }
+        val lb = FreePath.bounds(unturned) ?: return
         val c = Pt(lb.centerX * cs - lb.centerY * sn, lb.centerX * sn + lb.centerY * cs)
         start = Pt(c.x - lb.w / 2.0, c.y - lb.h / 2.0)
         end = Pt(c.x + lb.w / 2.0, c.y + lb.h / 2.0)
         rotation = a
-        points = normalize(unturned, lb)
+        path = FreePath.normalize(unturned, lb)
     }
 
     /**
-     * What a reader that predates [rotation] should draw instead: null when this shape needs no
-     * stand-in (upright, or a line or arrow), else its page outline as polygon (or, for an open
-     * free kind, polyline) vertices. The codecs write it as the legacy shape and add the real one.
+     * What a reader that predates turned, curved or newer kinds should draw instead: null when
+     * the shape is plain enough for it as is, else the page outline its [legacyId] stands in with.
+     * The codecs write that stand-in and then the real shape for current readers.
      */
-    fun legacyOutline(): List<Pt>? = when {
-        rotation == 0.0 || shape.isEndpointShape -> null
-        isFree -> vertices()
-        shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE -> ellipsePolygon(LEGACY_ELLIPSE_POINTS).map(::toPage)
-        else -> localOutline().map(::toPage)
+    fun legacyOutline(): List<Pt>? {
+        if (shape.isEndpointShape) return null
+        val plain = shape.isLegacy && rotation == 0.0 && (!isFree || path?.let(FreePath::isVertexList) != false)
+        if (plain) return null
+        if (shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE) return ellipsePolygon(LEGACY_ELLIPSE_POINTS).map(::toPage)
+        val outer = localGeometry().paths
+            .firstOrNull { it.role == PathRole.OUTLINE || it.role == PathRole.STROKE_ONLY }
+            ?.contours?.firstOrNull() ?: return null
+        val pts = if (outer.segments.all { it is VectorSeg.Line }) FreePath.vertices(outer) else PathFlattener.flatten(outer, LEGACY_FLATTEN)
+        return pts.map(::toPage)
+    }
+
+    /** The legacy kind id a file writes for this shape: its own, or the polygon/polyline of its stand-in. */
+    fun legacyId(): String = when {
+        legacyOutline() == null || isFree -> shape.id
+        shape.isClosed -> ShapeKind.POLYGON.id
+        else -> ShapeKind.POLYLINE.id
     }
 
     /**
      * Turn a stand-in read from a file back into the shape it stands for: its real [kind] (null
-     * keeps this one), its unturned [frame] and the [turn] about the frame's centre.
+     * keeps this one), its unturned [frame], the [turn] about the frame's centre and, for a free
+     * kind, its outline normalized to the frame ([freePath], else the stand-in's own vertices).
      */
-    fun restoreFrame(kind: ShapeKind?, frame: Rect, turn: Double) {
+    fun restoreFrame(kind: ShapeKind?, frame: Rect, turn: Double, freePath: List<VectorContour>? = null) {
         val target = kind ?: shape
         val finite = frame.x.isFinite() && frame.y.isFinite() && frame.w.isFinite() && frame.h.isFinite()
         if (target.isEndpointShape || !finite || !turn.isFinite()) return
@@ -548,7 +539,11 @@ class ShapeItem(
         start = frame.topLeft
         end = Pt(frame.right, frame.bottom)
         rotation = turn
-        points = if (isFree) pagePoints?.let { pts -> normalize(pts.map(::toLocal), box) } else null
+        path = when {
+            !isFree -> null
+            freePath != null -> freePath
+            else -> pagePoints?.let { pts -> FreePath.normalize(listOf(FreePath.lines(pts.map(::toLocal), target.isClosed)), box) }
+        }
     }
 
     /**
@@ -557,6 +552,7 @@ class ShapeItem(
      */
     fun unbake() {
         if (shape != ShapeKind.POLYGON || rotation != 0.0) return
+        if (path?.let(FreePath::isVertexList) != true) return
         val p = vertices() ?: return
         if (p.size == 4) unbakeRect(p) else if (p.size == BAKED_ELLIPSE_POINTS) unbakeEllipse(p)
     }
@@ -572,7 +568,7 @@ class ShapeItem(
         if ((e1 + e3).length() > tol || (e2 + e4).length() > tol) return
         if (abs(e1.x * e2.x + e1.y * e2.y) > tol * size) return
         shape = ShapeKind.RECTANGLE
-        points = null
+        path = null
         setFrame((p[0] + p[2]) * 0.5, e1.length(), e2.length(), atan2(e1.y, e1.x))
     }
 
@@ -602,19 +598,8 @@ class ShapeItem(
         val major = sqrt(mid + spread)
         val minor = sqrt((mid - spread).coerceAtLeast(0.0))
         shape = if (major - minor <= 1e-9 * major) ShapeKind.CIRCLE else ShapeKind.ELLIPSE
-        points = null
+        path = null
         setFrame(c, 2.0 * major, 2.0 * minor, 0.5 * atan2(2.0 * q, pp - r))
-    }
-
-    /** Vertices of the unturned outline; what a bake or the area eraser turns into a vertex list. */
-    private fun localOutline(): List<Pt> = when (shape) {
-        ShapeKind.POLYGON, ShapeKind.POLYLINE, ShapeKind.CURVE -> absPoints()
-        ShapeKind.TRIANGLE -> triangleVertices()
-        ShapeKind.ELLIPSE, ShapeKind.CIRCLE -> ellipsePolygon()
-        else -> {
-            val b = box
-            listOf(Pt(b.left, b.top), Pt(b.right, b.top), Pt(b.right, b.bottom), Pt(b.left, b.bottom))
-        }
     }
 
     companion object {
@@ -629,6 +614,12 @@ class ShapeItem(
 
         /** Points earlier versions baked a turned ellipse into. */
         private const val BAKED_ELLIPSE_POINTS = 48
+
+        /** Content px a curve may stray when flattened for hit tests, bounds, erasing and stand-ins. */
+        private const val HIT_FLATTEN = 0.5
+        private const val BOUNDS_FLATTEN = 0.05
+        private const val ERASE_FLATTEN = 0.25
+        private const val LEGACY_FLATTEN = 0.25
 
         /** [a] folded into (-PI, PI]. */
         private fun normalizeTurn(a: Double): Double {
@@ -652,16 +643,20 @@ class ShapeItem(
             dashGap: Double = 8.0,
         ): ShapeItem {
             val box = Rect.bounding(vertices)
+            val outline = FreePath.normalize(listOf(FreePath.lines(vertices, shape.isClosed)), box)
             return ShapeItem(
                 shape, box.topLeft, Pt(box.right, box.bottom), strokeRgba, strokeWidth,
-                fillRgba, neon, neonStrength, normalize(vertices, box), dashed, dashLength, dashGap,
+                fillRgba, neon, neonStrength, outline, dashed, dashLength, dashGap,
             )
         }
 
-        private fun normalize(vertices: List<Pt>, box: Rect): List<Pt> {
-            val w = if (box.w > 1e-9) box.w else 1.0
-            val h = if (box.h > 1e-9) box.h else 1.0
-            return vertices.map { Pt((it.x - box.left) / w, (it.y - box.top) / h) }
+        /** A free shape whose outline is the page-space [contours], boxed tight around what they draw. */
+        fun free(shape: ShapeKind, contours: List<VectorContour>, strokeRgba: Rgba, strokeWidth: Double = 3.0): ShapeItem {
+            val box = FreePath.bounds(contours) ?: Rect(0.0, 0.0, 0.0, 0.0)
+            return ShapeItem(
+                shape, box.topLeft, Pt(box.right, box.bottom), strokeRgba, strokeWidth,
+                path = FreePath.normalize(contours, box),
+            )
         }
 
         /** Halo blur = stroke_width × (MIN + SPAN × neonStrength), floored in page px. */
@@ -679,11 +674,20 @@ class ShapeItem(
     }
 }
 
-/** Snapshot of a shape's transformable geometry (kind can change when a box shape is rotated). */
-private data class ShapeSnapshot(
+/** Snapshot of a shape's transformable geometry (kind can change when a box shape is sheared). */
+private class ShapeSnapshot(
     val shape: ShapeKind,
     val start: Pt,
     val end: Pt,
-    val points: List<Pt>?,
+    val path: List<VectorContour>?,
     val rotation: Double,
-) : GeometrySnapshot
+    val adj: DoubleArray,
+    val n: Int,
+) : GeometrySnapshot {
+    // Value equality, so a drag that changed nothing records nothing.
+    override fun equals(other: Any?): Boolean = other is ShapeSnapshot && shape == other.shape &&
+        start == other.start && end == other.end && path === other.path && rotation == other.rotation &&
+        adj.contentEquals(other.adj) && n == other.n
+
+    override fun hashCode(): Int = start.hashCode() * 31 + end.hashCode()
+}

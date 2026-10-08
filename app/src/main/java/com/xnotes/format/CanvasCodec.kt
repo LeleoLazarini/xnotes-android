@@ -16,7 +16,8 @@ import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.pal.ImageCodec
 import com.xnotes.core.stroke.Sample
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.shapes.FreePath
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
 import com.xnotes.core.tools.ToolDefaults
@@ -238,12 +239,12 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
     }
 
     private fun writeShape(j: JsonWrite, s: ShapeItem) {
-        // A turned shape goes down as the polygon older readers draw, its real geometry after.
+        // A shape older readers cannot draw goes down as the polygon they can, its real geometry after.
         val standIn = s.legacyOutline()
         val drawn = standIn?.let { Rect.bounding(it) }
         j.beginObject()
         j.name("kind").value(ShapeItem.KIND)
-        j.name("shape").value(if (standIn != null && !s.isFree) ShapeKind.POLYGON.id else s.shape.id)
+        j.name("shape").value(s.legacyId())
         j.name("start").beginArray().value(drawn?.left ?: s.start.x).value(drawn?.top ?: s.start.y).endArray()
         j.name("end").beginArray().value(drawn?.right ?: s.end.x).value(drawn?.bottom ?: s.end.y).endArray()
         j.name("stroke_rgba")
@@ -261,7 +262,14 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
             if (!s.isFree) j.name("geom").value(s.shape.id)
             val f = s.box
             j.name("rect").beginArray().value(f.x).value(f.y).value(f.w).value(f.h).endArray()
-            j.name("angle").value(s.rotation)
+            if (s.rotation != 0.0) j.name("angle").value(s.rotation)
+            s.path?.takeIf { s.isFree && !FreePath.isVertexList(it) }?.let { j.name("path").value(FreePath.toSvg(it)) }
+        }
+        if (s.n != s.shape.defaultN) j.name("n").value(s.n)
+        if (!s.adj.contentEquals(s.shape.defaultAdj)) {
+            j.name("adj").beginArray()
+            for (v in s.adj) j.value(v)
+            j.endArray()
         }
         if (s.neon) {
             j.name("neon").value(true)
@@ -507,6 +515,9 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
         var angle = 0.0
         var shape: String? = null
         var geom: String? = null
+        var path: String? = null
+        var adj: DoubleArray? = null
+        var n = 0
         var start: Pt? = null
         var end: Pt? = null
         var strokeRgba: Rgba? = null
@@ -559,6 +570,9 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
                 "angle" -> s.angle = doubleOr(p, 0.0)
                 "shape" -> s.shape = stringOr(p, "")
                 "geom" -> s.geom = stringOrNull(p)
+                "path" -> s.path = stringOrNull(p)
+                "adj" -> s.adj = doublesOrNull(p)
+                "n" -> s.n = intOr(p, 0)
                 "start" -> s.start = ptOrNull(p)
                 "end" -> s.end = ptOrNull(p)
                 "stroke_rgba" -> s.strokeRgba = rgbaOrNull(p)
@@ -625,11 +639,13 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
         val shape = buildDrawnShape(s)
         // The real geometry behind a stand-in polygon; or else an old file's baked turn.
         val frame = s.rect
-        if (frame != null && (s.geom != null || s.angle != 0.0)) {
-            shape.restoreFrame(ShapeKind.fromIdOrNull(s.geom), frame, s.angle)
+        if (frame != null && (s.geom != null || s.angle != 0.0 || s.path != null)) {
+            shape.restoreFrame(ShapeKind.fromIdOrNull(s.geom), frame, s.angle, FreePath.fromSvg(s.path))
         } else {
             shape.unbake()
         }
+        if (s.n > 0) shape.n = s.n
+        s.adj?.let { shape.adj = it }
         return shape
     }
 
@@ -825,6 +841,18 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
         }
         p.endArray()
         return if (count >= 4) Rect(v[0], v[1], v[2], v[3]) else null
+    }
+
+    private fun doublesOrNull(p: JsonPull): DoubleArray? {
+        if (p.peek() != JsonPull.Token.BEGIN_ARRAY) {
+            p.skipValue()
+            return null
+        }
+        val out = ArrayList<Double>()
+        p.beginArray()
+        while (p.hasNext()) doubleOrNull(p)?.takeIf { it.isFinite() }?.let { out.add(it) }
+        p.endArray()
+        return out.toDoubleArray()
     }
 
     private fun pointsOrNull(p: JsonPull): List<Pt>? {

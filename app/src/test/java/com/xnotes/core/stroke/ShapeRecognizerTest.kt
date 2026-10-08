@@ -1,7 +1,7 @@
 package com.xnotes.core.stroke
 
 import com.xnotes.core.geometry.Pt
-import com.xnotes.core.tools.ShapeKind
+import com.xnotes.core.shapes.ShapeKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -256,7 +256,7 @@ class ShapeRecognizerTest {
         val rec = ShapeRecognizer.recognizePoints(c)
         assertNotNull(rec)
         assertEquals(ShapeKind.CURVE, rec!!.kind)
-        for (p in rec.vertices!!) assertEquals(r, hypot(p.x - cx, p.y - cy), 34.0)
+        for (p in CubicFit.sample(rec.controls!!, 32)) assertEquals(r, hypot(p.x - cx, p.y - cy), 34.0)
     }
 
     @Test fun clearOvalStaysEllipse() {
@@ -329,7 +329,7 @@ class ShapeRecognizerTest {
         val rec = ShapeRecognizer.recognizePoints(arc)
         assertNotNull(rec)
         assertEquals(ShapeKind.CURVE, rec!!.kind)
-        assertTrue(rec.vertices!!.size >= 4)
+        assertEquals("a curve is kept as its four control points", 4, rec.controls!!.size)
     }
 
     @Test fun sCurveSnapsToCurve() {
@@ -342,8 +342,8 @@ class ShapeRecognizerTest {
         assertNotNull(rec)
         assertEquals(ShapeKind.CURVE, rec!!.kind)
         // The fit keeps the stroke's endpoints.
-        assertEquals(s.first().x, rec.vertices!!.first().x, 18.0)
-        assertEquals(s.last().x, rec.vertices!!.last().x, 18.0)
+        assertEquals(s.first().x, rec.controls!!.first().x, 18.0)
+        assertEquals(s.last().x, rec.controls!!.last().x, 18.0)
     }
 
     // --- properties ---

@@ -1,6 +1,7 @@
 package com.xnotes.core.tools
 
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.shapes.ShapeKind
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
