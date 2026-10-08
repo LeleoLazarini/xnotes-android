@@ -34,11 +34,9 @@ object ShapeTessellator {
     internal fun tessellate(paths: List<ShapePath>, fill: Rgba?, pen: Pen, tolerance: Double): List<MeshPart> {
         val flat = flatten(paths, tolerance)
         val parts = ArrayList<MeshPart>(2)
-        if (fill != null) {
-            for (path in flat) {
-                val color = ShapePainter.fillColor(path.role, fill) ?: continue
-                fillPart(path, color)?.let(parts::add)
-            }
+        for (path in flat) {
+            val color = ShapePainter.fillColor(path.role, fill, pen.color) ?: continue
+            fillPart(path, color)?.let(parts::add)
         }
         val outline = outlineMesh(flat, pen, tolerance)
         if (!outline.isEmpty) parts.add(MeshPart(outline, pen.color, InkPass.OPAQUE))

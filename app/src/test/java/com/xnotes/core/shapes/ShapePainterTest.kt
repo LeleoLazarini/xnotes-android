@@ -23,7 +23,7 @@ class ShapePainterTest {
 
     private fun paint(paths: List<ShapePath>, pen: Pen = this.pen): FakeRenderer {
         val r = FakeRenderer()
-        ShapePainter.fill(r, paths, fill)
+        ShapePainter.fill(r, paths, fill, ink)
         ShapePainter.stroke(r, paths, pen)
         return r
     }
@@ -50,13 +50,13 @@ class ShapePainterTest {
     }
 
     @Test fun shadedFacesTintTheFillAndKeepItsAlpha() {
-        val dark = ShapePainter.fillColor(PathRole.SHADE_DARK, fill)!!
-        val light = ShapePainter.fillColor(PathRole.SHADE_LIGHT, fill)!!
+        val dark = ShapePainter.fillColor(PathRole.SHADE_DARK, fill, ink)!!
+        val light = ShapePainter.fillColor(PathRole.SHADE_LIGHT, fill, ink)!!
         assertTrue(dark.r < fill.r && dark.g < fill.g && dark.b < fill.b)
         assertTrue(light.r > fill.r && light.g > fill.g && light.b > fill.b)
         assertEquals(64, dark.a)
         assertEquals(64, light.a)
-        assertNull(ShapePainter.fillColor(PathRole.STROKE_ONLY, fill))
+        assertNull(ShapePainter.fillColor(PathRole.STROKE_ONLY, fill, ink))
     }
 
     @Test fun aDashedArrowDashesItsShaftButNotItsHead() {

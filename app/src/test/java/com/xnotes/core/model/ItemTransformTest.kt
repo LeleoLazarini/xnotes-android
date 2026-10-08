@@ -66,9 +66,10 @@ class ItemTransformTest {
 
     @Test fun scaleArrowKeepsItsHeadSize() {
         val s = ShapeItem(ShapeKind.ARROW, Pt(0.0, 0.0), Pt(100.0, 0.0), Rgba(0, 0, 0), 4.0)
-        val before = s.arrowHead()
+        fun head() = s.paths().last().contours.single().let { c -> listOf(c.start) + c.segments.map { it.end } }
+        val before = head()
         s.applyTransform(Affine.scaleAbout(Pt.ZERO, 3.0, 3.0))
-        val after = s.arrowHead()
+        val after = head()
         assertEquals(Pt(300.0, 0.0), s.end)
         assertEquals(4.0, s.strokeWidth, 1e-9)
         assertEquals(before[0].distanceTo(before[2]), after[0].distanceTo(after[2]), 1e-9)

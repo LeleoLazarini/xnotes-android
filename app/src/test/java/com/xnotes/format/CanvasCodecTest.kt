@@ -708,4 +708,16 @@ class CanvasCodecTest {
         assertEquals(0.2, back.adj[0], 1e-12)
         assertNull(back.path)
     }
+
+    @Test fun headsRoundTripAndAPlainArrowWritesNone() {
+        val doc = InfiniteDocument()
+        doc.add(ShapeItem(ShapeKind.ARROW, Pt(0.0, 0.0), Pt(50.0, 0.0), ink, 2.0))
+        doc.add(ShapeItem(ShapeKind.LINE, Pt(0.0, 10.0), Pt(50.0, 10.0), ink, 2.0, headStart = com.xnotes.core.shapes.Head.FILLED_DIAMOND, headEnd = com.xnotes.core.shapes.Head.HOLLOW_TRIANGLE))
+        val text = manifestText(doc)
+        assertEquals(1, Regex("\"head_start\"").findAll(text).count())
+        val back = roundTrip(doc).items.map { it as ShapeItem }
+        assertEquals(com.xnotes.core.shapes.Head.OPEN, back[0].headEnd)
+        assertEquals(com.xnotes.core.shapes.Head.FILLED_DIAMOND, back[1].headStart)
+        assertEquals(com.xnotes.core.shapes.Head.HOLLOW_TRIANGLE, back[1].headEnd)
+    }
 }

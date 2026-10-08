@@ -1411,9 +1411,12 @@ class InteractionController(
         return if (square) all.filter { it.id in CORNER_HANDLES } else all
     }
 
-    /** The lone selected shape that shows its own frame and point dots, or null. */
+    /** The lone selected shape that shows its own frame, or null. */
     private fun framedShape(): Selected? =
         selection.singleOrNull()?.takeIf { (it.item as? ShapeItem)?.frameObb() != null }
+
+    /** The lone selected shape whose point dots can be grabbed: framed, or a line or arrow. */
+    private fun pointShape(): Selected? = selection.singleOrNull()?.takeIf { it.item is ShapeItem }
 
     /**
      * How far the chrome sits outside [selObb]: nothing for a group, whose box already wraps the
@@ -1459,12 +1462,10 @@ class InteractionController(
         val tol = HANDLE_HIT / state.zoom
         selectionRotatePoint()?.let { if (it.distanceTo(content) <= tol) return true }
         if (ResizeMath.hitHandle(selectionResizeHandles(), content, tol) != null) return true
-        // A knob can sit outside the box, out on a callout's tail.
-        framedShape()?.let { sel ->
-            val reach = com.xnotes.core.infinite.OverlayTessellator.DOT_TOUCH_PX / state.zoom
+        // A dot can sit outside the box: a knob out on a callout's tail, a thin line's middle.
+        pointShape()?.let { sel ->
             if (state.pageRects.getOrNull(sel.pageIndex) != null) {
-                val local = state.toPageSpace(sel.pageIndex, content)
-                if ((sel.item as ShapeItem).knobDots().any { it.distanceTo(local) <= reach }) return true
+                if ((sel.item as ShapeItem).dotNear(state.toPageSpace(sel.pageIndex, content), dotReach())) return true
             }
         }
         return selectionChromeBox()?.contains(content) == true
@@ -1736,7 +1737,7 @@ class InteractionController(
      * edge and drags the new point. The dots sit inside the box, so they are tried before it.
      */
     private fun tryGrabDot(content: Pt): Boolean {
-        val sel = framedShape() ?: return false
+        val sel = pointShape() ?: return false
         val shape = sel.item as ShapeItem
         if (state.pageRects.getOrNull(sel.pageIndex) == null) return false
         val local = state.toPageSpace(sel.pageIndex, content)
@@ -1846,10 +1847,12 @@ class InteractionController(
         knobIndex = -1
     }
 
+    private fun dotReach(): Double = com.xnotes.core.infinite.OverlayTessellator.DOT_TOUCH_PX / state.zoom
+
     /** A lone shape's point dots over its chrome: faint ones halfway along edges, solid ones on vertices. */
     private fun drawEditDots(r: Renderer) {
-        if (mode == PointerMode.MOVE || mode == PointerMode.TRANSFORM) return
-        val sel = framedShape() ?: return
+        if (mode == PointerMode.MOVE || mode == PointerMode.TRANSFORM || mode == PointerMode.RESIZE) return
+        val sel = pointShape() ?: return
         val shape = sel.item as ShapeItem
         if (state.pageRects.getOrNull(sel.pageIndex) == null) return
         val ot = com.xnotes.core.infinite.OverlayTessellator

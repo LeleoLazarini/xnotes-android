@@ -643,9 +643,9 @@ class InfiniteInteraction(
         val grip = sel.rotateGrip(OverlayTessellator.GRIP_ARM_PX / viewport.zoom, margin)
         if (grip != null && at.distanceTo(grip) <= tolerance) return true
         if (sel.hitHandle(at, tolerance, margin) != null) return true
-        // A knob can sit outside the box, out on a callout's tail.
+        // A dot can sit outside the box: a knob out on a callout's tail, a thin line's middle.
         val reach = OverlayTessellator.DOT_TOUCH_PX / viewport.zoom
-        if ((sel.items.singleOrNull() as? ShapeItem)?.knobDots()?.any { it.distanceTo(at) <= reach } == true) return true
+        if ((sel.items.singleOrNull() as? ShapeItem)?.dotNear(at, reach) == true) return true
         return sel.contains(at, margin)
     }
 

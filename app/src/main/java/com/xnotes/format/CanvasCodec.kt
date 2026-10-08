@@ -17,6 +17,7 @@ import com.xnotes.core.model.Stroke
 import com.xnotes.core.pal.ImageCodec
 import com.xnotes.core.stroke.Sample
 import com.xnotes.core.shapes.FreePath
+import com.xnotes.core.shapes.Head
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
@@ -266,6 +267,8 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
             s.path?.takeIf { s.isFree && !FreePath.isVertexList(it) }?.let { j.name("path").value(FreePath.toSvg(it)) }
         }
         if (s.n != s.shape.defaultN) j.name("n").value(s.n)
+        if (s.headStart != s.shape.defaultHeadStart) j.name("head_start").value(s.headStart.id)
+        if (s.headEnd != s.shape.defaultHeadEnd) j.name("head_end").value(s.headEnd.id)
         if (!s.adj.contentEquals(s.shape.defaultAdj)) {
             j.name("adj").beginArray()
             for (v in s.adj) j.value(v)
@@ -518,6 +521,8 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
         var path: String? = null
         var adj: DoubleArray? = null
         var n = 0
+        var headStart: String? = null
+        var headEnd: String? = null
         var start: Pt? = null
         var end: Pt? = null
         var strokeRgba: Rgba? = null
@@ -573,6 +578,8 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
                 "path" -> s.path = stringOrNull(p)
                 "adj" -> s.adj = doublesOrNull(p)
                 "n" -> s.n = intOr(p, 0)
+                "head_start" -> s.headStart = stringOrNull(p)
+                "head_end" -> s.headEnd = stringOrNull(p)
                 "start" -> s.start = ptOrNull(p)
                 "end" -> s.end = ptOrNull(p)
                 "stroke_rgba" -> s.strokeRgba = rgbaOrNull(p)
@@ -646,6 +653,8 @@ class CanvasCodec(private val imageCodec: ImageCodec) {
         }
         if (s.n > 0) shape.n = s.n
         s.adj?.let { shape.adj = it }
+        s.headStart?.let { shape.headStart = Head.fromId(it) }
+        s.headEnd?.let { shape.headEnd = Head.fromId(it) }
         return shape
     }
 

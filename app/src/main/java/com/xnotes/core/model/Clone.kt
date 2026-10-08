@@ -15,7 +15,7 @@ fun CanvasItem.deepCopy(measurer: TextMeasurer): CanvasItem = when (this) {
     is ShapeItem ->
         ShapeItem(
             shape, start, end, strokeRgba, strokeWidth, fillRgba, neon, neonStrength, path,
-            dashed, dashLength, dashGap, rotation, adj.copyOf(), n,
+            dashed, dashLength, dashGap, rotation, adj.copyOf(), n, headStart, headEnd,
         )
     else -> this
     // Carried, not reset: autosave snapshots the document through this, so dropping the lock here

@@ -69,6 +69,10 @@ abstract class ShapeKind internal constructor(val id: String) {
     open val defaultAdj: DoubleArray get() = NO_ADJ
     open val defaultN: Int get() = 0
 
+    /** The heads a new shape of this open kind starts with: an arrow ends in a chevron. */
+    open val defaultHeadStart: Head get() = Head.NONE
+    open val defaultHeadEnd: Head get() = Head.NONE
+
     /** The knobs a shape of this kind shows; none for most. */
     open val knobs: List<KnobDef> get() = emptyList()
 
@@ -92,8 +96,8 @@ abstract class ShapeKind internal constructor(val id: String) {
         private val NO_ADJ = DoubleArray(0)
         private val LEGACY_IDS = setOf("line", "arrow", "rectangle", "ellipse", "circle", "triangle", "polygon", "polyline", "curve")
 
-        val LINE: ShapeKind = EndpointKind("line")
-        val ARROW: ShapeKind = EndpointKind("arrow")
+        val LINE: ShapeKind = EndpointKind("line", Head.NONE)
+        val ARROW: ShapeKind = EndpointKind("arrow", Head.OPEN)
         val RECTANGLE: ShapeKind = RectangleKind("rectangle")
         val ELLIPSE: ShapeKind = EllipseKind("ellipse", keepsAspect = false)
         val CIRCLE: ShapeKind = EllipseKind("circle", keepsAspect = true)
@@ -160,7 +164,7 @@ abstract class ShapeKind internal constructor(val id: String) {
 }
 
 /** Line and arrow: drawn from their two ends by [com.xnotes.core.model.ShapeItem], never from a box. */
-private class EndpointKind(id: String) : ShapeKind(id) {
+private class EndpointKind(id: String, override val defaultHeadEnd: Head) : ShapeKind(id) {
     override val isClosed get() = false
     override val isEndpointShape get() = true
     override val staysInBox get() = false

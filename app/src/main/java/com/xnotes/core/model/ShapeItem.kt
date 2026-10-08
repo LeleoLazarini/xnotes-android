@@ -9,6 +9,7 @@ import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.Renderer
 import com.xnotes.core.shapes.EditDot
 import com.xnotes.core.shapes.FreePath
+import com.xnotes.core.shapes.Head
 import com.xnotes.core.shapes.PathRole
 import com.xnotes.core.shapes.PathSpot
 import com.xnotes.core.shapes.ShapeGeometry
@@ -62,6 +63,9 @@ class ShapeItem(
     var adj: DoubleArray = shape.defaultAdj.copyOf(),
     /** A star's points or a polygon's sides; 0 for kinds without. */
     var n: Int = shape.defaultN,
+    /** What an open shape's two ends carry; an arrow starts with a chevron at its end. */
+    var headStart: Head = shape.defaultHeadStart,
+    var headEnd: Head = shape.defaultHeadEnd,
 ) : CanvasItem, Resizable {
 
     override val kind = KIND
@@ -112,25 +116,17 @@ class ShapeItem(
      * dots, glue points and label area. A line or arrow is built from its two ends.
      */
     fun localGeometry(): ShapeGeometry {
-        if (!shape.isEndpointShape) return shape.build(box, ShapeParams(adj, n, path))
-        val shaft = ShapePath.polyline(listOf(start, end))
-        val head = if (shape == ShapeKind.ARROW) arrowHead() else emptyList()
-        val paths = if (head.size == 3) listOf(shaft, ShapePath.polyline(head, PathRole.HEAD)) else listOf(shaft)
-        return ShapeGeometry(paths, textRect = Rect.fromPoints(start, end))
+        val g = if (shape.isEndpointShape) {
+            ShapeGeometry(listOf(ShapePath.polyline(listOf(start, end))), textRect = Rect.fromPoints(start, end))
+        } else {
+            shape.build(box, ShapeParams(adj, n, path))
+        }
+        if (shape.isClosed || !hasHeads()) return g
+        return ShapeGeometry(Head.attach(g.paths, headStart, headEnd, strokeWidth), g.corners, g.connections, g.textRect)
     }
 
-    /** Open ">" arrowhead as the chevron polyline barbLeft -> tip -> barbRight (stroked, not filled),
-     *  sized from the stroke width. The tip sits just past [end] so the point clears the shaft's
-     *  round cap and reads slightly forward instead of buried under the line end. */
-    internal fun arrowHead(): List<Pt> {
-        val dir = (end - start).normalized()
-        if (dir.length() < 1e-9) return emptyList()
-        val headLen = max(12.0, strokeWidth * 3.5)
-        val tip = end + dir * (strokeWidth * 0.5)
-        val back = tip - dir * headLen
-        val perp = dir.perp() * (headLen * 0.5)
-        return listOf(back + perp, tip, back - perp)
-    }
+    /** True when either end of an open shape carries a head. */
+    fun hasHeads(): Boolean = shape.isOpen && (headStart != Head.NONE || headEnd != Head.NONE)
 
     internal fun ellipsePolygon(segments: Int = 48): List<Pt> {
         val b = box
@@ -157,7 +153,7 @@ class ShapeItem(
     override fun paint(r: Renderer) {
         val paths = paths()
         if (neon) return paintNeon(r, paths)
-        fillRgba?.let { ShapePainter.fill(r, paths, it) }
+        ShapePainter.fill(r, paths, fillRgba, strokeRgba)
         ShapePainter.stroke(r, paths, pen())
     }
 
@@ -184,7 +180,7 @@ class ShapeItem(
         val glowAlpha = GLOW_ALPHA_MIN + GLOW_ALPHA_SPAN * s
         val coreW = (strokeWidth * CORE_WIDTH_FRAC).coerceAtLeast(CORE_WIDTH_MIN)
 
-        fillRgba?.let { ShapePainter.fill(r, paths, it) }
+        ShapePainter.fill(r, paths, fillRgba, strokeRgba)
 
         // 1) Outer halo (ink colour), bounded in its own glow-alpha layer.
         r.saveLayerAlpha(paintBounds(), glowAlpha)
@@ -200,11 +196,8 @@ class ShapeItem(
 
     override fun bounds(): Rect {
         val pad = strokeWidth / 2.0 + 1.0
-        return when (shape) {
-            ShapeKind.LINE -> Rect.fromPoints(start, end).outset(pad)
-            ShapeKind.ARROW -> Rect.bounding(listOf(start, end) + arrowHead()).outset(pad)
-            else -> outlineBounds().outset(pad)
-        }
+        if (shape.isEndpointShape && !hasHeads()) return Rect.fromPoints(start, end).outset(pad)
+        return outlineBounds().outset(pad)
     }
 
     /**
@@ -230,6 +223,12 @@ class ShapeItem(
     fun knobDots(): List<Pt> =
         if (shape.isEndpointShape) emptyList() else shape.knobs.map { toPage(it.position(box, adj, n)) }
 
+    /** True when page point [p] is within [reach] of any knob, vertex dot or edge dot. */
+    fun dotNear(p: Pt, reach: Double): Boolean =
+        knobDots().any { it.distanceTo(p) <= reach } ||
+            vertexDots().any { it.at.distanceTo(p) <= reach } ||
+            edgeDots().any { it.at.distanceTo(p) <= reach }
+
     /** Drag knob [index] to page point [to]: the kind turns that into new knob values. */
     fun dragKnob(index: Int, to: Pt) {
         val knob = shape.knobs.getOrNull(index) ?: return
@@ -240,21 +239,25 @@ class ShapeItem(
 
     /** The outline a point edit works on: a free kind's own, or the curves a box kind would become. */
     private fun editOutline(): List<VectorContour> {
-        val contours = if (isFree) {
-            FreePath.place(path.orEmpty(), box)
-        } else {
-            localGeometry().paths.filter { it.role == PathRole.OUTLINE || it.role == PathRole.STROKE_ONLY }.flatMap { it.contours }
+        val contours = when {
+            shape.isEndpointShape -> listOf(FreePath.lines(listOf(start, end), closed = false))
+            isFree -> FreePath.place(path.orEmpty(), box)
+            else -> shape.build(box, ShapeParams(adj, n, path)).paths
+                .filter { it.role == PathRole.OUTLINE || it.role == PathRole.STROKE_ONLY }.flatMap { it.contours }
         }
         return contours.map(VertexEdit::canonical)
     }
 
-    /** True when the shape shows vertex dots: a free outline, or a kind with corners. */
+    /** True when the shape shows point dots: a line or arrow (its middle), a free outline, a kind with corners. */
     private fun editable(): Boolean =
-        !shape.isEndpointShape && (isFree || localGeometry().corners.isNotEmpty())
+        shape.isEndpointShape || isFree || localGeometry().corners.isNotEmpty()
 
-    /** The dots on the vertices a drag can move, on the page; none for a smooth kind, a line or an arrow. */
+    /**
+     * The dots on the vertices a drag can move, on the page; none for a smooth kind, and none for a
+     * line or arrow, whose two ends are already its resize handles.
+     */
     fun vertexDots(): List<EditDot> {
-        if (!editable()) return emptyList()
+        if (!editable() || shape.isEndpointShape) return emptyList()
         return editOutline().flatMapIndexed { ci, c ->
             VertexEdit.vertices(c).mapIndexed { vi, v -> EditDot(toPage(v), PathSpot(ci, vi)) }
         }
@@ -280,7 +283,7 @@ class ShapeItem(
      * move one by one. Style, fill and frame are kept; the kind's own knobs go. True when it changed.
      */
     fun toFree(): Boolean {
-        if (isFree || shape.isEndpointShape) return false
+        if (isFree) return false
         val outline = editOutline()
         shape = if (shape.isClosed) ShapeKind.POLYGON else ShapeKind.POLYLINE
         adj = shape.defaultAdj.copyOf()
@@ -315,7 +318,7 @@ class ShapeItem(
 
     /** The turned outline's page-space bounds, before the stroke's own width. */
     private fun outlineBounds(): Rect {
-        if (rotation == 0.0 && shape.staysInBox) return box
+        if (rotation == 0.0 && shape.staysInBox && !hasHeads()) return box
         if (shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE) {
             val b = box
             val cs = cos(rotation)
@@ -348,7 +351,7 @@ class ShapeItem(
     private fun hits(p: Pt, tol: Double): Boolean {
         for (path in localGeometry().paths) {
             val rings = path.contours.map { PathFlattener.flatten(it, HIT_FLATTEN) }
-            if (fillRgba != null && path.role.fills) {
+            if (path.role == PathRole.HEAD_FILLED || (fillRgba != null && path.role.fills)) {
                 // Inside an odd number of the path's rings: in the fill, holes left out.
                 var inside = false
                 for (ring in rings) if (ring.size >= 3 && Geometry.pointInPolygon(ring, p)) inside = !inside

@@ -27,10 +27,13 @@ enum class PathRole {
     SHADE_LIGHT,
 
     /** Stroked solid even on a dashed shape: an arrowhead, whose barbs a dash gap would maim. */
-    HEAD;
+    HEAD,
 
-    val fills: Boolean get() = this == OUTLINE || this == FILL_ONLY || this == SHADE_DARK || this == SHADE_LIGHT
-    val strokes: Boolean get() = this == OUTLINE || this == STROKE_ONLY || this == HIDDEN || this == HEAD
+    /** A head with a solid body: filled in the outline's colour, whatever the shape's fill, and stroked solid. */
+    HEAD_FILLED;
+
+    val fills: Boolean get() = this == OUTLINE || this == FILL_ONLY || this == SHADE_DARK || this == SHADE_LIGHT || this == HEAD_FILLED
+    val strokes: Boolean get() = this == OUTLINE || this == STROKE_ONLY || this == HIDDEN || this == HEAD || this == HEAD_FILLED
 }
 
 /**
