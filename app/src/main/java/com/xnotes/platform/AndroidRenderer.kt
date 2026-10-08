@@ -19,6 +19,8 @@ import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.RasterSurface
 import com.xnotes.core.pal.Renderer
 import com.xnotes.core.pal.TextFlags
+import com.xnotes.core.vector.VectorContour
+import com.xnotes.core.vector.VectorSeg
 
 /**
  * A [Renderer] backed by an [android.graphics.Canvas]. The same implementation
@@ -274,6 +276,18 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
         )
     }
 
+    override fun fillPath(contours: List<VectorContour>, color: Rgba, rule: FillRule) {
+        if (contours.isEmpty()) return
+        fillPaint.color = color.toArgb()
+        canvas.drawPath(buildPath(contours, rule), fillPaint)
+    }
+
+    override fun strokePath(contours: List<VectorContour>, pen: Pen) {
+        if (contours.isEmpty()) return
+        applyPen(pen)
+        canvas.drawPath(buildPath(contours, FillRule.NONZERO), strokePaint)
+    }
+
     override fun drawRaster(raster: RasterSurface, dest: Rect, src: Rect?) {
         val bmp = (raster as? AndroidRasterSurface)?.bitmap ?: return
         if (bmp.isRecycled) return
@@ -428,6 +442,23 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
         path.moveTo(points[0].x.toFloat(), points[0].y.toFloat())
         for (i in 1 until points.size) path.lineTo(points[i].x.toFloat(), points[i].y.toFloat())
         if (close) path.close()
+        return path
+    }
+
+    private fun buildPath(contours: List<VectorContour>, rule: FillRule): Path {
+        val path = Path()
+        path.fillType = if (rule == FillRule.EVEN_ODD) Path.FillType.EVEN_ODD else Path.FillType.WINDING
+        for (c in contours) {
+            path.moveTo(c.start.x.toFloat(), c.start.y.toFloat())
+            for (seg in c.segments) when (seg) {
+                is VectorSeg.Line -> path.lineTo(seg.end.x.toFloat(), seg.end.y.toFloat())
+                is VectorSeg.Cubic -> path.cubicTo(
+                    seg.c1.x.toFloat(), seg.c1.y.toFloat(), seg.c2.x.toFloat(), seg.c2.y.toFloat(),
+                    seg.end.x.toFloat(), seg.end.y.toFloat(),
+                )
+            }
+            if (c.closed) path.close()
+        }
         return path
     }
 

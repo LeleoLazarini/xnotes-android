@@ -5,6 +5,8 @@ import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.ImageData
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.vector.PathFlattener
+import com.xnotes.core.vector.VectorContour
 
 /** Polygon fill rule (spec 01 §1). Both are required. */
 enum class FillRule { NONZERO, EVEN_ODD }
@@ -183,6 +185,24 @@ interface Renderer {
     fun strokePolygon(points: List<Pt>, pen: Pen)
     fun strokeEllipse(center: Pt, rx: Double, ry: Double, pen: Pen)
 
+    // --- paths of lines and cubics (shapes) ---
+
+    /** Fill [contours] as one path under [rule]. The default fills a flattened copy of each on its own. */
+    fun fillPath(contours: List<VectorContour>, color: Rgba, rule: FillRule = FillRule.NONZERO) {
+        for (c in contours) {
+            val pts = PathFlattener.flatten(c, PATH_FALLBACK_TOLERANCE)
+            if (pts.size >= 3) fillPolygon(pts, color, rule)
+        }
+    }
+
+    /** Stroke [contours] with [pen]. The default strokes a flattened copy of each. */
+    fun strokePath(contours: List<VectorContour>, pen: Pen) {
+        for (c in contours) {
+            val pts = PathFlattener.flatten(c, PATH_FALLBACK_TOLERANCE)
+            if (c.closed) strokePolygon(pts, pen) else strokePolyline(pts, pen)
+        }
+    }
+
     // --- raster + text ---
     /** Draw [raster] scaled into [dest] (optionally only [src] sub-rect), smooth sampling. */
     fun drawRaster(raster: RasterSurface, dest: Rect, src: Rect? = null)
@@ -278,6 +298,9 @@ interface Renderer {
         }
     }
 }
+
+/** Content px a curve may stray when a backend without real paths flattens one. */
+private const val PATH_FALLBACK_TOLERANCE = 0.1
 
 /** Packed interleaved x,y → [Pt] list, for the default (non-hot) packed-primitive fallbacks. */
 private fun unpackPts(pts: FloatArray): List<Pt> =

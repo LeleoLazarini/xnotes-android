@@ -6,6 +6,9 @@ import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.Renderer
+import com.xnotes.core.shapes.PathRole
+import com.xnotes.core.shapes.ShapePainter
+import com.xnotes.core.shapes.ShapePath
 import com.xnotes.core.tools.ShapeKind
 import kotlin.math.PI
 import kotlin.math.cos
@@ -60,7 +63,8 @@ class ShapeItem(
     /** Absolute (content-space) vertices for polygon/polyline kinds; null for the rest. */
     fun vertices(): List<Pt>? = if (points == null) null else absPoints()
 
-    private fun pen() =
+    /** The outline pen the shape's style describes, before any role adjusts it. */
+    internal fun pen() =
         Pen(color = strokeRgba, width = strokeWidth, cosmetic = false, dashed = dashed, dashOn = dashLength, dashGap = dashGap)
 
     /** Triangle vertices: apex at top-edge midpoint, base along the bottom edge. */
@@ -94,43 +98,34 @@ class ShapeItem(
         }
     }
 
+    /**
+     * The shape's geometry as paths in page space: the one outline the note, the canvas and the PDF
+     * all draw. Open kinds are stroke-only, and an arrow's chevron is a [PathRole.HEAD] so it stays
+     * solid on a dashed arrow.
+     */
+    fun paths(): List<ShapePath> {
+        val b = box
+        return when (shape) {
+            ShapeKind.LINE -> listOf(ShapePath.polyline(listOf(start, end)))
+            ShapeKind.ARROW -> {
+                val head = arrowHead()
+                val shaft = ShapePath.polyline(listOf(start, end))
+                if (head.size == 3) listOf(shaft, ShapePath.polyline(head, PathRole.HEAD)) else listOf(shaft)
+            }
+            ShapeKind.RECTANGLE -> listOf(ShapePath.rect(b))
+            ShapeKind.ELLIPSE, ShapeKind.CIRCLE -> listOf(ShapePath.ellipse(b.centerX, b.centerY, b.w / 2.0, b.h / 2.0))
+            ShapeKind.TRIANGLE -> listOf(ShapePath.polygon(triangleVertices()))
+            ShapeKind.POLYGON -> absPoints().takeIf { it.size >= 2 }?.let { listOf(ShapePath.polygon(it)) }.orEmpty()
+            ShapeKind.POLYLINE, ShapeKind.CURVE ->
+                absPoints().takeIf { it.size >= 2 }?.let { listOf(ShapePath.polyline(it)) }.orEmpty()
+        }
+    }
+
     override fun paint(r: Renderer) {
-        if (neon) return paintNeon(r)
-        fillRgba?.let { drawFill(r, it) }
-        drawOutline(r, pen())
-        if (shape == ShapeKind.ARROW) drawArrowHead(r, pen())
-    }
-
-    /** Fill the closed-shape interior (no-op for open line/arrow). */
-    private fun drawFill(r: Renderer, fill: Rgba) {
-        val b = box
-        when (shape) {
-            ShapeKind.RECTANGLE -> r.fillRect(b, fill)
-            ShapeKind.ELLIPSE, ShapeKind.CIRCLE -> r.fillEllipse(b.center, b.w / 2.0, b.h / 2.0, fill)
-            ShapeKind.TRIANGLE -> r.fillPolygon(triangleVertices(), fill)
-            ShapeKind.POLYGON -> r.fillPolygon(absPoints(), fill)
-            ShapeKind.LINE, ShapeKind.ARROW, ShapeKind.POLYLINE, ShapeKind.CURVE -> {}
-        }
-    }
-
-    /** Stroke the shape's outline (the arrow's shaft for arrows) with [pen]. */
-    private fun drawOutline(r: Renderer, pen: Pen) {
-        val b = box
-        when (shape) {
-            ShapeKind.LINE, ShapeKind.ARROW -> r.strokePolyline(listOf(start, end), pen)
-            ShapeKind.RECTANGLE -> r.strokeRect(b, pen)
-            ShapeKind.ELLIPSE, ShapeKind.CIRCLE -> r.strokeEllipse(b.center, b.w / 2.0, b.h / 2.0, pen)
-            ShapeKind.TRIANGLE -> r.strokePolygon(triangleVertices(), pen)
-            ShapeKind.POLYGON -> r.strokePolygon(absPoints(), pen)
-            ShapeKind.POLYLINE, ShapeKind.CURVE -> r.strokePolyline(absPoints(), pen)
-        }
-    }
-
-    /** Stroke the open ">" arrowhead with [pen], mirroring the shaft so the head and shaft share one tube.
-     *  The chevron is always solid: a dash break on the short barbs would maim the point. */
-    private fun drawArrowHead(r: Renderer, pen: Pen) {
-        val head = arrowHead()
-        if (head.size == 3) r.strokePolyline(head, pen.copy(dashed = false))
+        val paths = paths()
+        if (neon) return paintNeon(r, paths)
+        fillRgba?.let { ShapePainter.fill(r, paths, it) }
+        ShapePainter.stroke(r, paths, pen())
     }
 
     /**
@@ -148,7 +143,7 @@ class ShapeItem(
         if (neon) bounds().outset(neonGlowRadius() * 2.0 + 4.0)
         else bounds()
 
-    private fun paintNeon(r: Renderer) {
+    private fun paintNeon(r: Renderer, paths: List<ShapePath>) {
         val glowR = neonGlowRadius()
         val s = neonStrength.coerceIn(0.0, 1.0)
         val color = strokeRgba.withAlpha(255)
@@ -156,23 +151,18 @@ class ShapeItem(
         val glowAlpha = GLOW_ALPHA_MIN + GLOW_ALPHA_SPAN * s
         val coreW = (strokeWidth * CORE_WIDTH_FRAC).coerceAtLeast(CORE_WIDTH_MIN)
 
-        fillRgba?.let { drawFill(r, it) }
+        fillRgba?.let { ShapePainter.fill(r, paths, it) }
 
         // 1) Outer halo (ink colour), bounded in its own glow-alpha layer.
         r.saveLayerAlpha(paintBounds(), glowAlpha)
-        val haloPen = pen().copy(color = color, glowRadius = glowR)
-        drawOutline(r, haloPen)
-        if (shape == ShapeKind.ARROW) drawArrowHead(r, haloPen)
+        ShapePainter.stroke(r, paths, pen().copy(color = color, glowRadius = glowR))
         r.restore()
 
         // 2) Tube body — saturated colour shows at the rim.
-        drawOutline(r, pen())
-        if (shape == ShapeKind.ARROW) drawArrowHead(r, pen())
+        ShapePainter.stroke(r, paths, pen())
 
         // 3) White-hot core — a thinner white line down the centre of the shaft and the chevron.
-        val corePen = pen().copy(color = white, width = coreW)
-        drawOutline(r, corePen)
-        if (shape == ShapeKind.ARROW) drawArrowHead(r, corePen)
+        ShapePainter.stroke(r, paths, pen().copy(color = white, width = coreW))
     }
 
     override fun bounds(): Rect {

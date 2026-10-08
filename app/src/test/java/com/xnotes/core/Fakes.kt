@@ -18,6 +18,7 @@ import com.xnotes.core.pal.Renderer
 import com.xnotes.core.pal.SurfaceFactory
 import com.xnotes.core.pal.TextFlags
 import com.xnotes.core.pal.TextMeasurer
+import com.xnotes.core.vector.VectorContour
 
 /** A Renderer that records the primitive calls it receives (for assertions). */
 class FakeRenderer : Renderer {
@@ -37,6 +38,10 @@ class FakeRenderer : Renderer {
 
     /** Centres of filled circles (the dotted ruling). */
     val circles = mutableListOf<Pt>()
+
+    /** Colours [fillPath] filled with and pens [strokePath] stroked with, in call order. */
+    val pathFills = mutableListOf<Rgba>()
+    val pathPens = mutableListOf<Pen>()
 
     override fun fillDiskRibbon(centers: FloatArray, radii: FloatArray, from: Int, count: Int, color: Rgba) {
         ribbonRuns += from to count
@@ -70,6 +75,14 @@ class FakeRenderer : Renderer {
     }
     override fun strokePolygon(points: List<Pt>, pen: Pen) { ops += "strokePolygon" }
     override fun strokeEllipse(center: Pt, rx: Double, ry: Double, pen: Pen) { ops += "strokeEllipse" }
+    override fun fillPath(contours: List<VectorContour>, color: Rgba, rule: FillRule) {
+        ops += "fillPath"
+        pathFills += color
+    }
+    override fun strokePath(contours: List<VectorContour>, pen: Pen) {
+        ops += "strokePath"
+        pathPens += pen
+    }
     override fun drawRaster(raster: RasterSurface, dest: Rect, src: Rect?) {
         ops += "drawRaster"
         rasterDests += dest

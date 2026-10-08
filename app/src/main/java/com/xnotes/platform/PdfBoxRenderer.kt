@@ -28,6 +28,8 @@ import com.xnotes.core.pdf.GlyphPlacement
 import com.xnotes.core.pdf.LinkFinder
 import com.xnotes.core.pdf.PdfNumbers
 import com.xnotes.core.pdf.PlacedLink
+import com.xnotes.core.vector.VectorContour
+import com.xnotes.core.vector.VectorSeg
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
@@ -214,6 +216,27 @@ internal class PdfBoxRenderer(
         translucent(pen.color) {
             applyPen(pen)
             ellipsePath(center, rx, ry)
+            cs.stroke()
+        }
+    }
+
+    // --- paths ---
+    override fun fillPath(contours: List<VectorContour>, color: Rgba, rule: FillRule) {
+        if (contours.isEmpty()) return
+        tag()
+        translucent(color) {
+            setFill(color)
+            contourPath(contours)
+            if (rule == FillRule.EVEN_ODD) cs.fillEvenOdd() else cs.fill()
+        }
+    }
+
+    override fun strokePath(contours: List<VectorContour>, pen: Pen) {
+        if (contours.isEmpty()) return
+        tag()
+        translucent(pen.color) {
+            applyPen(pen)
+            contourPath(contours)
             cs.stroke()
         }
     }
@@ -560,6 +583,19 @@ internal class PdfBoxRenderer(
         cs.moveTo(ux(points[0].x), uy(points[0].y))
         for (i in 1 until points.size) cs.lineTo(ux(points[i].x), uy(points[i].y))
         if (close) cs.closePath()
+    }
+
+    private fun contourPath(contours: List<VectorContour>) {
+        for (c in contours) {
+            cs.moveTo(ux(c.start.x), uy(c.start.y))
+            for (seg in c.segments) when (seg) {
+                is VectorSeg.Line -> cs.lineTo(ux(seg.end.x), uy(seg.end.y))
+                is VectorSeg.Cubic -> cs.curveTo(
+                    ux(seg.c1.x), uy(seg.c1.y), ux(seg.c2.x), uy(seg.c2.y), ux(seg.end.x), uy(seg.end.y),
+                )
+            }
+            if (c.closed) cs.closePath()
+        }
     }
 
     private fun ellipsePath(center: Pt, rx: Double, ry: Double) {
