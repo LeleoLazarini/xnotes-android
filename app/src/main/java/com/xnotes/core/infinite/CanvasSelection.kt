@@ -107,6 +107,19 @@ class CanvasSelection(private val doc: InfiniteDocument) {
         doc.itemsChanged(items)
     }
 
+    /** [applyLive] for [only] some of the items, the ones a renderer-driven drag cannot carry. */
+    fun applyLiveTo(only: Set<CanvasItem>, transform: Affine) {
+        val changed = ArrayList<CanvasItem>(only.size)
+        for (i in items.indices) {
+            val item = items[i]
+            if (item !in only) continue
+            item.restoreGeometry(startSnapshots[i])
+            item.applyTransform(transform)
+            changed.add(item)
+        }
+        doc.itemsChanged(changed)
+    }
+
     /**
      * Move the box alone, for a drag the renderer is offsetting rather than the model.
      *

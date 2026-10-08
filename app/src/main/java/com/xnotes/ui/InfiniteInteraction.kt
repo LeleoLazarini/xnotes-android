@@ -7,6 +7,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import com.xnotes.canvas.InteractionController
 import com.xnotes.canvas.StylusButtonLatch
+import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.infinite.CanvasViewport
 import com.xnotes.canvas.HandleId
@@ -162,6 +163,11 @@ class InfiniteInteraction(
     private var transformPointer = Pt.ZERO
     private var liftedTransform = false
 
+    // A lifted resize leaves shapes out and bakes them every frame: they keep their outline width
+    // through a resize, which a mesh scaled by the shader cannot.
+    private var bakedInLift: Set<CanvasItem> = emptySet()
+    private var liftItems: List<CanvasItem> = emptyList()
+
     // A finger press landed off a live selection and became a pan; a tap there dismisses it, a
     // real drag pans and leaves it alone.
     private var panMayDismiss = false
@@ -240,7 +246,7 @@ class InfiniteInteraction(
         mode = CanvasPointerMode.IDLE
         panVel = Pt.ZERO
         liveStroke = null
-        liftedTransform = false
+        endLift()
         onWetStroke(null)
         onLiftSelection(emptyList(), LiftTransform.NONE)
         stylusButtons.reset()
@@ -472,8 +478,9 @@ class InfiniteInteraction(
         }
         if ((mode == CanvasPointerMode.ROTATE || mode == CanvasPointerMode.RESIZE) && liftedTransform) {
             selection()?.previewBack()
+            if (bakedInLift.isNotEmpty()) selection()?.applyLiveTo(bakedInLift, Affine.IDENTITY)
             onLiftSelection(emptyList(), LiftTransform.NONE)
-            liftedTransform = false
+            endLift()
             onSelectionChanged()
         }
         mode = CanvasPointerMode.IDLE
@@ -637,7 +644,7 @@ class InfiniteInteraction(
         val grip = sel.rotateGrip(OverlayTessellator.GRIP_ARM_PX / viewport.zoom)
         if (grip != null && at.distanceTo(grip) <= tolerance) {
             sel.beginTransform(at)
-            beginLiftedTransform(sel, at)
+            beginLiftedTransform(sel, at, resize = false)
             mode = CanvasPointerMode.ROTATE
             return true
         }
@@ -645,7 +652,7 @@ class InfiniteInteraction(
         if (handle != null) {
             grabHandle = handle
             sel.beginTransform()
-            beginLiftedTransform(sel, at)
+            beginLiftedTransform(sel, at, resize = true)
             mode = CanvasPointerMode.RESIZE
             return true
         }
@@ -786,12 +793,21 @@ class InfiniteInteraction(
      * transform, which is exactly what the shader does. A placed SVG does too, since it is drawn
      * from triangles rather than from a texture, and it has the most to gain: baking would re-mesh
      * the whole drawing on every pointer sample. A photo or a text box is rebuilt instead of mapped,
-     * so those keep the slow path and stay honest.
+     * so those keep the slow path and stay honest. A resize bakes the shapes alone, see [bakedInLift].
      */
-    private fun beginLiftedTransform(sel: CanvasSelection, at: Pt) {
+    private fun beginLiftedTransform(sel: CanvasSelection, at: Pt, resize: Boolean) {
         transformPointer = at
         liftedTransform = sel.items.all { it is Stroke || it is ShapeItem || isVectorImage(it) }
-        if (liftedTransform) onLiftSelection(sel.items, LiftTransform.NONE)
+        if (!liftedTransform) return
+        bakedInLift = if (resize) sel.items.filterTo(HashSet()) { it is ShapeItem } else emptySet()
+        liftItems = if (bakedInLift.isEmpty()) sel.items else sel.items.filter { it !in bakedInLift }
+        onLiftSelection(liftItems, LiftTransform.NONE)
+    }
+
+    private fun endLift() {
+        liftedTransform = false
+        bakedInLift = emptySet()
+        liftItems = emptyList()
     }
 
     private fun isVectorImage(item: CanvasItem): Boolean =
@@ -808,7 +824,8 @@ class InfiniteInteraction(
         transformPointer = at
         if (liftedTransform) {
             val map = sel.previewResize(handle, at) ?: return
-            onLiftSelection(sel.items, LiftTransform.of(map, sel.transformPivot ?: Pt.ZERO))
+            if (bakedInLift.isNotEmpty()) sel.applyLiveTo(bakedInLift, map)
+            onLiftSelection(liftItems, LiftTransform.of(map, sel.transformPivot ?: Pt.ZERO))
         } else {
             sel.resizeLive(handle, at)
         }
@@ -823,7 +840,7 @@ class InfiniteInteraction(
         transformPointer = at
         if (liftedTransform) {
             val swept = sel.previewRotate(at)
-            onLiftSelection(sel.items, LiftTransform.turn(sel.transformPivot ?: Pt.ZERO, swept))
+            onLiftSelection(liftItems, LiftTransform.turn(sel.transformPivot ?: Pt.ZERO, swept))
         } else {
             sel.rotateLive(at)
         }
@@ -842,7 +859,7 @@ class InfiniteInteraction(
             if (handle != null) sel.resizeLive(handle, transformPointer)
             else sel.rotateLive(transformPointer)
             onLiftSelection(emptyList(), LiftTransform.NONE)
-            liftedTransform = false
+            endLift()
         }
         onCommitSelection(sel.buildCommand(movedOnly = false))
         // A resize of an upright box snaps onto the real bounds, which is what keeps the chrome

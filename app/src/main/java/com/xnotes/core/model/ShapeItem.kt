@@ -369,7 +369,7 @@ class ShapeItem(
         }
     }
 
-    override fun snapshotGeometry(): GeometrySnapshot = ShapeSnapshot(shape, start, end, points, strokeWidth)
+    override fun snapshotGeometry(): GeometrySnapshot = ShapeSnapshot(shape, start, end, points)
 
     override fun restoreGeometry(snap: GeometrySnapshot) {
         if (snap !is ShapeSnapshot) return
@@ -377,7 +377,6 @@ class ShapeItem(
         start = snap.start
         end = snap.end
         points = snap.points
-        strokeWidth = snap.strokeWidth
     }
 
     /**
@@ -385,10 +384,9 @@ class ShapeItem(
      * A pure scale keeps every kind parametric (the box scales; normalized vertices follow). A
      * rotation can't be held by an axis-aligned box, so a rotated rectangle/ellipse/triangle is
      * converted to a [ShapeKind.POLYGON] (closed) or [ShapeKind.POLYLINE] (open) of baked
-     * vertices. The outline width scales by the transform's linear factor (1.0 for a rotation).
+     * vertices. The outline keeps its width: a shape is redrawn at its new size, not magnified.
      */
     override fun applyTransform(t: Affine) {
-        strokeWidth *= t.linearScale
         if (shape.isEndpointShape || t.isAxisAligned) {
             start = t.apply(start)
             end = t.apply(end)
@@ -464,5 +462,4 @@ private data class ShapeSnapshot(
     val start: Pt,
     val end: Pt,
     val points: List<Pt>?,
-    val strokeWidth: Double,
 ) : GeometrySnapshot

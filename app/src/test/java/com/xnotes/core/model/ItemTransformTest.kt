@@ -60,8 +60,18 @@ class ItemTransformTest {
         assertEquals(ShapeKind.RECTANGLE, s.shape)
         assertEquals(Pt(0.0, 0.0), s.start)
         assertEquals(Pt(200.0, 100.0), s.end)
-        assertEquals(6.0, s.strokeWidth, 1e-9)
+        assertEquals(3.0, s.strokeWidth, 1e-9) // a shape keeps its outline width
         assertNull(s.points)
+    }
+
+    @Test fun scaleArrowKeepsItsHeadSize() {
+        val s = ShapeItem(ShapeKind.ARROW, Pt(0.0, 0.0), Pt(100.0, 0.0), Rgba(0, 0, 0), 4.0)
+        val before = s.arrowHead()
+        s.applyTransform(Affine.scaleAbout(Pt.ZERO, 3.0, 3.0))
+        val after = s.arrowHead()
+        assertEquals(Pt(300.0, 0.0), s.end)
+        assertEquals(4.0, s.strokeWidth, 1e-9)
+        assertEquals(before[0].distanceTo(before[2]), after[0].distanceTo(after[2]), 1e-9)
     }
 
     @Test fun rotateRectangleBecomesPolygon() {

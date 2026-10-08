@@ -2,13 +2,17 @@ package com.xnotes.core.infinite
 
 import com.xnotes.canvas.HandleId
 import com.xnotes.canvas.SelectionMath
+import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.ImageData
 import com.xnotes.core.model.ImageItem
+import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.stroke.Sample
+import com.xnotes.core.tools.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolDefaults
 import org.junit.Assert.assertEquals
@@ -227,6 +231,31 @@ class CanvasSelectionTest {
         sel.beginTransform()
         sel.resizeLive(HandleId.BR, Pt(200.0, 200.0))
         assertTrue("a resized stroke should look zoomed, not just longer", s.config.baseWidth > before)
+    }
+
+    @Test fun scalingAShapeKeepsItsOutlineWidth() {
+        val r = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(100.0, 100.0), Rgba(0, 0, 0), 3.0)
+        val sel = CanvasSelection(docOf(r))
+        sel.select(listOf(r))
+        sel.beginTransform()
+        sel.resizeLive(HandleId.BR, Pt(200.0, 200.0))
+        assertTrue(r.box.w > 100.0)
+        assertEquals(3.0, r.strokeWidth, 1e-9)
+    }
+
+    @Test fun aPartialBakeLeavesTheRestAlone() {
+        val r = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(100.0, 100.0), Rgba(0, 0, 0), 3.0)
+        val s = line(0.0, 200.0)
+        val sel = CanvasSelection(docOf(r, s))
+        sel.select(listOf(r, s))
+        sel.beginTransform()
+        val twice = Affine.scaleAbout(Pt.ZERO, 2.0, 2.0)
+        sel.applyLiveTo(setOf(r), twice)
+        sel.applyLiveTo(setOf(r), twice)
+        assertEquals("baked from the start, never compounded", Pt(200.0, 200.0), r.end)
+        assertEquals("the stroke rides the lift instead", Pt(20.0, 200.0), s.centroid())
+        sel.applyLiveTo(setOf(r), Affine.IDENTITY)
+        assertEquals(Pt(100.0, 100.0), r.end)
     }
 
     // --- rotating ---
