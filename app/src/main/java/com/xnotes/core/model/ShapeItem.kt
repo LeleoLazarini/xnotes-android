@@ -119,7 +119,7 @@ class ShapeItem(
         val g = if (shape.isEndpointShape) {
             ShapeGeometry(listOf(ShapePath.polyline(listOf(start, end))), textRect = Rect.fromPoints(start, end))
         } else {
-            shape.build(box, ShapeParams(adj, n, path))
+            shape.build(box, ShapeParams(adj, n, path, strokeWidth))
         }
         if (shape.isClosed || !hasHeads()) return g
         return ShapeGeometry(Head.attach(g.paths, headStart, headEnd, strokeWidth), g.corners, g.connections, g.textRect)
@@ -242,7 +242,7 @@ class ShapeItem(
         val contours = when {
             shape.isEndpointShape -> listOf(FreePath.lines(listOf(start, end), closed = false))
             isFree -> FreePath.place(path.orEmpty(), box)
-            else -> shape.build(box, ShapeParams(adj, n, path)).paths
+            else -> shape.build(box, ShapeParams(adj, n, path, strokeWidth)).paths
                 .filter { it.role == PathRole.OUTLINE || it.role == PathRole.STROKE_ONLY }.flatMap { it.contours }
         }
         return contours.map(VertexEdit::canonical)

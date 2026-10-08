@@ -542,7 +542,7 @@ class CanvasCodecTest {
     }
 
     private fun withoutNewFields(manifest: String) =
-        manifest.replace(Regex(",\"geom\":\"[a-z_]+\""), "")
+        manifest.replace(Regex(",\"geom\":\"[a-z0-9_]+\""), "")
             .replace(Regex(",\"rect\":\\[[^\\]]*\\],\"angle\":[-0-9.eE]+"), "")
 
     @Test fun aTurnedShapeRoundTripsAsItself() {

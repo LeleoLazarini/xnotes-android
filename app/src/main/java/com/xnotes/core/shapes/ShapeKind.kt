@@ -34,13 +34,18 @@ class KnobDef(
     val drag: (to: Pt, box: Rect, adj: DoubleArray, n: Int) -> DoubleArray,
 )
 
-/** What a kind builds from beside its box: knob values, a point or side count, and a free outline. */
+/** What a kind builds from beside its box: knob values, a count, a free outline and the line width. */
 class ShapeParams(
     val adj: DoubleArray = DoubleArray(0),
     val n: Int = 0,
     /** A free kind's outline, normalized to the box; null for every other kind. */
     val path: List<VectorContour>? = null,
+    /** The outline's width, which sizes any arrowheads a kind draws itself. */
+    val width: Double = 2.0,
 )
+
+/** What a kind's minus/plus counts, which names it in the picker. */
+enum class CountKind { SIDES, POINTS, TICKS, CELLS }
 
 /**
  * A kind of shape: how it draws inside its box, and what it offers the editor. Every kind lives in
@@ -75,8 +80,8 @@ abstract class ShapeKind internal constructor(val id: String) {
     /** The point or side counts a minus/plus may set, for a star or a polygon; null for the rest. */
     open val nRange: IntRange? get() = null
 
-    /** True when the count is of points (a star) rather than sides. */
-    open val countsPoints: Boolean get() = false
+    /** What the minus/plus counts: a polygon's sides, a star's points, an axis's ticks, a grid's cells. */
+    open val countKind: CountKind get() = CountKind.SIDES
 
     /** The heads a new shape of this open kind starts with: an arrow ends in a chevron. */
     open val defaultHeadStart: Head get() = Head.NONE
@@ -140,7 +145,7 @@ abstract class ShapeKind internal constructor(val id: String) {
                 LINE, ARROW, RECTANGLE, ELLIPSE, CIRCLE, TRIANGLE, POLYGON, POLYLINE, CURVE,
                 ROUNDED_RECT, SQUARE, CAPSULE, RIGHT_TRIANGLE, DIAMOND, PARALLELOGRAM, TRAPEZOID,
                 REGULAR_POLYGON, STAR, CROSS, HEART, CLOUD, RING, PIE, ARC,
-            ) + FlowchartKinds.all + ArrowKinds.all
+            ) + FlowchartKinds.all + ArrowKinds.all + SolidMathKinds.all
         }
 
         private val byId: Map<String, ShapeKind> by lazy { all.associateBy { it.id } }

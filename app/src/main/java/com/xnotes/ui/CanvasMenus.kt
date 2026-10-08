@@ -251,7 +251,7 @@ private fun SelectionStylePopup(host: SelectionMenuHost, onDismiss: () -> Unit) 
                 val count = sc.n
                 val range = sc.range
                 Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    StyleCaption(stringResource(if (sc.points) R.string.caption_points else R.string.caption_sides))
+                    StyleCaption(stringResource(countLabel(sc.kind)))
                     Spacer(Modifier.width(12.dp))
                     StepDot("\u2212", stringResource(R.string.count_fewer), enabled = count > range.first) { host.setSelectionCount(count - 1) }
                     Text("$count", color = palette.text.toComposeColor(), fontSize = 14.sp, modifier = Modifier.padding(horizontal = 10.dp))
@@ -278,13 +278,13 @@ private fun SelectionStylePopup(host: SelectionMenuHost, onDismiss: () -> Unit) 
     }
 }
 
-/** A star's [n] points or a polygon's [n] sides ([points] says which), and the counts it can take. */
-class ShapeCount(val n: Int, val range: IntRange, val points: Boolean) {
+/** A star's [n] points, a polygon's [n] sides and so on ([kind] says which), and the counts it can take. */
+class ShapeCount(val n: Int, val range: IntRange, val kind: com.xnotes.core.shapes.CountKind) {
     companion object {
         fun of(shape: com.xnotes.core.model.ShapeItem?): ShapeCount? {
             val s = shape ?: return null
             val range = s.shape.nRange ?: return null
-            return ShapeCount(s.n.coerceIn(range.first, range.last), range, s.shape.countsPoints)
+            return ShapeCount(s.n.coerceIn(range.first, range.last), range, s.shape.countKind)
         }
     }
 }

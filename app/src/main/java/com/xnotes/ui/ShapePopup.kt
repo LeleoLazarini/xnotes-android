@@ -201,7 +201,7 @@ private fun CountRow(config: ShapeConfig, onChange: (Int) -> Unit) {
     val count = config.count.coerceIn(range.first, range.last)
     Row(Modifier.padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            stringResource(if (config.chip.kind.countsPoints) R.string.caption_points else R.string.caption_sides),
+            stringResource(countLabel(config.chip.kind.countKind)),
             color = palette.text.toComposeColor(), fontSize = 12.sp, modifier = Modifier.width(120.dp),
         )
         StepButton("−", stringResource(R.string.count_fewer), enabled = count > range.first) { onChange(count - 1) }
@@ -229,6 +229,7 @@ private fun StepButton(glyph: String, label: String, enabled: Boolean, onClick: 
 private fun pageLabel(page: ShapePage): Int = when (page.key) {
     "flowchart" -> R.string.shape_page_flowchart
     "arrows" -> R.string.shape_page_arrows
+    "solids_math" -> R.string.shape_page_solids_math
     else -> R.string.shape_page_basic
 }
 
@@ -306,7 +307,34 @@ internal fun presetLabel(key: String): Int = when (key) {
     "callout_thought" -> R.string.shape_callout_thought
     "callout_line" -> R.string.shape_callout_line
     "burst" -> R.string.shape_burst
+    "solid_cube" -> R.string.shape_solid_cube
+    "solid_cylinder" -> R.string.shape_solid_cylinder
+    "solid_cone" -> R.string.shape_solid_cone
+    "solid_sphere" -> R.string.shape_solid_sphere
+    "solid_pyramid" -> R.string.shape_solid_pyramid
+    "solid_tetrahedron" -> R.string.shape_solid_tetrahedron
+    "solid_tri_prism" -> R.string.shape_solid_tri_prism
+    "solid_hex_prism" -> R.string.shape_solid_hex_prism
+    "solid_frustum" -> R.string.shape_solid_frustum
+    "solid_hemisphere" -> R.string.shape_solid_hemisphere
+    "math_axes_2d" -> R.string.shape_math_axes_2d
+    "math_axes_3d" -> R.string.shape_math_axes_3d
+    "math_number_line" -> R.string.shape_math_number_line
+    "math_grid" -> R.string.shape_math_grid
+    "math_angle" -> R.string.shape_math_angle
+    "math_right_angle" -> R.string.shape_math_right_angle
+    "math_curly_brace" -> R.string.shape_math_curly_brace
+    "math_square_bracket" -> R.string.shape_math_square_bracket
+    "math_round_bracket" -> R.string.shape_math_round_bracket
     else -> R.string.shape_polygon
+}
+
+@StringRes
+internal fun countLabel(kind: com.xnotes.core.shapes.CountKind): Int = when (kind) {
+    com.xnotes.core.shapes.CountKind.SIDES -> R.string.caption_sides
+    com.xnotes.core.shapes.CountKind.POINTS -> R.string.caption_points
+    com.xnotes.core.shapes.CountKind.TICKS -> R.string.caption_ticks
+    com.xnotes.core.shapes.CountKind.CELLS -> R.string.caption_cells
 }
 
 @StringRes

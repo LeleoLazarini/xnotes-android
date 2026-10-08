@@ -124,7 +124,32 @@ object ShapePresets {
         ),
     )
 
-    val pages: List<ShapePage> = listOf(basic, flowchart, arrows)
+    val solidsMath = ShapePage(
+        "solids_math",
+        listOf(
+            ShapePreset("solid_cube", SolidMathKinds.CUBE),
+            ShapePreset("solid_cylinder", SolidMathKinds.CYLINDER),
+            ShapePreset("solid_cone", SolidMathKinds.CONE),
+            ShapePreset("solid_sphere", SolidMathKinds.SPHERE),
+            ShapePreset("solid_pyramid", SolidMathKinds.PYRAMID),
+            ShapePreset("solid_tetrahedron", SolidMathKinds.TETRAHEDRON),
+            ShapePreset("solid_tri_prism", SolidMathKinds.TRI_PRISM),
+            ShapePreset("solid_hex_prism", SolidMathKinds.HEX_PRISM),
+            ShapePreset("solid_frustum", SolidMathKinds.FRUSTUM),
+            ShapePreset("solid_hemisphere", SolidMathKinds.HEMISPHERE),
+            ShapePreset("math_axes_2d", SolidMathKinds.AXES_2D),
+            ShapePreset("math_axes_3d", SolidMathKinds.AXES_3D),
+            ShapePreset("math_number_line", SolidMathKinds.NUMBER_LINE),
+            ShapePreset("math_grid", SolidMathKinds.GRID),
+            ShapePreset("math_angle", SolidMathKinds.ANGLE),
+            ShapePreset("math_right_angle", SolidMathKinds.RIGHT_ANGLE),
+            ShapePreset("math_curly_brace", SolidMathKinds.CURLY_BRACE),
+            ShapePreset("math_square_bracket", SolidMathKinds.SQUARE_BRACKET),
+            ShapePreset("math_round_bracket", SolidMathKinds.ROUND_BRACKET),
+        ),
+    )
+
+    val pages: List<ShapePage> = listOf(basic, flowchart, arrows, solidsMath)
 
     val all: List<ShapePreset> = pages.flatMap { it.presets }
 

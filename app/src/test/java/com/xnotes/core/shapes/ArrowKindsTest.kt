@@ -70,6 +70,6 @@ class ArrowKindsTest {
         assertEquals(24, keys.size)
         assertEquals("arrow_right", keys.first())
         assertEquals("burst", keys.last())
-        assertEquals(3, ShapePresets.pages.size)
+        assertEquals("the third page", ShapePresets.arrows, ShapePresets.pages[2])
     }
 }

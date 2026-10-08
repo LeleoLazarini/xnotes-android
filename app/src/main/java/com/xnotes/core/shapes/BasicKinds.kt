@@ -144,7 +144,7 @@ internal class StarKind(id: String) : ShapeKind(id) {
     override val isClosed get() = true
     override val defaultN get() = 5
     override val nRange = 3..24
-    override val countsPoints get() = true
+    override val countKind get() = CountKind.POINTS
     override val defaultAdj = doubleArrayOf(-1.0)
     override val knobs = listOf(
         KnobDef(
