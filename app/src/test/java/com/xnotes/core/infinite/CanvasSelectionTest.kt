@@ -265,8 +265,28 @@ class CanvasSelectionTest {
         sel.select(listOf(r))
         val box = sel.box!!
         assertEquals(0.5, box.angle, 1e-12)
-        assertEquals("half the width plus the stroke pad", 52.0, box.halfW, 1e-9)
+        assertEquals("the box is the frame itself", 50.0, box.halfW, 1e-9)
         assertTrue(sel.isFramedShape)
+        assertEquals("the outline's reach plus the gap", 12.0, sel.chromeMargin(10.0), 1e-9)
+        assertEquals(62.0, sel.chromeBox(10.0)!!.halfW, 1e-9)
+    }
+
+    @Test fun aCircleOffersCornerHandlesOnly() {
+        val c = ShapeItem(ShapeKind.CIRCLE, Pt(0.0, 0.0), Pt(50.0, 50.0), Rgba(0, 0, 0), 2.0)
+        val sel = CanvasSelection(docOf(c))
+        sel.select(listOf(c))
+        assertEquals(setOf(HandleId.TL, HandleId.TR, HandleId.BL, HandleId.BR), sel.handles(10.0).map { it.id }.toSet())
+    }
+
+    @Test fun aFramedResizeKeepsTheShapeEdgeBehindTheHandle() {
+        val r = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(100.0, 50.0), Rgba(0, 0, 0), 2.0)
+        val sel = CanvasSelection(docOf(r))
+        sel.select(listOf(r))
+        val margin = sel.chromeMargin(10.0)
+        sel.beginTransform()
+        sel.resizeLive(HandleId.R, Pt(100.0 + margin + 30.0, 25.0), margin)
+        assertEquals(130.0, r.box.right, 1e-9)
+        assertEquals(2.0, r.strokeWidth, 1e-9)
     }
 
     @Test fun resizingATurnedShapeByItsOwnHandleKeepsItARectangle() {

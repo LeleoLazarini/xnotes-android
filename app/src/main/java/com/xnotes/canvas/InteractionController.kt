@@ -74,7 +74,7 @@ import kotlin.math.sin
 /** The pointer state machine modes (spec 06 §1). */
 enum class PointerMode {
     IDLE, DRAW, ERASE, BAND, LASSO_DRAW, SHOT, SHAPE, MOVE, RESIZE, TRANSFORM, PAN, PINCH, FLOW_TEXT,
-    TEXT_DRAG, RULER_MOVE, RULER_TRANSFORM, RULER_ROTATE, PDF_TEXT,
+    TEXT_DRAG, RULER_MOVE, RULER_TRANSFORM, RULER_ROTATE, PDF_TEXT, VERTEX,
 }
 
 /**
@@ -362,7 +362,22 @@ class InteractionController(
     private var txItems: List<Selected> = emptyList()
     private var txSnaps: List<GeometrySnapshot> = emptyList()
     private var txStartObb: Obb? = null
+    private var txMargin = 0.0 // how far outside the box its handles sat, kept behind the pointer
     private var txHandle: HandleId? = null // non-null = scale via this box handle; null = rotate
+
+    // A point drag on a lone shape: what it grabbed, the shape before (for a tap that changes
+    // nothing) and the free, maybe split shape the drag measures from.
+    private var vertexSel: Selected? = null
+    private var vertexSpot: com.xnotes.core.shapes.PathSpot? = null
+    private var vertexBefore: GeometrySnapshot? = null
+    private var vertexBase: GeometrySnapshot? = null
+    private var vertexDownAt = Pt.ZERO
+    private var vertexMoved = false
+    private var vertexWasEdge = false
+
+    // The last tap on a vertex dot, for the double tap that deletes it.
+    private var lastVertexTap: com.xnotes.core.shapes.PathSpot? = null
+    private var lastVertexTapAt = 0L
     private var txCenter = Pt.ZERO
     private var txGrabAngle = 0.0
     private var txStartAngle = 0.0
@@ -763,6 +778,7 @@ class InteractionController(
             PointerMode.MOVE -> extendMove(content)
             PointerMode.RESIZE -> extendResize(content)
             PointerMode.TRANSFORM -> extendTransform(content)
+            PointerMode.VERTEX -> extendVertex(content)
             PointerMode.SHAPE -> extendShape(content)
             PointerMode.FLOW_TEXT ->
                 // A plain drag with the text tool scrolls the document; only a long-pressed
@@ -823,7 +839,7 @@ class InteractionController(
                     when {
                         textCleared || linkHandled -> Unit
                         state.overscrollY > 0.0 -> releaseOverscroll()
-                        tap && hasSelection && selectionBoundsContent()?.contains(content) != true -> clearSelection()
+                        tap && hasSelection && selectionChromeBox()?.contains(content) != true -> clearSelection()
                         !state.verticalScroll -> endPanPaginated()
                         else -> startPanFling()
                     }
@@ -837,6 +853,7 @@ class InteractionController(
             PointerMode.MOVE -> endMove(content)
             PointerMode.RESIZE -> endResize()
             PointerMode.TRANSFORM -> endTransform()
+            PointerMode.VERTEX -> endVertex(e.eventTime)
             PointerMode.SHAPE -> endShape()
             PointerMode.FLOW_TEXT -> {
                 mode = PointerMode.IDLE
@@ -1383,12 +1400,32 @@ class InteractionController(
     }
 
     /** Resize handles for the current selection in content space: a single line/arrow's two
-     *  endpoint handles, else the eight handles of the oriented selection box. */
+     *  endpoint handles, else the handles of the oriented selection box (corners only for a lone
+     *  shape that keeps its aspect). */
     private fun selectionResizeHandles(): List<ResizeHandle> {
         val endpoint = singleEndpointShape()
         if (endpoint != null) return endpointHandles(endpoint)
-        return selObb?.let { ResizeMath.obbHandles(it) } ?: emptyList()
+        val all = selectionChromeBox()?.let { ResizeMath.obbHandles(it) } ?: return emptyList()
+        val square = (selection.singleOrNull()?.item as? ShapeItem)?.shape?.keepsAspect == true
+        return if (square) all.filter { it.id in CORNER_HANDLES } else all
     }
+
+    /** The lone selected shape that shows its own frame and point dots, or null. */
+    private fun framedShape(): Selected? =
+        selection.singleOrNull()?.takeIf { (it.item as? ShapeItem)?.frameObb() != null }
+
+    /**
+     * How far the chrome sits outside [selObb]: nothing for a group, whose box already wraps the
+     * ink, but a lone shape's frame gets its outline's reach plus a fixed on-screen gap, so the box
+     * corners clear the shape's own corners and their dots.
+     */
+    private fun selectionChromeMargin(): Double {
+        val shape = framedShape()?.item as? ShapeItem ?: return 0.0
+        return shape.framePad + com.xnotes.core.infinite.OverlayTessellator.FRAME_MARGIN_PX / state.zoom
+    }
+
+    /** The box the chrome draws and grabs by: [selObb] pushed out by [selectionChromeMargin]. */
+    private fun selectionChromeBox(): Obb? = selObb?.grow(selectionChromeMargin())
 
     /** A line/arrow's two endpoint handles, mapped from page space into content space. */
     private fun endpointHandles(sel: Selected): List<ResizeHandle> {
@@ -1409,7 +1446,7 @@ class InteractionController(
      *  null when the selection can't rotate or is a single line/arrow (reoriented by an endpoint). */
     private fun selectionRotatePoint(): Pt? {
         if (!selectionIsRotatable() || singleEndpointShape() != null) return null
-        val obb = selObb ?: return null
+        val obb = selectionChromeBox() ?: return null
         return ResizeMath.obbRotateGrip(obb, ROTATE_ARM / state.zoom)
     }
 
@@ -1421,7 +1458,7 @@ class InteractionController(
         val tol = HANDLE_HIT / state.zoom
         selectionRotatePoint()?.let { if (it.distanceTo(content) <= tol) return true }
         if (ResizeMath.hitHandle(selectionResizeHandles(), content, tol) != null) return true
-        return selObb?.contains(content) == true
+        return selectionChromeBox()?.contains(content) == true
     }
 
     /** If [content] grabs a resize or rotate handle of the settled selection, begin that gesture
@@ -1429,6 +1466,7 @@ class InteractionController(
      *  select and lasso tools so both grab handles the same way. */
     private fun tryGrabSelectionHandle(content: Pt): Boolean {
         if (selection.isEmpty()) return false
+        if (tryGrabDot(content)) return true
         val tol = HANDLE_HIT / state.zoom
         selectionRotatePoint()?.let {
             if (it.distanceTo(content) <= tol) {
@@ -1442,8 +1480,7 @@ class InteractionController(
             beginResize(endpoint, id)
             return true
         }
-        val obb = selObb ?: return false
-        val id = ResizeMath.hitHandle(ResizeMath.obbHandles(obb), content, tol) ?: return false
+        val id = ResizeMath.hitHandle(selectionResizeHandles(), content, tol) ?: return false
         beginTransform(id, content)
         return true
     }
@@ -1453,7 +1490,7 @@ class InteractionController(
         // Inside the settled selection the press moves it, whatever it landed on. Hit-testing
         // first would re-pick the stroke under the finger, and you meant to drag what is
         // selected, not to select what happens to sit inside it.
-        if (selObb?.contains(content) == true) {
+        if (selectionChromeBox()?.contains(content) == true) {
             beginMove(content)
             return
         }
@@ -1499,7 +1536,7 @@ class InteractionController(
         // A tap on the settled selection grabs it (a resize/rotate handle, or a move when inside the
         // oriented box) instead of starting a fresh lasso.
         if (tryGrabSelectionHandle(content)) return
-        if (selObb?.contains(content) == true) {
+        if (selectionChromeBox()?.contains(content) == true) {
             beginMove(content)
             return
         }
@@ -1683,6 +1720,122 @@ class InteractionController(
         if (changed) maybeSwitchBackAfterSelect()
     }
 
+    // --- POINT EDITING ---
+
+    /**
+     * A press on one of a lone shape's dots: a vertex dot drags that point, an edge dot splits its
+     * edge and drags the new point. The dots sit inside the box, so they are tried before it.
+     */
+    private fun tryGrabDot(content: Pt): Boolean {
+        val sel = framedShape() ?: return false
+        val shape = sel.item as ShapeItem
+        if (state.pageRects.getOrNull(sel.pageIndex) == null) return false
+        val local = state.toPageSpace(sel.pageIndex, content)
+        val reach = com.xnotes.core.infinite.OverlayTessellator.DOT_TOUCH_PX / state.zoom
+        val vertex = shape.vertexDots().minByOrNull { it.at.distanceTo(local) }?.takeIf { it.at.distanceTo(local) <= reach }
+        val edge = if (vertex != null) null else {
+            shape.edgeDots(com.xnotes.core.infinite.OverlayTessellator.EDGE_DOT_MIN_PX / state.zoom)
+                .minByOrNull { it.at.distanceTo(local) }?.takeIf { it.at.distanceTo(local) <= reach }
+        }
+        val dot = vertex ?: edge ?: return false
+        vertexBefore = shape.snapshotGeometry()
+        shape.toFree()
+        vertexSpot = if (edge != null) shape.splitEdge(dot.spot) ?: dot.spot else dot.spot
+        vertexBase = shape.snapshotGeometry()
+        vertexSel = sel
+        vertexDownAt = content
+        vertexMoved = false
+        vertexWasEdge = edge != null
+        selObb = selectionBox()
+        mode = PointerMode.VERTEX
+        onSelectionMenu(null)
+        requestRender()
+        return true
+    }
+
+    private fun extendVertex(content: Pt) {
+        val sel = vertexSel ?: return
+        val shape = sel.item as? ShapeItem ?: return
+        val spot = vertexSpot ?: return
+        val base = vertexBase ?: return
+        if (state.pageRects.getOrNull(sel.pageIndex) == null) return
+        // A dot is small: a press that wobbles a pixel or two is still a tap, not an edit.
+        if (!vertexMoved && content.distanceTo(vertexDownAt) * state.zoom < LONG_PRESS_SLOP) return
+        vertexMoved = true
+        shape.restoreGeometry(base)
+        shape.moveVertex(spot, state.toPageSpace(sel.pageIndex, content))
+        selObb = selectionBox()
+        requestRender()
+    }
+
+    /** Pen up on a point drag: an edit is one undo step; a tap changes nothing, and a second one deletes. */
+    private fun endVertex(eventTime: Long) {
+        val sel = vertexSel
+        val shape = sel?.item as? ShapeItem
+        val before = vertexBefore
+        val spot = vertexSpot
+        if (shape != null && before != null) {
+            if (vertexMoved) {
+                commitPointEdit(shape, before)
+                lastVertexTap = null
+            } else {
+                shape.restoreGeometry(before)
+                if (!vertexWasEdge && spot != null && spot == lastVertexTap && eventTime - lastVertexTapAt <= DOUBLE_TAP_MS) {
+                    lastVertexTap = null
+                    shape.toFree()
+                    if (shape.deleteVertex(spot)) commitPointEdit(shape, before) else shape.restoreGeometry(before)
+                } else {
+                    lastVertexTap = if (vertexWasEdge) null else spot
+                    lastVertexTapAt = eventTime
+                }
+            }
+        }
+        clearVertex()
+        selObb = selectionBox()
+        mode = PointerMode.IDLE
+        refreshSelectionMenu()
+        requestRender()
+    }
+
+    private fun commitPointEdit(shape: ShapeItem, before: GeometrySnapshot) {
+        history.push(TransformItems(listOf(shape), listOf(before), listOf(shape.snapshotGeometry())))
+        state.document.dirty = true
+        onContentChanged()
+    }
+
+    private fun abandonVertex() {
+        val shape = vertexSel?.item as? ShapeItem
+        vertexBefore?.let { shape?.restoreGeometry(it) }
+        clearVertex()
+        selObb = selectionBox()
+    }
+
+    private fun clearVertex() {
+        vertexSel = null
+        vertexSpot = null
+        vertexBefore = null
+        vertexBase = null
+        vertexMoved = false
+    }
+
+    /** A lone shape's point dots over its chrome: faint ones halfway along edges, solid ones on vertices. */
+    private fun drawEditDots(r: Renderer) {
+        if (mode == PointerMode.MOVE || mode == PointerMode.TRANSFORM) return
+        val sel = framedShape() ?: return
+        val shape = sel.item as ShapeItem
+        if (state.pageRects.getOrNull(sel.pageIndex) == null) return
+        val ot = com.xnotes.core.infinite.OverlayTessellator
+        val accent = state.palette.accent
+        for (d in shape.edgeDots(ot.EDGE_DOT_MIN_PX / state.zoom)) {
+            r.fillCircle(state.fromPageSpace(sel.pageIndex, d.at), ot.EDGE_DOT_PX / 2.0 / state.zoom, accent.withAlpha(140))
+        }
+        for (d in shape.vertexDots()) {
+            val c = state.fromPageSpace(sel.pageIndex, d.at)
+            r.fillCircle(c, ot.VERTEX_DOT_PX / 2.0 / state.zoom, accent)
+            r.fillCircle(c, ot.VERTEX_CORE_PX / 2.0 / state.zoom, ot.DOT_CORE)
+        }
+    }
+
     // --- TRANSFORM (generic resize + rotate) ---
 
     /** Begin a resize ([handle] non-null) or rotate ([handle] null) of the whole selection. Snapshots
@@ -1691,6 +1844,7 @@ class InteractionController(
         txItems = selection.toList()
         txSnaps = txItems.map { it.item.snapshotGeometry() }
         txStartObb = selObb
+        txMargin = selectionChromeMargin()
         txHandle = handle
         if (handle == null) {
             val c = selObb?.center ?: content
@@ -1710,7 +1864,7 @@ class InteractionController(
         val world: Affine
         val handle = txHandle
         if (handle != null) {
-            val res = ResizeMath.obbResize(obb0, handle, content)
+            val res = ResizeMath.obbResize(obb0, handle, content, txMargin)
             selObb = res.obb
             world = res.transform
         } else {
@@ -2947,6 +3101,7 @@ class InteractionController(
         clearFlipPull()
         clearOverscroll()
         if (mode == PointerMode.ERASE) endErase() // what a cancelled erase took stays one undo step
+        if (mode == PointerMode.VERTEX) abandonVertex()
         pushStrokeEdit(null) // a cancelled crossing still left segments on the pages behind it
         liveStroke = null
         strokePageIndex = null
@@ -3026,7 +3181,7 @@ class InteractionController(
                 mode == PointerMode.LASSO_DRAW && lassoPoints.size >= 2 ->
                     r.strokePolyline(lassoPoints, chromePen(1.3))
                 selection.isNotEmpty() ->
-                    selObb?.let { obb ->
+                    selectionChromeBox()?.let { obb ->
                         r.strokePolygon(obb.corners().map { Pt(it.x + moveOffset.x, it.y + moveOffset.y) }, accent)
                     }
             }
@@ -3036,7 +3191,7 @@ class InteractionController(
                 val side = HANDLE_SIZE / state.zoom
                 // Rotate grip: a short stem out from the box's top edge up to a round handle.
                 selectionRotatePoint()?.let { rp ->
-                    selObb?.let { obb ->
+                    selectionChromeBox()?.let { obb ->
                         val base = ResizeMath.obbTopMid(obb)
                         val stemTop = Pt(base.x + moveOffset.x, base.y + moveOffset.y)
                         val grip = Pt(rp.x + moveOffset.x, rp.y + moveOffset.y)
@@ -3048,6 +3203,7 @@ class InteractionController(
                     val c = Pt(h.content.x + moveOffset.x, h.content.y + moveOffset.y)
                     r.fillRect(Rect(c.x - side / 2, c.y - side / 2, side, side), state.palette.accent)
                 }
+                drawEditDots(r)
             }
         }
 
@@ -3397,6 +3553,11 @@ class InteractionController(
         const val TEXT_MAX_PT = 96.0
         const val LONG_PRESS_MS = 450L
         const val LONG_PRESS_SLOP = 6.0
+
+        /** Two taps on the same vertex dot within this long (ms) delete the vertex. */
+        const val DOUBLE_TAP_MS = 320L
+
+        private val CORNER_HANDLES = setOf(HandleId.TL, HandleId.TR, HandleId.BL, HandleId.BR)
 
         /** Hold-to-snap: how long the pen must rest (ms) before a freehand stroke snaps to a shape. */
         const val SHAPE_DWELL_MS = 500L

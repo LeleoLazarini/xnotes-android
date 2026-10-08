@@ -124,6 +124,31 @@ object ResizeMath {
     }
 
     /**
+     * As [obbResize], for handles drawn [margin] outside the box that scales: a lone shape's frame,
+     * whose chrome sits past its outline. The pointer is read as if pulled back by the margin, so
+     * the box edge stays exactly the margin behind the finger rather than scaling the gap.
+     */
+    fun obbResize(obb: Obb, handle: HandleId, pointer: Pt, margin: Double): ObbResize {
+        if (margin <= 0.0) return obbResize(obb, handle, pointer)
+        val local = obb.worldToLocal(pointer)
+        val dir = handleDirection(handle)
+        return obbResize(obb, handle, obb.localToWorld(Pt(local.x - dir.x * margin, local.y - dir.y * margin)))
+    }
+
+    /** Which way a handle sits from the box centre, one unit per axis it moves along. */
+    fun handleDirection(handle: HandleId): Pt = when (handle) {
+        HandleId.TL -> Pt(-1.0, -1.0)
+        HandleId.TR -> Pt(1.0, -1.0)
+        HandleId.BL -> Pt(-1.0, 1.0)
+        HandleId.BR -> Pt(1.0, 1.0)
+        HandleId.L -> Pt(-1.0, 0.0)
+        HandleId.R -> Pt(1.0, 0.0)
+        HandleId.T -> Pt(0.0, -1.0)
+        HandleId.B -> Pt(0.0, 1.0)
+        else -> Pt.ZERO
+    }
+
+    /**
      * The scale a box-handle drag produces: a corner scales both axes by one factor (aspect-locked,
      * anchored at the opposite corner); an edge scales a single axis (anchored at the opposite
      * edge). Each axis is floored positive so the box can't shrink past [MIN_SIZE] or flip.

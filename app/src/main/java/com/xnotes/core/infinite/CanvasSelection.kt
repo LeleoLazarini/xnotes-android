@@ -73,21 +73,39 @@ class CanvasSelection(private val doc: InfiniteDocument) {
     /** True when the selection is one shape boxed by its own frame, which a drag keeps turned. */
     val isFramedShape: Boolean get() = (items.singleOrNull() as? ShapeItem)?.frameObb() != null
 
+    private val CORNERS = setOf(HandleId.TL, HandleId.TR, HandleId.BL, HandleId.BR)
+
     private fun boxOf(of: List<CanvasItem>): Obb? =
         (of.singleOrNull() as? ShapeItem)?.frameObb() ?: boundsOf(of)?.let { Obb.fromAabb(it) }
 
-    /** True when [p] is inside the selection, so a press there grabs it rather than starting a band. */
-    fun contains(p: Pt): Boolean = box?.contains(p) == true
+    /**
+     * How far the chrome sits outside [box]: nothing for a group, whose box already wraps the ink,
+     * but a lone shape's frame gets its outline's reach plus [screenMargin], so the box corners
+     * clear the shape's own corners and their vertex dots.
+     */
+    fun chromeMargin(screenMargin: Double): Double =
+        (items.singleOrNull() as? ShapeItem)?.takeIf { it.frameObb() != null }?.let { it.framePad + screenMargin } ?: 0.0
 
-    /** The eight resize handles, in content space. */
-    fun handles(): List<ResizeHandle> = box?.let { ResizeMath.obbHandles(it) } ?: emptyList()
+    /** The box the chrome draws and grabs by: [box] pushed out by [chromeMargin]. */
+    fun chromeBox(screenMargin: Double = 0.0): Obb? = box?.grow(chromeMargin(screenMargin))
+
+    /** True when [p] is inside the selection, so a press there grabs it rather than starting a band. */
+    fun contains(p: Pt, screenMargin: Double = 0.0): Boolean = chromeBox(screenMargin)?.contains(p) == true
+
+    /** The resize handles, in content space; a shape that keeps its aspect gets corners only. */
+    fun handles(screenMargin: Double = 0.0): List<ResizeHandle> {
+        val all = chromeBox(screenMargin)?.let { ResizeMath.obbHandles(it) } ?: return emptyList()
+        val square = (items.singleOrNull() as? ShapeItem)?.shape?.keepsAspect == true
+        return if (square) all.filter { it.id in CORNERS } else all
+    }
 
     /** The rotate grip's centre, [arm] content pixels past the box's top edge. */
-    fun rotateGrip(arm: Double): Pt? = box?.let { ResizeMath.obbRotateGrip(it, arm) }
+    fun rotateGrip(arm: Double, screenMargin: Double = 0.0): Pt? =
+        chromeBox(screenMargin)?.let { ResizeMath.obbRotateGrip(it, arm) }
 
     /** Which handle [p] lands on, within [tolerance] content pixels, or null. */
-    fun hitHandle(p: Pt, tolerance: Double): HandleId? =
-        ResizeMath.hitHandle(handles(), p, tolerance)
+    fun hitHandle(p: Pt, tolerance: Double, screenMargin: Double = 0.0): HandleId? =
+        ResizeMath.hitHandle(handles(screenMargin), p, tolerance)
 
     // --- transforms ---
 
@@ -146,10 +164,13 @@ class CanvasSelection(private val doc: InfiniteDocument) {
         doc.itemsChanged(items)
     }
 
-    /** Scale a handle drag in the box's own frame, anchored at the opposite handle. */
-    fun resizeLive(handle: HandleId, pointer: Pt) {
+    /**
+     * Scale a handle drag in the box's own frame, anchored at the opposite handle. [margin] is how
+     * far outside the box the handle sits ([chromeMargin]), which the box edge keeps behind it.
+     */
+    fun resizeLive(handle: HandleId, pointer: Pt, margin: Double = 0.0) {
         val from = startBox ?: return
-        val result = ResizeMath.obbResize(from, handle, pointer)
+        val result = ResizeMath.obbResize(from, handle, pointer, margin)
         box = result.obb
         applyLive(result.transform)
     }
@@ -158,9 +179,9 @@ class CanvasSelection(private val doc: InfiniteDocument) {
      * Scale the box alone and report the map, for a drag the renderer is scaling rather than the
      * model. The counterpart of [previewMove] and [previewRotate].
      */
-    fun previewResize(handle: HandleId, pointer: Pt): Affine? {
+    fun previewResize(handle: HandleId, pointer: Pt, margin: Double = 0.0): Affine? {
         val from = startBox ?: return null
-        val result = ResizeMath.obbResize(from, handle, pointer)
+        val result = ResizeMath.obbResize(from, handle, pointer, margin)
         box = result.obb
         return result.transform
     }
@@ -189,6 +210,12 @@ class CanvasSelection(private val doc: InfiniteDocument) {
         val swept = sweptAngle(from, pointer)
         box = from.copy(angle = from.angle + swept)
         return swept
+    }
+
+    /** Re-file [item] after a change the selection did not make itself, a point edit, and refit the box. */
+    fun itemChanged(item: CanvasItem) {
+        doc.itemsChanged(listOf(item))
+        refreshBox()
     }
 
     /** Put the box back where the drag started, for a gesture that was cancelled rather than ended. */

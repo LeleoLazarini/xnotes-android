@@ -1028,8 +1028,16 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
             parts += OverlayTessellator.band(it, zoom, accent, StrokeTessellator.DEFAULT_TOLERANCE, devicePxPerDp)
             bounds = it.outset(4.0 / zoom)
         }
-        selection.box?.let { box ->
-            parts += OverlayTessellator.selection(box, zoom, accent, StrokeTessellator.DEFAULT_TOLERANCE, devicePxPerDp)
+        val margin = OverlayTessellator.FRAME_MARGIN_PX / zoom
+        selection.chromeBox(margin)?.let { box ->
+            // A lone shape also shows the dots that edit its points, except while a drag carries it.
+            val shape = (selection.items.singleOrNull() as? ShapeItem)?.takeIf { interaction.showsEditDots }
+            parts += OverlayTessellator.selection(
+                box, zoom, accent, StrokeTessellator.DEFAULT_TOLERANCE, devicePxPerDp,
+                handles = selection.handles(margin).map { it.content },
+                vertexDots = shape?.vertexDots()?.map { it.at }.orEmpty(),
+                edgeDots = shape?.edgeDots(OverlayTessellator.EDGE_DOT_MIN_PX / zoom)?.map { it.at }.orEmpty(),
+            )
             val b = OverlayTessellator.selectionBounds(box, zoom)
             bounds = bounds?.union(b) ?: b
         }

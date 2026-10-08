@@ -38,7 +38,7 @@ import kotlin.math.exp
 import kotlin.math.max
 
 /** What the current gesture is doing. */
-enum class CanvasPointerMode { IDLE, PAN, PINCH, DRAW, ERASE, SHAPE, BAND, LASSO, MOVE, RESIZE, ROTATE }
+enum class CanvasPointerMode { IDLE, PAN, PINCH, DRAW, ERASE, SHAPE, BAND, LASSO, MOVE, RESIZE, ROTATE, VERTEX }
 
 /**
  * Gestures on the infinite canvas.
@@ -167,6 +167,23 @@ class InfiniteInteraction(
     // through a resize, which a mesh scaled by the shader cannot.
     private var bakedInLift: Set<CanvasItem> = emptySet()
     private var liftItems: List<CanvasItem> = emptyList()
+
+    // How far outside the box a resize's handle sat, which the box edge keeps behind the pointer.
+    private var transformMargin = 0.0
+
+    // A point drag on a lone shape: what it grabbed, the shape as it was before (for a tap that
+    // changes nothing) and as the drag measures from (free, split if it began on an edge dot).
+    private var vertexShape: ShapeItem? = null
+    private var vertexSpot: com.xnotes.core.shapes.PathSpot? = null
+    private var vertexBefore: com.xnotes.core.model.GeometrySnapshot? = null
+    private var vertexBase: com.xnotes.core.model.GeometrySnapshot? = null
+    private var vertexDownAt = Pt.ZERO
+    private var vertexMoved = false
+    private var vertexWasEdge = false
+
+    // The last tap on a vertex dot, for the double tap that deletes it.
+    private var lastVertexTap: com.xnotes.core.shapes.PathSpot? = null
+    private var lastVertexTapAt = 0L
 
     // A finger press landed off a live selection and became a pan; a tap there dismisses it, a
     // real drag pans and leaves it alone.
@@ -413,6 +430,7 @@ class InfiniteInteraction(
             CanvasPointerMode.MOVE -> extendMove(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.RESIZE -> extendResize(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.ROTATE -> extendRotate(e.getX(0).toDouble(), e.getY(0).toDouble())
+            CanvasPointerMode.VERTEX -> extendVertex(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.IDLE -> Unit
         }
     }
@@ -452,6 +470,7 @@ class InfiniteInteraction(
             CanvasPointerMode.LASSO -> endLasso()
             CanvasPointerMode.MOVE -> endMove()
             CanvasPointerMode.RESIZE, CanvasPointerMode.ROTATE -> endTransform()
+            CanvasPointerMode.VERTEX -> endVertex(e.eventTime)
             else -> Unit
         }
         mode = CanvasPointerMode.IDLE
@@ -476,6 +495,7 @@ class InfiniteInteraction(
             onLiftSelection(emptyList(), LiftTransform.NONE)
             onSelectionChanged()
         }
+        if (mode == CanvasPointerMode.VERTEX) abandonVertex()
         if ((mode == CanvasPointerMode.ROTATE || mode == CanvasPointerMode.RESIZE) && liftedTransform) {
             selection()?.previewBack()
             if (bakedInLift.isNotEmpty()) selection()?.applyLiveTo(bakedInLift, Affine.IDENTITY)
@@ -603,6 +623,10 @@ class InfiniteInteraction(
 
     fun hasSelection(): Boolean = selection()?.isEmpty == false
 
+    /** False while a move or a handle drag is in flight, when the shader carries the ink and dots would lag. */
+    val showsEditDots: Boolean
+        get() = mode != CanvasPointerMode.MOVE && mode != CanvasPointerMode.RESIZE && mode != CanvasPointerMode.ROTATE
+
     /**
      * Whether [at] grabs the settled selection: its rotate grip, one of its handles, or its body.
      * A press that does is routed to the selection whatever tool is armed and whatever is touching,
@@ -612,11 +636,15 @@ class InfiniteInteraction(
         val sel = selection() ?: return false
         if (sel.isEmpty) return false
         val tolerance = HANDLE_TOUCH_PX / viewport.zoom
-        val grip = sel.rotateGrip(OverlayTessellator.GRIP_ARM_PX / viewport.zoom)
+        val margin = frameMargin()
+        val grip = sel.rotateGrip(OverlayTessellator.GRIP_ARM_PX / viewport.zoom, margin)
         if (grip != null && at.distanceTo(grip) <= tolerance) return true
-        if (sel.hitHandle(at, tolerance) != null) return true
-        return sel.contains(at)
+        if (sel.hitHandle(at, tolerance, margin) != null) return true
+        return sel.contains(at, margin)
     }
+
+    /** The on-screen gap a lone shape's chrome keeps from its outline, in content pixels. */
+    private fun frameMargin(): Double = OverlayTessellator.FRAME_MARGIN_PX / viewport.zoom
 
     /** Clear the selection and its chrome, for a tool change or a document swap. */
     fun clearSelection() {
@@ -640,23 +668,26 @@ class InfiniteInteraction(
      */
     private fun tryGrabSelection(sel: CanvasSelection, at: Pt): Boolean {
         if (sel.isEmpty) return false
+        if (tryGrabDot(sel, at)) return true
         val tolerance = HANDLE_TOUCH_PX / viewport.zoom
-        val grip = sel.rotateGrip(OverlayTessellator.GRIP_ARM_PX / viewport.zoom)
+        val margin = frameMargin()
+        val grip = sel.rotateGrip(OverlayTessellator.GRIP_ARM_PX / viewport.zoom, margin)
         if (grip != null && at.distanceTo(grip) <= tolerance) {
             sel.beginTransform(at)
             beginLiftedTransform(sel, at, resize = false)
             mode = CanvasPointerMode.ROTATE
             return true
         }
-        val handle = sel.hitHandle(at, tolerance)
+        val handle = sel.hitHandle(at, tolerance, margin)
         if (handle != null) {
             grabHandle = handle
+            transformMargin = sel.chromeMargin(margin)
             sel.beginTransform()
             beginLiftedTransform(sel, at, resize = true)
             mode = CanvasPointerMode.RESIZE
             return true
         }
-        if (sel.contains(at)) {
+        if (sel.contains(at, margin)) {
             beginMoveAt(sel, at)
             return true
         }
@@ -823,11 +854,11 @@ class InfiniteInteraction(
         val at = viewport.viewportToContent(Pt(vx, vy))
         transformPointer = at
         if (liftedTransform) {
-            val map = sel.previewResize(handle, at) ?: return
+            val map = sel.previewResize(handle, at, transformMargin) ?: return
             if (bakedInLift.isNotEmpty()) sel.applyLiveTo(bakedInLift, map)
             onLiftSelection(liftItems, LiftTransform.of(map, sel.transformPivot ?: Pt.ZERO))
         } else {
-            sel.resizeLive(handle, at)
+            sel.resizeLive(handle, at, transformMargin)
         }
         onSelectionChanged()
         requestRender()
@@ -856,7 +887,7 @@ class InfiniteInteraction(
         // Finger up on a lifted drag: apply the whole thing to the model once, then hand the drawing
         // back to it.
         if (liftedTransform) {
-            if (handle != null) sel.resizeLive(handle, transformPointer)
+            if (handle != null) sel.resizeLive(handle, transformPointer, transformMargin)
             else sel.rotateLive(transformPointer)
             onLiftSelection(emptyList(), LiftTransform.NONE)
             endLift()
@@ -871,6 +902,94 @@ class InfiniteInteraction(
         if ((wasResize && upright) || sel.isFramedShape) sel.refreshBox()
         onSelectionChanged()
         requestRender()
+    }
+
+    // --- point editing ---
+
+    /**
+     * A press on one of a lone shape's dots: a vertex dot starts a drag of that point, an edge dot
+     * splits its edge and drags the new point. Dots sit inside the box, so they are tried first.
+     */
+    private fun tryGrabDot(sel: CanvasSelection, at: Pt): Boolean {
+        val shape = sel.items.singleOrNull() as? ShapeItem ?: return false
+        val reach = OverlayTessellator.DOT_TOUCH_PX / viewport.zoom
+        val vertex = shape.vertexDots().minByOrNull { it.at.distanceTo(at) }?.takeIf { it.at.distanceTo(at) <= reach }
+        val edge = if (vertex != null) null else {
+            shape.edgeDots(OverlayTessellator.EDGE_DOT_MIN_PX / viewport.zoom)
+                .minByOrNull { it.at.distanceTo(at) }?.takeIf { it.at.distanceTo(at) <= reach }
+        }
+        val dot = vertex ?: edge ?: return false
+        sel.beginTransform()
+        vertexBefore = shape.snapshotGeometry()
+        shape.toFree()
+        vertexSpot = if (edge != null) shape.splitEdge(dot.spot) ?: dot.spot else dot.spot
+        vertexBase = shape.snapshotGeometry()
+        vertexShape = shape
+        vertexDownAt = at
+        vertexMoved = false
+        vertexWasEdge = edge != null
+        sel.itemChanged(shape)
+        mode = CanvasPointerMode.VERTEX
+        onSelectionChanged()
+        requestRender()
+        return true
+    }
+
+    private fun extendVertex(vx: Double, vy: Double) {
+        val shape = vertexShape ?: return
+        val spot = vertexSpot ?: return
+        val base = vertexBase ?: return
+        val at = viewport.viewportToContent(Pt(vx, vy))
+        // A dot is small: a press that wobbles a pixel or two is still a tap, not an edit.
+        if (!vertexMoved && (at.distanceTo(vertexDownAt) * viewport.zoom) < InteractionController.LONG_PRESS_SLOP) return
+        vertexMoved = true
+        shape.restoreGeometry(base)
+        shape.moveVertex(spot, at)
+        selection()?.itemChanged(shape)
+        onSelectionChanged()
+        requestRender()
+    }
+
+    /** Finger up on a point drag: an edit is one undo step; a tap changes nothing, and a second one deletes. */
+    private fun endVertex(eventTime: Long) {
+        val shape = vertexShape ?: return
+        val sel = selection()
+        val spot = vertexSpot
+        if (vertexMoved) {
+            onCommitSelection(sel?.buildCommand(movedOnly = false))
+            lastVertexTap = null
+        } else {
+            vertexBefore?.let { shape.restoreGeometry(it) }
+            if (!vertexWasEdge && spot != null && spot == lastVertexTap &&
+                eventTime - lastVertexTapAt <= InteractionController.DOUBLE_TAP_MS
+            ) {
+                lastVertexTap = null
+                shape.toFree()
+                if (shape.deleteVertex(spot)) onCommitSelection(sel?.buildCommand(movedOnly = false))
+                else vertexBefore?.let { shape.restoreGeometry(it) }
+            } else {
+                lastVertexTap = if (vertexWasEdge) null else spot
+                lastVertexTapAt = eventTime
+            }
+        }
+        sel?.itemChanged(shape)
+        clearVertex()
+    }
+
+    private fun abandonVertex() {
+        val shape = vertexShape ?: return
+        vertexBefore?.let { shape.restoreGeometry(it) }
+        selection()?.itemChanged(shape)
+        clearVertex()
+        onSelectionChanged()
+    }
+
+    private fun clearVertex() {
+        vertexShape = null
+        vertexSpot = null
+        vertexBefore = null
+        vertexBase = null
+        vertexMoved = false
     }
 
     // --- shapes ---

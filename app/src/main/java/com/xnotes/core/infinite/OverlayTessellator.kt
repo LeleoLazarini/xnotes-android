@@ -34,6 +34,22 @@ object OverlayTessellator {
     /** Band and lasso outline thickness, in device pixels. */
     const val MARQUEE_PX = 1.4
 
+    /** How far a lone shape's chrome sits outside its outline, in device pixels. */
+    const val FRAME_MARGIN_PX = 14.0
+
+    /** Vertex dot diameter and the light core inside it, in device pixels. */
+    const val VERTEX_DOT_PX = 12.0
+    const val VERTEX_CORE_PX = 6.0
+
+    /** Edge midpoint dot diameter, in device pixels. */
+    const val EDGE_DOT_PX = 9.0
+
+    /** An edge shorter than this on screen shows no midpoint dot, in device pixels. */
+    const val EDGE_DOT_MIN_PX = 48.0
+
+    /** How close a press has to land to a dot to grab it, in device pixels. */
+    const val DOT_TOUCH_PX = 20.0
+
     /**
      * Dash on/off runs for every marquee, in dp, so chrome reads the same on any screen. Both
      * canvases draw from these, which is what keeps a band, a lasso and a selection box looking
@@ -42,13 +58,20 @@ object OverlayTessellator {
     const val DASH_ON_DP = 8.0
     const val DASH_GAP_DP = 5.0
 
-    /** The selection box, its eight handles and the rotate grip and its stem. */
+    /**
+     * The selection box, its handles (all eight unless [handles] names fewer), the rotate grip and
+     * its stem, and over a lone shape the dots that edit its points: faint ones halfway along each
+     * edge, solid ones on the vertices.
+     */
     fun selection(
         box: Obb,
         zoom: Double,
         accent: Rgba,
         tolerance: Double,
         devicePxPerDp: Double = 1.0,
+        handles: List<Pt>? = null,
+        vertexDots: List<Pt> = emptyList(),
+        edgeDots: List<Pt> = emptyList(),
     ): List<MeshPart> {
         if (zoom <= 0.0) return emptyList()
         val outline = MeshBuilder()
@@ -64,14 +87,29 @@ object OverlayTessellator {
 
         val marks = MeshBuilder()
         val handleHalf = HANDLE_PX / zoom / 2.0
-        for (handle in com.xnotes.canvas.ResizeMath.obbHandles(box)) {
-            marks.rect(handle.content.x - handleHalf, handle.content.y - handleHalf, handleHalf * 2, handleHalf * 2)
+        for (c in handles ?: com.xnotes.canvas.ResizeMath.obbHandles(box).map { it.content }) {
+            marks.rect(c.x - handleHalf, c.y - handleHalf, handleHalf * 2, handleHalf * 2)
         }
         marks.circle(grip.x, grip.y, GRIP_PX / zoom / 2.0, tolerance)
 
-        val parts = ArrayList<MeshPart>(2)
+        val parts = ArrayList<MeshPart>(5)
         if (!outline.isEmpty) parts.add(MeshPart(outline.build(), accent, InkPass.OPAQUE))
         if (!marks.isEmpty) parts.add(MeshPart(marks.build(), accent, InkPass.OPAQUE))
+        if (edgeDots.isNotEmpty()) {
+            val faint = MeshBuilder()
+            for (d in edgeDots) faint.circle(d.x, d.y, EDGE_DOT_PX / zoom / 2.0, tolerance)
+            parts.add(MeshPart(faint.build(), accent.withAlpha(EDGE_DOT_ALPHA), InkPass.OPAQUE))
+        }
+        if (vertexDots.isNotEmpty()) {
+            val dots = MeshBuilder()
+            val cores = MeshBuilder()
+            for (d in vertexDots) {
+                dots.circle(d.x, d.y, VERTEX_DOT_PX / zoom / 2.0, tolerance)
+                cores.circle(d.x, d.y, VERTEX_CORE_PX / zoom / 2.0, tolerance)
+            }
+            parts.add(MeshPart(dots.build(), accent, InkPass.OPAQUE))
+            parts.add(MeshPart(cores.build(), DOT_CORE, InkPass.OPAQUE))
+        }
         return parts
     }
 
@@ -175,6 +213,12 @@ object OverlayTessellator {
     }
 
     /** Content-space bounds of an oriented box grown by its handles and grip, for the cover quad. */
+    /** Edge dots read as a hint beside the solid vertex dots. */
+    private const val EDGE_DOT_ALPHA = 140
+
+    /** The light core that makes a vertex dot read as a point rather than a handle. */
+    val DOT_CORE = Rgba(255, 255, 255, 255)
+
     fun selectionBounds(box: Obb, zoom: Double): Rect {
         val pad = (GRIP_ARM_PX + GRIP_PX + HANDLE_PX) / maxOf(zoom, 1e-9)
         var acc = Rect.bounding(box.corners())

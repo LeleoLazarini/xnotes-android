@@ -7,13 +7,16 @@ import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.Renderer
+import com.xnotes.core.shapes.EditDot
 import com.xnotes.core.shapes.FreePath
 import com.xnotes.core.shapes.PathRole
+import com.xnotes.core.shapes.PathSpot
 import com.xnotes.core.shapes.ShapeGeometry
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.shapes.ShapePainter
 import com.xnotes.core.shapes.ShapeParams
 import com.xnotes.core.shapes.ShapePath
+import com.xnotes.core.shapes.VertexEdit
 import com.xnotes.core.vector.PathFlattener
 import com.xnotes.core.vector.VectorContour
 import com.xnotes.core.vector.VectorSeg
@@ -205,15 +208,94 @@ class ShapeItem(
     }
 
     /**
-     * The shape's own frame as a selection box in page space, turned with it and padded like
-     * [bounds]; null for a line or arrow, which its two endpoints frame instead.
+     * The shape's own frame as a selection box in page space, turned with it; null for a line or
+     * arrow, which its two endpoints frame instead. The chrome draws it [framePad] further out.
      */
     fun frameObb(): Obb? {
         if (shape.isEndpointShape) return null
         val b = box
-        val pad = strokeWidth / 2.0 + 1.0
-        return Obb(b.center, b.w / 2.0 + pad, b.h / 2.0 + pad, rotation)
+        return Obb(b.center, b.w / 2.0, b.h / 2.0, rotation)
     }
+
+    /** How far past the frame the outline itself reaches: half its width, and a pixel to spare. */
+    val framePad: Double get() = strokeWidth / 2.0 + 1.0
+
+    // --- point editing ---
+
+    /** The outline a point edit works on: a free kind's own, or the curves a box kind would become. */
+    private fun editOutline(): List<VectorContour> {
+        val contours = if (isFree) {
+            FreePath.place(path.orEmpty(), box)
+        } else {
+            localGeometry().paths.filter { it.role == PathRole.OUTLINE || it.role == PathRole.STROKE_ONLY }.flatMap { it.contours }
+        }
+        return contours.map(VertexEdit::canonical)
+    }
+
+    /** True when the shape shows vertex dots: a free outline, or a kind with corners. */
+    private fun editable(): Boolean =
+        !shape.isEndpointShape && (isFree || localGeometry().corners.isNotEmpty())
+
+    /** The dots on the vertices a drag can move, on the page; none for a smooth kind, a line or an arrow. */
+    fun vertexDots(): List<EditDot> {
+        if (!editable()) return emptyList()
+        return editOutline().flatMapIndexed { ci, c ->
+            VertexEdit.vertices(c).mapIndexed { vi, v -> EditDot(toPage(v), PathSpot(ci, vi)) }
+        }
+    }
+
+    /**
+     * The dots halfway along each edge, which a drag splits into a new vertex; only beside vertex
+     * dots, and only on edges whose ends are at least [minLength] apart, so a short one stays clear.
+     */
+    fun edgeDots(minLength: Double = 0.0): List<EditDot> {
+        if (!editable()) return emptyList()
+        return editOutline().flatMapIndexed { ci, c ->
+            c.segments.indices.mapNotNull { si ->
+                val from = VertexEdit.vertexAt(c, si)
+                if (from.distanceTo(c.segments[si].end) < minLength) null
+                else EditDot(toPage(VertexEdit.midpoint(c, si)), PathSpot(ci, si))
+            }
+        }
+    }
+
+    /**
+     * Become a free outline of the curves this kind draws, if not one already, so its points can
+     * move one by one. Style, fill and frame are kept; the kind's own knobs go. True when it changed.
+     */
+    fun toFree(): Boolean {
+        if (isFree || shape.isEndpointShape) return false
+        val outline = editOutline()
+        shape = if (shape.isClosed) ShapeKind.POLYGON else ShapeKind.POLYLINE
+        adj = shape.defaultAdj.copyOf()
+        n = shape.defaultN
+        edited(outline)
+        return true
+    }
+
+    /** Move a free outline's vertex [spot] to page point [to]. */
+    fun moveVertex(spot: PathSpot, to: Pt) {
+        if (!isFree) return
+        edited(VertexEdit.moveVertex(editOutline(), spot, toLocal(to)))
+    }
+
+    /** Split a free outline's edge [spot] at its middle; the new vertex's spot, or null when not free. */
+    fun splitEdge(spot: PathSpot): PathSpot? {
+        if (!isFree) return null
+        val (contours, added) = VertexEdit.split(editOutline(), spot)
+        edited(contours)
+        return added
+    }
+
+    /** Delete a free outline's vertex [spot]; false when too few would be left. */
+    fun deleteVertex(spot: PathSpot): Boolean {
+        if (!isFree) return false
+        edited(VertexEdit.delete(editOutline(), spot) ?: return false)
+        return true
+    }
+
+    /** Store an edited outline (unturned frame), reboxing it in the same turned frame. */
+    private fun edited(contours: List<VectorContour>) = refit(FreePath.map(contours, ::toPage), rotation)
 
     /** The turned outline's page-space bounds, before the stroke's own width. */
     private fun outlineBounds(): Rect {
