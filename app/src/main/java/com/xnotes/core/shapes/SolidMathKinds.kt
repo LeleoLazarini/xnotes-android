@@ -412,7 +412,8 @@ internal object SolidMathKinds {
             if (dir.x > 1e-9) (b.right - v.x) / dir.x else null,
             if (dir.x < -1e-9) (v.x - b.left) / -dir.x else null,
         ).filter { it > 1e-9 }.minOrNull() ?: b.h
-        val r = 0.3 * min(b.w, b.h)
+        // The arc fits inside both rays, however short a slid vertex leaves the first.
+        val r = minOf(0.3 * min(b.w, b.h), 0.6 * (b.right - v.x), 0.6 * reach)
         listOf(
             ShapePath(listOf(ShapePath.lines(listOf(Pt(b.right, b.bottom), v, v + dir * reach), false)), PathRole.STROKE_ONLY),
             ShapePath(listOf(VectorContour(Pt(v.x + r, v.y), arcSegments(v, r, r, 0.0, -Math.toRadians(deg)), false)), PathRole.STROKE_ONLY),
