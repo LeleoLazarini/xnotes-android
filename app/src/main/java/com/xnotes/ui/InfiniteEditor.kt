@@ -141,8 +141,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         private set
 
     /** Whether a held freehand stroke may snap to the shape it looks like. */
-    var detectShapes by mutableStateOf(true)
-        private set
+    private var detectShapes = false
 
     /** Live zoom, mirrored into Compose so a readout can follow a pinch frame by frame. */
     var zoomPercent by mutableStateOf(100)
@@ -875,10 +874,6 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     fun armShapeConfig(config: ShapeConfig) {
         shapeConfig = config
-    }
-
-    fun armDetectShapes(on: Boolean) {
-        detectShapes = on
     }
 
     fun configFor(forTool: Tool): ToolConfig {
@@ -1645,10 +1640,11 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     }
 
     /** Adopt the app's pen preferences, so the canvas and the paged note behave the same. */
-    fun applyInputPrefs(fingerDraws: Boolean, penButtonTool: Tool?, zoomLockPan: String = "single") {
+    fun applyInputPrefs(fingerDraws: Boolean, penButtonTool: Tool?, zoomLockPan: String, detectShapes: Boolean) {
         interaction.fingerDraws = fingerDraws
         interaction.penButtonTool = penButtonTool
         interaction.zoomLockPan = zoomLockPan
+        this.detectShapes = detectShapes
     }
 
     fun toggleZoomLock() {
