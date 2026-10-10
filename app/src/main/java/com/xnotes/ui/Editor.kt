@@ -637,6 +637,10 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             // A style tuned on the canvas is the same style, so it persists through this editor.
             it.onToolStyleChanged = { settingsDirty = true }
             it.onSwatchColorChanged = { index, color -> adoptSwatchColor(index, color) }
+            it.onSwatchRecolored = { index, color ->
+                recolorSwatch(index, color)
+                settingsDirty = true
+            }
             // The new-canvas background lives in the settings file this editor owns.
             it.newCanvasBackground = newCanvasBackground
             it.onSaveNewCanvasBackground = { bg -> saveNewCanvasBackground(bg) }
@@ -5457,6 +5461,15 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         pickColor(index)
     }
 
+    /** Recolour a swatch from a fill row's picker without arming it; the ink follows when it is the active one. */
+    override fun recolorSwatch(index: Int, color: Rgba) {
+        if (index !in toolbarColors.indices) return
+        toolbarColors = toolbarColors.toMutableList().also { it[index] = color }
+        if (index == activeColorIndex) controller.inkColor = color
+    }
+
+    override val hostToolbarColorCount: Int get() = toolbarColorCount
+
     /** Commit the swatch's current colour to the recent-colours list — called once the picker closes. */
     override fun rememberSwatchColor(index: Int) {
         toolbarColors.getOrNull(index)?.let { settings = settings.rememberColor(it) }
@@ -5843,9 +5856,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     override fun selectionFills() = controller.selectionFills()
 
-    override fun refillSelection(color: Rgba?) {
-        controller.refillSelection(color)
-        color?.let { settings = settings.rememberColor(it) }
+    override fun refillSelection(color: Rgba?, preview: Boolean) {
+        controller.refillSelection(color, preview)
+        if (!preview) color?.let { settings = settings.rememberColor(it) }
     }
 
     override fun selectionCount() = ShapeCount.of(controller.countedShape())

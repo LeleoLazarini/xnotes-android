@@ -622,17 +622,27 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     override fun selectionFills(): List<Rgba> = selection.items.mapNotNull { (it as? ShapeItem)?.fillRgba }
 
-    override fun refillSelection(color: Rgba?) {
-        val entries = com.xnotes.core.history.RefillShapes.of(selection.items.mapNotNull { it as? ShapeItem }, color)
-        if (entries.isEmpty()) return
-        val cmd = OnCanvas(document, com.xnotes.core.history.RefillShapes(entries), entries.map { it.shape })
-        cmd.redo()
-        history.push(cmd)
-        color?.let { onColorRemembered?.invoke(it) }
+    override fun refillSelection(color: Rgba?, preview: Boolean) {
+        val shapes = selection.items.mapNotNull { (it as? ShapeItem)?.takeIf { s -> s.fillRgba != null } }
+        if (shapes.isEmpty()) return
+        val baseline = refillBaseline ?: shapes.associateWith { it.fillRgba }
+        refillBaseline = if (preview) baseline else null
+        com.xnotes.core.history.RefillShapes(com.xnotes.core.history.RefillShapes.of(shapes, color)).redo()
+        document.itemsChanged(shapes)
+        if (!preview) {
+            val entries = baseline.mapNotNull { (s, before) ->
+                s.fillRgba.takeIf { it != before }?.let { com.xnotes.core.history.RefillShapes.Entry(s, before, it) }
+            }
+            if (entries.isNotEmpty()) history.push(OnCanvas(document, com.xnotes.core.history.RefillShapes(entries), entries.map { it.shape }))
+            color?.let { onColorRemembered?.invoke(it) }
+        }
         markDirty()
         refresh()
         publishOverlay()
     }
+
+    /** The fills as a refill preview found them, so its settling call records them as one step. */
+    private var refillBaseline: Map<ShapeItem, Rgba?>? = null
 
     override fun selectionCount(): ShapeCount? = ShapeCount.of(selection.items.singleOrNull() as? ShapeItem)
 
@@ -890,6 +900,19 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     override fun rememberSwatchColor(index: Int) {
         toolbarColors.getOrNull(index)?.let { onColorRemembered?.invoke(it) }
     }
+
+    override val hostToolbarColorCount: Int get() = toolbarColorCount
+
+    /** Recolour a swatch from a fill row's picker without arming it, reported like any recolour. */
+    override fun recolorSwatch(index: Int, color: Rgba) {
+        if (index !in toolbarColors.indices) return
+        toolbarColors = toolbarColors.toMutableList().also { it[index] = color }
+        if (index == activeColorIndex) inkColor = color
+        onSwatchRecolored?.invoke(index, color)
+    }
+
+    /** Fired when a fill row recoloured a swatch without arming it, so the host keeps the same set. */
+    var onSwatchRecolored: ((Int, Rgba) -> Unit)? = null
 
     /** Fired when a swatch was recoloured here, so the host can adopt it and persist it. */
     var onSwatchColorChanged: ((Int, Rgba) -> Unit)? = null

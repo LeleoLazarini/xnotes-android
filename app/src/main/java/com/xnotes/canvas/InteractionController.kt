@@ -2938,16 +2938,25 @@ class InteractionController(
     fun selectionFills(): List<Rgba> = selection.mapNotNull { (it.item as? ShapeItem)?.fillRgba }
 
     /** Recolour the selected shapes' fills in [color], each keeping its opacity; null matches each outline. */
-    fun refillSelection(color: Rgba?) {
-        val entries = com.xnotes.core.history.RefillShapes.of(selection.mapNotNull { it.item as? ShapeItem }, color)
-        if (entries.isEmpty()) return
-        val cmd = com.xnotes.core.history.RefillShapes(entries)
-        cmd.redo()
-        history.push(cmd)
+    fun refillSelection(color: Rgba?, preview: Boolean = false) {
+        val shapes = selection.mapNotNull { (it.item as? ShapeItem)?.takeIf { s -> s.fillRgba != null } }
+        if (shapes.isEmpty()) return
+        val baseline = refillBaseline ?: shapes.associateWith { it.fillRgba }
+        refillBaseline = if (preview) baseline else null
+        com.xnotes.core.history.RefillShapes(com.xnotes.core.history.RefillShapes.of(shapes, color)).redo()
+        if (!preview) {
+            val entries = baseline.mapNotNull { (s, before) ->
+                s.fillRgba.takeIf { it != before }?.let { com.xnotes.core.history.RefillShapes.Entry(s, before, it) }
+            }
+            if (entries.isNotEmpty()) history.push(com.xnotes.core.history.RefillShapes(entries))
+        }
         state.document.dirty = true
         onContentChanged()
         requestRender()
     }
+
+    /** The fills as a refill preview found them, so its settling call records them as one step. */
+    private var refillBaseline: Map<ShapeItem, Rgba?>? = null
 
     /** The lone selected shape whose points or sides a minus/plus can change, or null. */
     fun countedShape(): ShapeItem? = (selection.singleOrNull()?.item as? ShapeItem)?.takeIf { it.shape.nRange != null }

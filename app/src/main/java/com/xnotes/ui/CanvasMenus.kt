@@ -31,9 +31,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,7 +66,7 @@ import kotlin.math.roundToInt
  * a property of the code rather than something to keep checking, exactly as [ToolPopupHost] does
  * for the tool popups.
  */
-interface SelectionMenuHost {
+interface SelectionMenuHost : SwatchHost {
     /** Where the settled selection sits in viewport pixels, or null to hide the bar. */
     val selectionMenuRect: com.xnotes.core.geometry.Rect?
 
@@ -88,15 +90,15 @@ interface SelectionMenuHost {
      */
     fun restyleSelection(color: Rgba?, width: Double?, preview: Boolean = false)
 
-    /** The toolbar's ink swatches and recently picked colours, offered by the restyle popup. */
-    val hostToolbarColors: List<Rgba>
-    val hostRecentColors: List<Rgba>
-
     /** The fills of the selected shapes that have one, for the restyle popup to open on. */
     fun selectionFills(): List<Rgba>
 
-    /** Recolour the selected shapes' fills in [color], each keeping its opacity; null fills each in its outline's colour. */
-    fun refillSelection(color: Rgba?)
+    /**
+     * Recolour the selected shapes' fills in [color], each keeping its opacity; null fills each in
+     * its outline's colour. A [preview] call skips history, and the next call without it records
+     * everything since as one undo step, so a drag through the picker is a single edit.
+     */
+    fun refillSelection(color: Rgba?, preview: Boolean = false)
 
     /** A lone selected star's points or polygon's sides and the counts it can take; null otherwise. */
     fun selectionCount(): ShapeCount?
@@ -235,27 +237,45 @@ private fun SelectionStylePopup(host: SelectionMenuHost, onDismiss: () -> Unit) 
             val fills = remember { host.selectionFills() }
             if (fills.isNotEmpty()) {
                 var fill by remember { mutableStateOf<Rgba?>(fills.first().copy(a = 255)) }
+                var editingFill by remember { mutableStateOf<Int?>(null) }
                 val outline = color
                 StyleCaption(stringResource(R.string.caption_fill_colour))
+                // The toolbar's own swatches; tapping the chosen one again opens the picker on it, as the toolbar does.
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     MatchDot(outline, selected = fill == null || fill == outline) {
                         fill = null
                         host.refillSelection(null)
                     }
-                    host.hostToolbarColors.forEach { c ->
-                        ColorDot(c.toComposeColor(), selected = fill == c && c != outline) {
-                            fill = c
-                            host.refillSelection(c)
+                    host.shownSwatches.forEachIndexed { i, c ->
+                        val on = fill == c
+                        Box {
+                            ColorDot(c.toComposeColor(), selected = on) {
+                                if (on) {
+                                    editingFill = i
+                                } else {
+                                    fill = c
+                                    host.refillSelection(c)
+                                }
+                            }
+                            if (editingFill == i) {
+                                // However the picker closes, the drag through it settles as one undo step.
+                                val latest by rememberUpdatedState(fill)
+                                DisposableEffect(Unit) { onDispose { host.refillSelection(latest) } }
+                                ColorPickerPopup(
+                                    initial = c,
+                                    recents = host.hostRecentColors,
+                                    onDismiss = {
+                                        host.rememberSwatchColor(i)
+                                        editingFill = null
+                                    },
+                                    onPick = { picked ->
+                                        host.recolorSwatch(i, picked)
+                                        fill = picked
+                                        host.refillSelection(picked, preview = true)
+                                    },
+                                )
+                            }
                         }
-                    }
-                    val shown = fill ?: outline
-                    ColorPickerDot(
-                        shown,
-                        custom = fill != null && fill !in host.hostToolbarColors,
-                        onPick = { fill = it; host.refillSelection(it) },
-                        dismissOnPick = false,
-                    ) { dismiss, pick ->
-                        ColorPickerPopup(initial = shown, recents = host.hostRecentColors, onDismiss = dismiss, onPick = pick)
                     }
                 }
             }

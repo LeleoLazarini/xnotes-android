@@ -7,6 +7,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -50,7 +52,6 @@ import com.xnotes.ui.theme.toComposeColor
 @Composable
 fun ShapeConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
     var config by remember { mutableStateOf(editor.hostShapeConfig) }
-    var pickingFill by remember { mutableStateOf(false) }
     fun emit(next: ShapeConfig) {
         config = next
         editor.updateShapeConfig(next)
@@ -69,9 +70,7 @@ fun ShapeConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
             if (chip.kind.isClosed) {
                 ToggleRow(stringResource(R.string.caption_fill), config.fill) { emit(config.copy(fill = it)) }
                 if (config.fill) {
-                    FillColourRow(config.fillColor, ink, editor.hostToolbarColors, onPick = { emit(config.copy(fillColor = it)) }) {
-                        pickingFill = true
-                    }
+                    FillColourRow(config.fillColor, ink, editor) { emit(config.copy(fillColor = it)) }
                     val minPct = (ShapeConfig.FILL_ALPHA_MIN * 100).toFloat()
                     SliderRow(stringResource(R.string.caption_opacity), (config.fillAlpha * 100).toFloat(), minPct..100f) {
                         emit(config.copy(fillAlpha = (it / 100.0).coerceIn(ShapeConfig.FILL_ALPHA_MIN, ShapeConfig.FILL_ALPHA_MAX)))
@@ -94,14 +93,6 @@ fun ShapeConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
                 }
             }
         }
-    }
-    if (pickingFill) {
-        ColorPickerPopup(
-            initial = config.fillColor ?: ink,
-            recents = editor.hostRecentColors,
-            onDismiss = { pickingFill = false },
-            onPick = { emit(config.copy(fillColor = it.withAlpha(255))) },
-        )
     }
 }
 
@@ -146,23 +137,49 @@ private fun ShapePager(config: ShapeConfig, onPage: (Int) -> Unit, onPick: (Shap
     }
 }
 
-/** The fill's colour: the outline's own, any toolbar swatch, or one picked freely. */
+/**
+ * The fill's colour: the outline's own, or one of the toolbar's swatches, the same ones in the same
+ * order. Tapping the chosen swatch again opens the picker on it, as the toolbar does, and the swatch
+ * takes the new colour everywhere.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FillColourRow(chosen: Rgba?, ink: Rgba, swatches: List<Rgba>, onPick: (Rgba?) -> Unit, onCustom: () -> Unit) {
+private fun FillColourRow(chosen: Rgba?, ink: Rgba, host: SwatchHost, onPick: (Rgba?) -> Unit) {
     val palette = LocalPalette.current
+    var editing by remember { mutableStateOf<Int?>(null) }
     Text(stringResource(R.string.caption_fill_colour), color = palette.text.toComposeColor(), fontSize = 12.sp)
-    Row(Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+    FlowRow(
+        Modifier.padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
         Swatch(ink, selected = chosen == null, label = stringResource(R.string.fill_match_outline), mark = true) { onPick(null) }
-        for (c in swatches.distinct().take(MAX_SWATCHES)) {
-            Swatch(c.withAlpha(255), selected = chosen == c.withAlpha(255), label = null) { onPick(c.withAlpha(255)) }
+        host.shownSwatches.forEachIndexed { i, c ->
+            val colour = c.withAlpha(255)
+            val on = chosen == colour
+            Box {
+                Swatch(colour, selected = on, label = null) { if (on) editing = i else onPick(colour) }
+                if (editing == i) {
+                    ColorPickerPopup(
+                        initial = colour,
+                        recents = host.hostRecentColors,
+                        onDismiss = {
+                            host.rememberSwatchColor(i)
+                            editing = null
+                        },
+                        onPick = { picked ->
+                            host.recolorSwatch(i, picked)
+                            onPick(picked.withAlpha(255))
+                        },
+                    )
+                }
+            }
         }
-        val custom = chosen?.takeIf { c -> swatches.none { it.withAlpha(255) == c } }
-        Swatch(custom ?: palette.surface, selected = custom != null, label = null, plus = true, onClick = onCustom)
     }
 }
 
 @Composable
-private fun Swatch(color: Rgba, selected: Boolean, label: String?, mark: Boolean = false, plus: Boolean = false, onClick: () -> Unit) {
+private fun Swatch(color: Rgba, selected: Boolean, label: String?, mark: Boolean = false, onClick: () -> Unit) {
     val palette = LocalPalette.current
     val body = @Composable {
         Box(
@@ -171,9 +188,9 @@ private fun Swatch(color: Rgba, selected: Boolean, label: String?, mark: Boolean
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            if (mark || plus) {
+            if (mark) {
                 Icon(
-                    if (mark) XnotesIcons.link else XnotesIcons.plus,
+                    XnotesIcons.link,
                     contentDescription = label,
                     tint = (if (color.luminance() > 0.55) Rgba(0, 0, 0) else Rgba(255, 255, 255)).toComposeColor(),
                     modifier = Modifier.size(14.dp),
@@ -350,6 +367,3 @@ private fun headLabel(head: Head): Int = when (head) {
 /** A chip is 38 dp across; six of them and their gaps fill the popup's 256 dp. */
 private const val CHIP = 38
 private const val GAP = 5
-
-/** Toolbar swatches shown beside Match and the free pick, so the row stays one line. */
-private const val MAX_SWATCHES = 5
