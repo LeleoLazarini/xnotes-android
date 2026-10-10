@@ -1857,6 +1857,8 @@ class InteractionController(
             // when the selection is later cleared.
             onContentChanged()
         }
+        // A press that never really moved leaves the connectors as it found them.
+        if (!moved) for ((_, f) in follows) f.restore()
         moveOffset = Pt.ZERO
         looseBefore = null
         endFollow()
