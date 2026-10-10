@@ -447,6 +447,10 @@ class InteractionController(
     private var lastTapViewport: Pt? = null
     private var lastTapTime = 0L
 
+    // What was selected as each tap went down: a double tap labels only a shape that was not.
+    private var tapDownSelected: Set<CanvasItem> = emptySet()
+    private var lastTapSelected: Set<CanvasItem> = emptySet()
+
     /** The style new text boxes are created with; mirrors the active box while one is open. */
     var textFace: FontFace = TextItem.DEFAULT_FACE
         private set
@@ -2589,6 +2593,7 @@ class InteractionController(
         tapCandidate = true
         tapDownViewport = Pt(e.x.toDouble(), e.y.toDouble())
         tapDownTime = e.eventTime
+        tapDownSelected = selection.mapTo(HashSet()) { it.item }
     }
 
     /** A tap that follows another close by and soon after is a double tap. */
@@ -2603,15 +2608,21 @@ class InteractionController(
         val prev = lastTapViewport
         if (prev != null && tapDownTime - lastTapTime <= DOUBLE_TAP_MS && prev.distanceTo(at) <= DOUBLE_TAP_SLOP_DP * state.devicePxPerDp) {
             lastTapViewport = null
-            onDoubleTap(at, e.getToolType(0))
+            onDoubleTap(at, e.getToolType(0), lastTapSelected)
             return
         }
         lastTapViewport = at
         lastTapTime = e.eventTime
+        lastTapSelected = tapDownSelected
     }
 
-    /** A double tap on a closed shape, with the Shape or Select tool or a finger that pans, types its label. */
-    private fun onDoubleTap(viewport: Pt, toolType: Int) {
+    /**
+     * A double tap on a closed shape, with the Shape or Select tool or a finger that pans, types its
+     * label. Only on a shape that was not selected when the first tap went down: on a selected shape
+     * a double tap is a vertex's, so it never labels one, whatever its kind. [selectedBefore] is that
+     * selection; the first tap may well have selected the shape itself.
+     */
+    private fun onDoubleTap(viewport: Pt, toolType: Int, selectedBefore: Set<CanvasItem>) {
         val fingerPans = toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff
         if (tool != Tool.SHAPE && tool != Tool.SELECT && !fingerPans) return
         // The free polygon's own double tap closes its outline.
@@ -2624,6 +2635,7 @@ class InteractionController(
         val shape = state.document.pages[pi].items.lastOrNull {
             it is ShapeItem && !it.locked && it.takesLabel && (it.touches(local, reach) || it.encloses(local))
         } as? ShapeItem ?: return
+        if (shape in selectedBefore) return
         startLabelEdit(shape, pi)
     }
 

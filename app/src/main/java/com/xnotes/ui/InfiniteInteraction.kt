@@ -105,8 +105,8 @@ class InfiniteInteraction(
     private val hasPasteContent: () -> Boolean = { false },
     /** A tool this layer armed by itself, so the chrome can follow: a long-press grab and its end. */
     private val onToolChanged: (Tool) -> Unit = {},
-    /** Two quick taps in one place, at this viewport point, by this pointer type. */
-    private val onDoubleTap: (Pt, Int) -> Unit = { _, _ -> },
+    /** Two quick taps in one place, at this viewport point, by this pointer type, with what was selected as the first went down. */
+    private val onDoubleTap: (Pt, Int, Set<CanvasItem>) -> Unit = { _, _, _ -> },
     /** Whether a shape's label is open in the text overlay. */
     private val isEditingText: () -> Boolean = { false },
     /** End that edit, keeping what was typed. */
@@ -255,6 +255,7 @@ class InfiniteInteraction(
                 tapCandidate = true
                 tapDownAt = Pt(e.x.toDouble(), e.y.toDouble())
                 tapDownTime = e.eventTime
+                tapDownSelected = selection()?.items?.toHashSet() ?: emptySet()
                 handleDown(e)
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
@@ -285,6 +286,10 @@ class InfiniteInteraction(
     private var lastTapAt: Pt? = null
     private var lastTapTime = 0L
 
+    // What was selected as each tap went down: a double tap labels only a shape that was not.
+    private var tapDownSelected: Set<CanvasItem> = emptySet()
+    private var lastTapSelected: Set<CanvasItem> = emptySet()
+
     /** A tap that follows another close by and soon after is a double tap. */
     private fun tapUp(e: MotionEvent) {
         val at = Pt(e.x.toDouble(), e.y.toDouble())
@@ -299,27 +304,31 @@ class InfiniteInteraction(
             prev.distanceTo(at) <= InteractionController.DOUBLE_TAP_SLOP_DP * devicePxPerDp()
         ) {
             lastTapAt = null
-            onDoubleTap(at, e.getToolType(0))
+            onDoubleTap(at, e.getToolType(0), lastTapSelected)
             return
         }
         lastTapAt = at
         lastTapTime = e.eventTime
+        lastTapSelected = tapDownSelected
     }
 
     /**
      * The topmost unlocked shape at viewport [vp] that takes a label, for a double tap with the
      * Shape or Select tool or a finger that pans: on its outline, fill or label, or anywhere inside.
+     * None when that shape was in [selectedBefore], the selection as the first tap went down: on a
+     * selected shape a double tap is a vertex's, whatever its kind.
      */
-    fun labelTargetAt(vp: Pt, toolType: Int): ShapeItem? {
+    fun labelTargetAt(vp: Pt, toolType: Int, selectedBefore: Set<CanvasItem>): ShapeItem? {
         val fingerPans = toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff
         if (tool != Tool.SHAPE && tool != Tool.SELECT && !fingerPans) return null
         if (tool == Tool.SHAPE && shapeConfig().placesCorners) return null
         val at = viewport.viewportToContent(vp)
         val reach = InteractionController.OUTLINE_GRAB / viewport.zoom
         val near = Rect(at.x - reach, at.y - reach, 2 * reach, 2 * reach)
-        return itemsIn(near).lastOrNull {
+        val shape = itemsIn(near).lastOrNull {
             it is ShapeItem && !it.locked && it.takesLabel && (it.touches(at, reach) || it.encloses(at))
         } as? ShapeItem
+        return shape?.takeUnless { it in selectedBefore }
     }
 
     /**
