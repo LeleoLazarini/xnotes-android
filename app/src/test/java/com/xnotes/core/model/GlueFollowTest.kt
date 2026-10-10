@@ -147,4 +147,32 @@ class GlueFollowTest {
         follow.restore()
         near(Pt(300.0, 130.0), c.end.at)
     }
+
+    @Test fun aTeeWhosePointIsGoneTakesTheNearestOne() {
+        val a = rect(0.0, 0.0, 100.0, 60.0)
+        val b = rect(300.0, 100.0, 400.0, 160.0)
+        val c = joining(a, b, 200.0)
+        val last = Glue.points(c).lastIndex
+        val tee = ConnectorItem(Routing.STRAIGHT, ConnectorEnd(Pt(350.0, 400.0)), ConnectorEnd(Glue.points(c)[last].at, c, last), ink)
+        val all = listOf(a, b, c, tee)
+        val follow = GlueFollow.of(listOf(c), all, { it in all }, rigid = false, pin = false)
+        // The step flattens away, so the connector keeps fewer points than the tee's number.
+        c.elbow = Elbow(Axis.H, DoubleArray(0))
+        b.translate(0.0, -100.0)
+        c.end = c.end.at(Glue.point(b, 7)!!.at)
+        follow.follow(Affine.IDENTITY)
+        assertTrue(Glue.points(c).size <= last)
+        assertSame(c, tee.end.target)
+        assertTrue(tee.end.point in Glue.points(c).indices)
+        near(Glue.point(c, tee.end.point)!!.at, tee.end.at)
+    }
+
+    @Test fun aCutConnectorsLabelBecomesATextBoxWhereItWas() {
+        val c = ConnectorItem(Routing.STRAIGHT, ConnectorEnd(Pt(0.0, 0.0)), ConnectorEnd(Pt(200.0, 0.0)), ink)
+        c.label = ShapeLabel("ok", TextStyle(ink, 10.0, com.xnotes.core.pal.FontFace.SANS), com.xnotes.core.FakeTextMeasurer())
+        val box = c.labelAsTextBox()!!
+        assertEquals("ok", box.text)
+        assertEquals(c.labelRect()!!.center.x, box.pos.x + box.width / 2.0, 1e-9)
+    }
 }
+

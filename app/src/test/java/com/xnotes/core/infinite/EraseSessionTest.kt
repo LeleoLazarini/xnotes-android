@@ -250,4 +250,37 @@ class EraseSessionTest {
         assertSame(ShapeKind.GLYPHS, shapes.single().shape)
         assertTrue(doc.items.any { it is Stroke })
     }
+
+    // --- connectors ---
+
+    private fun labelledConnector(): com.xnotes.core.model.ConnectorItem {
+        val ink = com.xnotes.core.model.Rgba(1, 2, 3, 255)
+        val c = com.xnotes.core.model.ConnectorItem(
+            com.xnotes.core.model.Routing.STRAIGHT,
+            com.xnotes.core.model.ConnectorEnd(com.xnotes.core.geometry.Pt(0.0, 0.0)),
+            com.xnotes.core.model.ConnectorEnd(com.xnotes.core.geometry.Pt(300.0, 0.0)),
+            ink, 2.0,
+        )
+        c.label = com.xnotes.core.model.ShapeLabel("go", com.xnotes.core.model.TextStyle(ink, 10.0, com.xnotes.core.pal.FontFace.SANS), com.xnotes.core.FakeTextMeasurer())
+        return c
+    }
+
+    @Test fun theAreaEraserCutsAConnectorIntoInkAndLeavesItsLabelAsDrawnText() {
+        val c = labelledConnector()
+        val doc = docOf(c)
+        EraseSession(doc).erase(40.0, 0.0, 10.0, area = true)
+        assertTrue(doc.items.none { it is com.xnotes.core.model.ConnectorItem })
+        // The label's gap already parts the line in two, and the cut parts one piece again.
+        assertEquals(3, doc.items.count { it is Stroke })
+        val glyphs = doc.items.filterIsInstance<com.xnotes.core.model.ShapeItem>().single()
+        assertEquals(com.xnotes.core.shapes.ShapeKind.GLYPHS, glyphs.shape)
+    }
+
+    @Test fun theStrokeEraserTakesAConnectorWhole() {
+        val c = labelledConnector()
+        val doc = docOf(c)
+        EraseSession(doc).erase(40.0, 0.0, 10.0, area = false)
+        assertTrue(doc.items.isEmpty())
+    }
 }
+

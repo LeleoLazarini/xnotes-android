@@ -1,9 +1,13 @@
 package com.xnotes.core.model
 
+import com.xnotes.core.geometry.Pt
+import com.xnotes.core.geometry.Rect
 import com.xnotes.core.pal.FontFace
 import com.xnotes.core.pal.FontSpec
 import com.xnotes.core.pal.TextFlags
 import com.xnotes.core.pal.TextMeasurer
+import com.xnotes.core.shapes.FreePath
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.vector.VectorContour
 
 /**
@@ -47,6 +51,40 @@ class ShapeLabel(val text: String, val style: TextStyle, val measurer: TextMeasu
         return c
     }
 
+    /**
+     * What a note keeps of the label when an eraser cuts what carries it: a text box centred where
+     * the words were ([frame] in the label's own frame, [toPage] placing it), upright since boxes
+     * never turn. Null for blank words.
+     */
+    fun asTextBox(frame: Rect, toPage: (Pt) -> Pt): TextItem? {
+        if (text.isBlank()) return null
+        val c = toPage(frame.center)
+        return TextItem(Pt(c.x - frame.w / 2.0, c.y - frame.h / 2.0), frame.w, 0.0, text, style.rgba, style.pointSize, style.face, measurer)
+    }
+
+    /**
+     * What a canvas keeps of it: the letters as a filled [ShapeKind.GLYPHS] shape exactly where they
+     * were, turned by [turn]. Null when the host cannot outline text.
+     */
+    fun asGlyphs(frame: Rect, toPage: (Pt) -> Pt, turn: Double): ShapeItem? {
+        val glyphs = outline(frame.w)
+        if (glyphs.isEmpty()) return null
+        val local = FreePath.map(glyphs) { Pt(frame.left + it.x, frame.top + it.y) }
+        val lb = FreePath.bounds(local) ?: return null
+        if (lb.w <= 0.0 || lb.h <= 0.0) return null
+        val c = toPage(lb.center)
+        return ShapeItem(
+            ShapeKind.GLYPHS,
+            Pt(c.x - lb.w / 2.0, c.y - lb.h / 2.0),
+            Pt(c.x + lb.w / 2.0, c.y + lb.h / 2.0),
+            strokeRgba = style.rgba,
+            strokeWidth = GLYPH_PEN,
+            fillRgba = style.rgba,
+            path = FreePath.normalize(local, lb),
+            rotation = turn,
+        )
+    }
+
     fun withText(text: String) = ShapeLabel(text, style, measurer)
 
     fun withStyle(style: TextStyle) = ShapeLabel(text, style, measurer)
@@ -66,6 +104,9 @@ class ShapeLabel(val text: String, val style: TextStyle, val measurer: TextMeasu
             val color = if (!swallowed) outline else if (outline.luminance() > 0.55) Rgba(0, 0, 0) else Rgba(255, 255, 255)
             return TextStyle(color, pointSize, face)
         }
+
+        /** Drawn text is never stroked; its width only pads its bounds. */
+        private const val GLYPH_PEN = 0.5
 
         /** A fill at least this opaque hides text in its own colour. */
         private const val SOLID_FILL_ALPHA = 160

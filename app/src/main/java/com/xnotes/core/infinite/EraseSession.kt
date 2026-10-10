@@ -3,6 +3,7 @@ package com.xnotes.core.infinite
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.history.Command
 import com.xnotes.core.model.CanvasItem
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
@@ -58,6 +59,7 @@ class EraseSession(private val doc: InfiniteDocument) {
                     is Stroke -> item.erasedBy(cx, cy, radius) ?: continue
                     // A cut shape's label stays behind as drawn text.
                     is ShapeItem -> item.erasedBy(cx, cy, radius)?.let { it + listOfNotNull(item.labelAsGlyphs()) } ?: continue
+                    is ConnectorItem -> item.erasedBy(cx, cy, radius)?.let { it + listOfNotNull(item.labelAsGlyphs()) } ?: continue
                     else -> continue
                 }
             } else {

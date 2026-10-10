@@ -120,6 +120,9 @@ class GlueFollow private constructor(
             if (index !in points.indices || drawnAt(index).distanceTo(want) > SAME_SPOT) {
                 index = points.indices.minByOrNull { drawnAt(it).distanceTo(want) } ?: index
             }
+        } else if (index !in points.indices) {
+            // The point is gone (a connector lost a bend): the nearest one takes the end.
+            index = points.indices.minByOrNull { drawnAt(it).distanceTo(end.at) } ?: return null
         }
         val cp = points.getOrNull(index) ?: return null
         val glued = ConnectorEnd(end.at, t, index)

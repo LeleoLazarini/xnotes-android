@@ -210,6 +210,12 @@ class ConnectorItem(
         return r.outset(l.lineHeight * GAP_LINES)
     }
 
+    /** What a note keeps of the label when the area eraser cuts the connector: a text box where the words were. */
+    fun labelAsTextBox(): TextItem? = labelRect()?.let { r -> label?.asTextBox(r) { it } }
+
+    /** What a canvas keeps of it: the letters as drawn text where they were. */
+    fun labelAsGlyphs(): ShapeItem? = labelRect()?.let { r -> label?.asGlyphs(r, { it }, 0.0) }
+
     /** True when page point [p] lands on the label's lines. */
     override fun labelContains(p: Pt): Boolean = labelRect()?.contains(p) == true
 

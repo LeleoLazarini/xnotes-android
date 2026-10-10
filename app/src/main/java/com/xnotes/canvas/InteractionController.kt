@@ -1451,6 +1451,8 @@ class InteractionController(
                     is Stroke -> item.erasedBy(cx, cy, radius)
                     // A cut shape's label stays behind as a text box.
                     is ShapeItem -> item.erasedBy(cx, cy, radius)?.let { it + listOfNotNull(item.labelAsTextBox()) }
+                    // So does a cut connector's; its glue goes with it.
+                    is ConnectorItem -> item.erasedBy(cx, cy, radius)?.let { it + listOfNotNull(item.labelAsTextBox()) }
                     else -> null
                 }
             }

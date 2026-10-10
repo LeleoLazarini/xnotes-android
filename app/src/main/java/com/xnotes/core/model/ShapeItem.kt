@@ -261,38 +261,14 @@ class ShapeItem(
      * What a note keeps of the label when the area eraser cuts the shape: a text box centred where
      * the words were, upright since boxes never turn. Null without a label.
      */
-    fun labelAsTextBox(): TextItem? {
-        val l = label?.takeIf { it.text.isNotBlank() } ?: return null
-        val frame = labelRect() ?: return null
-        val c = toPage(frame.center)
-        return TextItem(Pt(c.x - frame.w / 2.0, c.y - frame.h / 2.0), frame.w, 0.0, l.text, l.style.rgba, l.style.pointSize, l.style.face, l.measurer)
-    }
+    fun labelAsTextBox(): TextItem? = labelRect()?.let { r -> label?.asTextBox(r, ::toPage) }
 
     /**
      * What a canvas keeps of the label when the area eraser cuts the shape: its letters as a
      * filled [ShapeKind.GLYPHS] shape exactly where they were, turned with it. Null without a label,
      * or when the host cannot outline text.
      */
-    fun labelAsGlyphs(): ShapeItem? {
-        val l = label ?: return null
-        val frame = labelRect() ?: return null
-        val glyphs = l.outline(frame.w)
-        if (glyphs.isEmpty()) return null
-        val local = FreePath.map(glyphs) { Pt(frame.left + it.x, frame.top + it.y) }
-        val lb = FreePath.bounds(local) ?: return null
-        if (lb.w <= 0.0 || lb.h <= 0.0) return null
-        val c = toPage(lb.center)
-        return ShapeItem(
-            ShapeKind.GLYPHS,
-            Pt(c.x - lb.w / 2.0, c.y - lb.h / 2.0),
-            Pt(c.x + lb.w / 2.0, c.y + lb.h / 2.0),
-            strokeRgba = l.style.rgba,
-            strokeWidth = GLYPH_PEN,
-            fillRgba = l.style.rgba,
-            path = FreePath.normalize(local, lb),
-            rotation = rotation,
-        )
-    }
+    fun labelAsGlyphs(): ShapeItem? = labelRect()?.let { r -> label?.asGlyphs(r, ::toPage, rotation) }
 
     /** The label's four corners on the page, turned with the shape; empty without a label. */
     fun labelCorners(): List<Pt> {
@@ -753,9 +729,6 @@ class ShapeItem(
 
         /** Room past a label's longest line, so rounding never wraps it, in content px. */
         private const val LABEL_SLACK = 2.0
-
-        /** Drawn text is never stroked; its width only pads its bounds. */
-        private const val GLYPH_PEN = 0.5
 
         /** The kind a file gives drawn text, which readers that predate it skip rather than misdraw. */
         const val GLYPHS_KIND = "glyphs"
