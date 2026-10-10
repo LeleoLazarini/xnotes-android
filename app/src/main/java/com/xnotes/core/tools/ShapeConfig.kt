@@ -1,8 +1,12 @@
 package com.xnotes.core.tools
 
 import com.xnotes.core.geometry.Pt
+import com.xnotes.core.model.ConnectorEnd
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.shapes.ConnectorPreset
+import com.xnotes.core.shapes.ConnectorPresets
 import com.xnotes.core.shapes.Head
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.shapes.ShapePreset
@@ -33,8 +37,13 @@ data class ShapeConfig(
     val headEnd: Head = Head.NONE,
     /** The picker page last shown. */
     val shapePage: Int = 0,
+    /** The connector picker page last shown. */
+    val connectorPage: Int = 0,
 ) {
-    /** The chosen chip, or the rectangle for a key this version does not know. */
+    /** The chosen connector chip, when the choice is a connector rather than a shape. */
+    val connector: ConnectorPreset? get() = ConnectorPresets.byKey(preset)
+
+    /** The chosen chip, or the rectangle for a key this version does not know (or a connector's). */
     val chip: ShapePreset get() = ShapePresets.byKey(preset) ?: ShapePresets.forKind(ShapeKind.RECTANGLE)
 
     val shape: ShapeKind get() = chip.kind
@@ -45,6 +54,16 @@ data class ShapeConfig(
     /** This config with [chip] chosen: its own heads, and its own count until the minus/plus moves it. */
     fun choose(chip: ShapePreset): ShapeConfig =
         copy(preset = chip.key, n = 0, headStart = chip.headStart, headEnd = chip.headEnd)
+
+    /** This config with connector [chip] chosen: its heads, and its dash when it has a say. */
+    fun choose(chip: ConnectorPreset): ShapeConfig =
+        copy(preset = chip.key, n = 0, headStart = chip.headStart, headEnd = chip.headEnd, dashed = chip.dashed ?: dashed)
+
+    /** A connector of the chosen chip setting off from [from], in [outline] colour and [width] wide; null for a shape. */
+    fun startConnector(from: ConnectorEnd, outline: Rgba, width: Double): ConnectorItem? {
+        val chip = connector ?: return null
+        return ConnectorItem(chip.routing, from, ConnectorEnd(from.at), outline, width, headStart, headEnd, dashed, dashLength, dashGap, neon, neonStrength)
+    }
 
     /** The fill a [kind] outlined in [outline] gets, drawn or snapped; null when unfilled or open. */
     fun fillFor(kind: ShapeKind, outline: Rgba): Rgba? =

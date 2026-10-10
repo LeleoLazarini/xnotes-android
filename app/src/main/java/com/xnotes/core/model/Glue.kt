@@ -3,8 +3,11 @@ package com.xnotes.core.model
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.shapes.ConnectionPoint
+import com.xnotes.core.shapes.ConnectorRouter
+import com.xnotes.core.shapes.Elbow
 import com.xnotes.core.shapes.ShapeKind
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.sin
 
 /**
@@ -57,6 +60,41 @@ object Glue {
         }
         return best
     }
+
+    /** The router's view of a connector end: where it is, its ways out, and the box it leaves. */
+    fun port(end: ConnectorEnd): ConnectorRouter.Port {
+        val t = end.target ?: return ConnectorRouter.Port(end.at)
+        val cp = point(t, end.point) ?: return ConnectorRouter.Port(end.at)
+        return ConnectorRouter.Port(end.at, cp.normals, if (t is ConnectorItem) null else t.bounds())
+    }
+
+    /**
+     * Route [c] afresh between its ends around the glue targets among [nearby], [margin] clear of
+     * them: what drawing a connector does, and what Re-route asks for. A straight connector just
+     * loses its bends. The nearest [MAX_OBSTACLES] targets count, so a dense page stays quick.
+     */
+    fun reroute(c: ConnectorItem, nearby: List<CanvasItem>, margin: Double) {
+        if (!c.routing.orthogonal) {
+            c.waypoints = emptyList()
+            return
+        }
+        val mid = (c.start.at + c.end.at) * 0.5
+        val obstacles = nearby
+            .filter { it !== c && it !== c.start.target && it !== c.end.target && it !is ConnectorItem && accepts(it) }
+            .map { it.bounds() }
+            .sortedBy { it.distanceTo(mid) }
+            .take(MAX_OBSTACLES)
+        c.elbow = Elbow.of(ConnectorRouter.route(port(c.start), port(c.end), obstacles, max(margin, c.clearance)))
+    }
+
+    /** The area worth searching for what a connector from [a] to [b] might have to go round. */
+    fun routeArea(a: Pt, b: Pt, margin: Double): Rect {
+        val r = Rect.fromPoints(a, b)
+        return r.outset(max(margin * AREA_MARGINS, max(r.w, r.h) / 2.0))
+    }
+
+    private const val MAX_OBSTACLES = 80
+    private const val AREA_MARGINS = 8.0
 
     /** A box's corners and edge middles, turned by [angle] about its centre. */
     private fun box(r: Rect, angle: Double): List<ConnectionPoint> {

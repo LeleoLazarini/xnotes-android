@@ -30,6 +30,8 @@ import com.xnotes.core.history.TransferItems
 import com.xnotes.core.history.TransformItems
 import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.Carry
+import com.xnotes.core.model.ConnectorDraft
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Document
 import com.xnotes.core.model.DrawStyle
 import com.xnotes.core.model.deepCopyAll
@@ -41,6 +43,7 @@ import com.xnotes.core.model.Resizable
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeHandle
 import com.xnotes.core.model.GeometrySnapshot
+import com.xnotes.core.model.Glue
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
@@ -77,7 +80,7 @@ import kotlin.math.sin
 /** The pointer state machine modes (spec 06 §1). */
 enum class PointerMode {
     IDLE, DRAW, ERASE, BAND, LASSO_DRAW, SHOT, SHAPE, MOVE, RESIZE, TRANSFORM, PAN, PINCH, FLOW_TEXT,
-    TEXT_DRAG, RULER_MOVE, RULER_TRANSFORM, RULER_ROTATE, PDF_TEXT, VERTEX, POLYGON,
+    TEXT_DRAG, RULER_MOVE, RULER_TRANSFORM, RULER_ROTATE, PDF_TEXT, VERTEX, POLYGON, CONNECT,
 }
 
 /**
@@ -363,6 +366,22 @@ class InteractionController(
 
     // SHAPE
     var shapeConfig: ShapeConfig = ShapeConfig()
+        set(value) {
+            val marked = connecting
+            field = value
+            // Arming a connector chip shows where connectors glue; choosing a shape hides it again.
+            if (marked != connecting) requestRender()
+        }
+
+    // A connector being drawn with a connector chip armed, on the page it set off from.
+    private var connectorDraft: ConnectorDraft? = null
+    private var connectorPage = -1
+
+    /** The connection points lit for the chrome, with their pages: under a hovering pen, at a drawn connector's ends. */
+    private var connectHot: List<Pair<Int, Pt>> = emptyList()
+
+    /** True when the shape tool has a connector chip armed, so the points connectors glue to show. */
+    val connecting: Boolean get() = tool == Tool.SHAPE && shapeConfig.connector != null
     private var pendingShape: ShapeItem? = null
     private var shapePageIndex: Int? = null
 
@@ -554,6 +573,7 @@ class InteractionController(
 
     fun onHover(e: MotionEvent): Boolean {
         if (handleHoverAction(e)) return true
+        if (hoverConnect(e)) return true
         val isEraserPointer = e.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER
         if (tool != Tool.ERASER && !isEraserPointer) return false
         eraserCursor = if (e.actionMasked == MotionEvent.ACTION_HOVER_EXIT) {
@@ -738,6 +758,15 @@ class InteractionController(
             }
         }
 
+        // With a connector armed, a press on a point it can glue to starts one, whatever is selected.
+        val inks = toolType != MotionEvent.TOOL_TYPE_FINGER || fingerDraws
+        if (connecting && inks && !buttonHeld && toolType != MotionEvent.TOOL_TYPE_ERASER && glueHitAt(content) != null) {
+            cancelLongPress()
+            if (polygonDraft != null) finishPolygonDraft()
+            beginConnector(content)
+            return
+        }
+
         // A PDF text selection's handle drags with any pointer. Otherwise only a pan or a pinch keeps
         // the selection: anything else ends it now, and a tap ends it on release.
         pdfText?.let { text ->
@@ -774,6 +803,7 @@ class InteractionController(
             effectiveTool == Tool.LASSO -> beginLasso(content)
             effectiveTool == Tool.SCREENSHOT -> beginScreenshot(content)
             effectiveTool == Tool.SHAPE && shapeConfig.placesCorners -> beginPolygonTap(content)
+            effectiveTool == Tool.SHAPE && shapeConfig.connector != null -> beginConnector(content)
             effectiveTool == Tool.SHAPE -> beginShape(content)
             effectiveTool == Tool.TEXT -> beginTextGesture(content, Pt(vx, vy))
             effectiveTool == Tool.TEXT_BOX -> beginTextBoxGesture(content)
@@ -846,6 +876,7 @@ class InteractionController(
             PointerMode.VERTEX -> extendVertex(content)
             PointerMode.POLYGON -> showPolygonDraft(content)
             PointerMode.SHAPE -> extendShape(content)
+            PointerMode.CONNECT -> extendConnector(content)
             PointerMode.FLOW_TEXT ->
                 // A plain drag with the text tool scrolls the document; only a long-pressed
                 // drag extends the selection (dragTo returns true to request the pan handoff).
@@ -922,6 +953,7 @@ class InteractionController(
             PointerMode.VERTEX -> endVertex(e.eventTime)
             PointerMode.POLYGON -> endPolygonTap(content, e.eventTime)
             PointerMode.SHAPE -> endShape()
+            PointerMode.CONNECT -> endConnector()
             PointerMode.FLOW_TEXT -> {
                 mode = PointerMode.IDLE
                 flowText?.release(content, Pt(e.getX(idx).toDouble(), e.getY(idx).toDouble()), e.eventTime)
@@ -2123,10 +2155,122 @@ class InteractionController(
     /** Select the topmost shape on page [pi] whose outline or fill is under page point [local], if any. */
     private fun selectShapeAt(pi: Int, local: Pt) {
         val reach = OUTLINE_GRAB / state.zoom
-        val hit = state.document.pages.getOrNull(pi)?.items
-            ?.lastOrNull { it is ShapeItem && !it.locked && it.touches(local, reach) } ?: return
+        val hit = state.document.pages.getOrNull(pi)?.items?.lastOrNull {
+            !it.locked && ((it is ShapeItem && it.touches(local, reach)) || (it is ConnectorItem && it.touches(local, reach)))
+        } ?: return
         setSelection(listOf(Selected(pi, hit)))
         refreshSelectionMenu()
+    }
+
+    // --- CONNECTORS ---
+
+    /** The connection point within reach of content point [content], on the page under it, with that page. */
+    private fun glueHitAt(content: Pt): Pair<Int, Glue.Hit>? {
+        val pi = state.pageIndexAtContent(content) ?: return null
+        val page = state.document.pages.getOrNull(pi) ?: return null
+        return Glue.nearest(page.items, state.toPageSpace(pi, content), dotReach())?.let { pi to it }
+    }
+
+    /** How far a route keeps clear of what it goes round: a fixed distance on screen. */
+    private fun routeMargin(): Double = ROUTE_MARGIN_DP * state.devicePxPerDp / state.zoom
+
+    /** A hovering pen lights the connection point under it while a connector is armed. */
+    private fun hoverConnect(e: MotionEvent): Boolean {
+        val on = connecting && mode == PointerMode.IDLE && e.actionMasked != MotionEvent.ACTION_HOVER_EXIT
+        val hit = if (on) glueHitAt(state.viewportToContent(Pt(e.x.toDouble(), e.y.toDouble()))) else null
+        val hot = hit?.let { listOf(it.first to it.second.point.at) } ?: emptyList()
+        if (hot != connectHot) {
+            connectHot = hot
+            requestRender()
+        }
+        return on
+    }
+
+    /** A press with a connector chip: the connector sets off on the page under it, glued to the point under the pen if any. */
+    private fun beginConnector(content: Pt) {
+        val pi = state.pageIndexAtContent(content) ?: return
+        val page = state.document.pages[pi]
+        clearSelection()
+        val width = shapeConfig.strokeWidth * SHAPE_PEN_PARITY
+        val draft = ConnectorDraft.startAt(state.toPageSpace(pi, content), page.items, dotReach()) {
+            shapeConfig.startConnector(it, inkColor, width)
+        } ?: return
+        connectorDraft = draft
+        connectorPage = pi
+        connectHot = listOfNotNull(draft.connector.start.takeIf { it.glued }?.let { pi to it.at })
+        mode = PointerMode.CONNECT
+        onSelectionMenu(null)
+        requestRender()
+    }
+
+    /** The far end follows the pen on the starting page, gluing near a point there, the route planned afresh. */
+    private fun extendConnector(content: Pt) {
+        val draft = connectorDraft ?: return
+        val pi = connectorPage
+        val page = state.document.pages.getOrNull(pi) ?: return
+        if (state.pageRects.getOrNull(pi) == null) return
+        draft.drag(state.toPageSpace(pi, content), page.items, dotReach(), routeMargin())
+        val c = draft.connector
+        connectHot = listOfNotNull(c.start.takeIf { it.glued }?.let { pi to it.at }, draft.hot?.let { pi to it.point.at })
+        requestRender()
+    }
+
+    /** Pen up: a connector worth keeping goes on its page and stays selected; a tap picks up what is under it. */
+    private fun endConnector() {
+        val draft = connectorDraft ?: return
+        val pi = connectorPage
+        dropConnectorDraft()
+        mode = PointerMode.IDLE
+        val page = state.document.pages.getOrNull(pi)
+        if (page != null && draft.worthKeeping(SHAPE_MIN_DRAG)) {
+            val c = draft.connector
+            page.items.add(c)
+            state.appendToCache(page, c)
+            history.push(AddItem(page, c))
+            state.document.dirty = true
+            onContentChanged()
+            setSelection(listOf(Selected(pi, c)))
+            refreshSelectionMenu()
+        } else if (page != null) {
+            selectShapeAt(pi, draft.connector.start.at)
+        }
+        requestRender()
+    }
+
+    private fun dropConnectorDraft() {
+        connectorDraft = null
+        connectorPage = -1
+        connectHot = emptyList()
+    }
+
+    /** A cross on every connection point of the pages in view, and a ring on each lit one. */
+    private fun drawConnectionMarks(r: Renderer) {
+        val ot = com.xnotes.core.infinite.OverlayTessellator
+        val accent = state.palette.accent
+        val view = Rect.fromPoints(state.viewportToContent(Pt.ZERO), state.viewportToContent(Pt(state.viewportW.toDouble(), state.viewportH.toDouble())))
+        val pen = Pen(accent, ot.MARK_LINE_PX, cosmetic = true)
+        val arm = ot.MARK_PX / 2.0 / state.zoom
+        val drawing = connectorDraft?.connector
+        var count = 0
+        marks@ for (pi in state.pageRects.indices) {
+            if (!state.pageRects[pi].intersects(view)) continue
+            val page = state.document.pages.getOrNull(pi) ?: continue
+            for (item in page.items) {
+                if (item === drawing) continue
+                for (cp in Glue.points(item)) {
+                    val c = state.fromPageSpace(pi, cp.at)
+                    r.strokePolyline(listOf(Pt(c.x - arm, c.y - arm), Pt(c.x + arm, c.y + arm)), pen)
+                    r.strokePolyline(listOf(Pt(c.x - arm, c.y + arm), Pt(c.x + arm, c.y - arm)), pen)
+                    if (++count > MAX_MARKS) break@marks
+                }
+            }
+        }
+        for ((pi, p) in connectHot) {
+            if (state.pageRects.getOrNull(pi) == null) continue
+            val c = state.fromPageSpace(pi, p)
+            r.fillCircle(c, ot.HOT_PX / 2.0 / state.zoom, accent)
+            r.fillCircle(c, ot.HOT_CORE_PX / 2.0 / state.zoom, ot.DOT_CORE)
+        }
     }
 
     // --- FREE POLYGON ---
@@ -2726,6 +2870,7 @@ class InteractionController(
         strokePageIndex = null
         pendingShape = null
         shapePageIndex = null
+        dropConnectorDraft()
         bandRect = null
         lassoPoints.clear()
         if (candidate != null) {
@@ -3584,6 +3729,7 @@ class InteractionController(
         snapPenViewport = null
         pendingShape = null
         shapePageIndex = null
+        dropConnectorDraft()
         bandRect = null
         lassoPoints.clear()
         textDragRect = null
@@ -3647,6 +3793,7 @@ class InteractionController(
                 liveStroke?.let { stroke -> paintClippedToPage(r, strokePageIndex) { state.paintLiveStroke(r, stroke) } }
             }
             pendingShape?.let { shape -> paintClippedToPage(r, shapePageIndex) { shape.paint(r) } }
+            connectorDraft?.let { d -> paintClippedToPage(r, connectorPage) { d.connector.paint(r) } }
 
             // Disappearing ink (magic wand): ephemeral strokes drawn live at the shared fade alpha,
             // without mutating their stored colour. Highlighters keep their MULTIPLY look while fading.
@@ -3700,6 +3847,9 @@ class InteractionController(
                 }
                 drawEditDots(r)
             }
+
+            // Where a connector can glue, while one is armed.
+            if (connecting) drawConnectionMarks(r)
         }
 
         // Note icons: chrome of one size at any zoom, so in viewport space.
@@ -4036,6 +4186,12 @@ class InteractionController(
         /** Gap (viewport px) from the selection's top edge up to the rotate grip. */
         const val ROTATE_ARM = 28.0
         const val SHAPE_MIN_DRAG = 3.0
+
+        /** How far a drawn connector's route keeps clear of what it goes round, in dp. */
+        const val ROUTE_MARGIN_DP = 12.0
+
+        /** Past this many connection points in view, no more are marked. */
+        const val MAX_MARKS = 4000
 
         /** Min capture size (content px, both axes) for the screenshot tool; below it a drag is a tap. */
         const val SHOT_MIN = 6.0

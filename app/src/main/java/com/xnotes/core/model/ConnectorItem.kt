@@ -127,6 +127,9 @@ class ConnectorItem(
         }
     }
 
+    /** How far the line runs straight out of a box before it may turn: room for a head and then some. */
+    val clearance: Double get() = Head.length(strokeWidth) + strokeWidth * 2.0
+
     /** The pen the line draws with, before a head's role adjusts it. */
     internal fun pen() =
         Pen(color = strokeRgba, width = strokeWidth, cosmetic = false, dashed = dashed, dashOn = dashLength, dashGap = dashGap)

@@ -2,9 +2,12 @@ package com.xnotes.core.tools
 
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.history.RefillShapes
+import com.xnotes.core.model.ConnectorEnd
 import com.xnotes.core.model.DrawStyle
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.Routing
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.shapes.ConnectorPresets
 import com.xnotes.core.shapes.Head
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.shapes.ShapePresets
@@ -83,4 +86,39 @@ class ShapeConfigTest {
         val matched = RefillShapes.of(listOf(b), null).single()
         assertEquals(ink.copy(a = 200), matched.after)
     }
+
+    @Test fun theConnectorChipsAreTheAgreedTwoPages() {
+        assertEquals(listOf(12, 12), ConnectorPresets.pages.map { it.presets.size })
+        assertEquals(ConnectorPresets.all.size, ConnectorPresets.all.map { it.key }.toSet().size)
+        assertTrue(ConnectorPresets.all.none { ShapePresets.byKey(it.key) != null })
+        val uml = ConnectorPresets.umlPage.presets
+        assertEquals(Head.HOLLOW_TRIANGLE, uml[1].headEnd)
+        assertEquals(true, uml[2].dashed)
+        assertEquals(Head.FILLED_DIAMOND, uml[5].headStart)
+        assertEquals(Routing.ELBOW, uml[6].routing)
+    }
+
+    @Test fun choosingAConnectorTakesItsHeadsAndADashOnlyWhenItHasOne() {
+        val realization = ShapeConfig().choose(ConnectorPresets.byKey("uml_realization")!!)
+        assertEquals(Head.HOLLOW_TRIANGLE, realization.headEnd)
+        assertTrue(realization.dashed)
+        assertEquals(Routing.STRAIGHT, realization.connector!!.routing)
+        val plain = realization.choose(ConnectorPresets.byKey("conn_elbow_arrow")!!)
+        assertTrue("a plain chip leaves the dash alone", plain.dashed)
+        assertEquals(Head.OPEN, plain.headEnd)
+        assertNull(plain.choose(ShapePresets.byKey("arrow")!!).connector)
+    }
+
+    @Test fun aStartedConnectorCarriesTheConfigsStyle() {
+        val cfg = ShapeConfig(neon = true).choose(ConnectorPresets.byKey("conn_curved_both")!!)
+        val c = cfg.startConnector(ConnectorEnd(Pt(5.0, 6.0)), ink, 2.5)!!
+        assertEquals(Routing.CURVED, c.routing)
+        assertEquals(Head.OPEN, c.headStart)
+        assertEquals(Head.OPEN, c.headEnd)
+        assertEquals(Pt(5.0, 6.0), c.end.at)
+        assertTrue(c.neon)
+        assertEquals(2.5, c.strokeWidth, 0.0)
+        assertNull(ShapeConfig().startConnector(ConnectorEnd(Pt.ZERO), ink, 2.0))
+    }
 }
+

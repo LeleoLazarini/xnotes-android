@@ -9,13 +9,20 @@ import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.unit.dp
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
+import com.xnotes.core.infinite.MeshBuilder
+import com.xnotes.core.model.ConnectorEnd
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.shapes.Axis
+import com.xnotes.core.shapes.ConnectorPreset
+import com.xnotes.core.shapes.Elbow
 import com.xnotes.core.shapes.Head
 import com.xnotes.core.shapes.PathRole
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.shapes.ShapePath
 import com.xnotes.core.shapes.ShapePreset
+import com.xnotes.core.vector.PathFlattener
 import com.xnotes.core.vector.VectorSeg
 
 /**
@@ -52,8 +59,26 @@ object ShapeIcons {
             build("head-${head.id}", line)
         }
 
-    private fun build(name: String, item: ShapeItem): ImageVector {
-        val paths = item.paths()
+    /** A connector chip's glyph: its routing from the bottom left to the top right, heads and dashes drawn. */
+    fun connector(preset: ConnectorPreset): ImageVector =
+        cache.getOrPut("connector/${preset.key}") {
+            val c = ConnectorItem(
+                preset.routing, ConnectorEnd(Pt(8.0, 38.0)), ConnectorEnd(Pt(40.0, 10.0)), Rgba(255, 255, 255), STROKE,
+                preset.headStart, preset.headEnd,
+            )
+            if (preset.routing.orthogonal) c.elbow = Elbow(Axis.H, doubleArrayOf(24.0))
+            val paths = c.paths().map { p ->
+                if (preset.dashed != true || p.role != PathRole.STROKE_ONLY) return@map p
+                // An icon has no dash effect, so the dashes are cut out of the line itself.
+                val runs = p.contours.flatMap { MeshBuilder.dashRuns(PathFlattener.flatten(it, 0.25), ICON_DASH, ICON_GAP, it.closed) }
+                ShapePath(runs.filter { it.size >= 2 }.map { ShapePath.lines(it, closed = false) }, p.role)
+            }
+            build("connector-${preset.key}", paths)
+        }
+
+    private fun build(name: String, item: ShapeItem): ImageVector = build(name, item.paths())
+
+    private fun build(name: String, paths: List<ShapePath>): ImageVector {
         val builder = ImageVector.Builder(
             name = name,
             defaultWidth = 24.dp,
@@ -101,6 +126,8 @@ object ShapeIcons {
 
     private const val GRID = 48f
     private const val STROKE = 4.0
+    private const val ICON_DASH = 7.0
+    private const val ICON_GAP = 5.0
     private const val MAX_W = 38.0
     private const val MAX_H = 34.0
 }

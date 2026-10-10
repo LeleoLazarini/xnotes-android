@@ -265,6 +265,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     init {
         view.input = { interaction.onTouch(it) }
         view.genericMotion = { interaction.onGenericMotion(it) }
+        view.hover = { interaction.onHover(it) }
         view.afterLayout = { applyInitialView() }
         view.onContextReady = { renderFailure = view.failure }
         pad.onSurfaceLost = { endFrontInk(); settleHeld() }
@@ -434,8 +435,10 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     /** Show a tool the gesture layer armed by itself: a long-press grab, and its release. */
     private fun adoptTool(next: Tool) {
+        val marked = interaction.connecting
         tool = next
         interaction.tool = next
+        if (marked != interaction.connecting) publishOverlay()
     }
 
     // --- selection actions ---
@@ -877,8 +880,10 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     override val hostShapeConfig: ShapeConfig get() = shapeConfig
 
     override fun updateShapeConfig(config: ShapeConfig) {
+        val marked = interaction.connecting
         shapeConfig = config
         onToolStyleChanged?.invoke()
+        if (marked != interaction.connecting) publishOverlay()
     }
 
     override val hostToolbarColors: List<Rgba> get() = toolbarColors
@@ -1222,6 +1227,20 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         lassoSettled = 0
         val parts = ArrayList<MeshPart>(3)
         var bounds: Rect? = null
+        // A shape or connector being drawn sits under the chrome, in the same buffer.
+        pendingItem?.let { item ->
+            ItemMesher.mesh(item)?.let { m ->
+                parts += m.parts
+                bounds = m.bounds
+            }
+        }
+        if (interaction.connecting) {
+            val marks = interaction.connectionMarks()
+            val hot = interaction.connectHot
+            parts += OverlayTessellator.connectionMarks(marks, hot, zoom, accent, StrokeTessellator.DEFAULT_TOLERANCE)
+            val pad = OverlayTessellator.HOT_PX / zoom
+            for (p in marks + hot) bounds = (bounds ?: Rect(p.x, p.y, 0.0, 0.0)).union(Rect(p.x - pad, p.y - pad, 2 * pad, 2 * pad))
+        }
         interaction.bandRect?.let {
             parts += OverlayTessellator.band(it, zoom, accent, StrokeTessellator.DEFAULT_TOLERANCE, devicePxPerDp)
             bounds = it.outset(4.0 / zoom)
@@ -1325,14 +1344,12 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         maybeSwitchBackAfterSelect()
     }
 
-    /** The shape being dragged out, drawn live over the committed geometry like a wet stroke. */
-    private fun publishPendingShape(shape: ShapeItem?) {
-        if (shape == null) {
-            scene.setWet(null, InkPalette.DEFAULT, InkPass.OPAQUE, Rect(0.0, 0.0, 0.0, 0.0))
-            return
-        }
-        val meshed = ItemMesher.mesh(shape) ?: return
-        scene.setWetParts(meshed.parts, meshed.bounds)
+    /** The shape or connector being drawn, shown live under the chrome until it is committed. */
+    private var pendingItem: CanvasItem? = null
+
+    private fun publishPendingShape(item: CanvasItem?) {
+        pendingItem = item
+        publishOverlay()
     }
 
     /** Add a finished item and record the edit, the common tail of every creating tool. */
@@ -1818,6 +1835,8 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     private fun onViewChanged() {
         if (editingLabel != null) refreshField()
+        // The connection marks are sized for the screen and only cover what is on it.
+        if (interaction.connecting) publishOverlay()
         document.lastView = viewport.toWaypoint()
         zoomPercent = Math.round(viewport.zoom * 100).toInt()
         // The menu is anchored in viewport pixels, so a pan or a zoom moves it.

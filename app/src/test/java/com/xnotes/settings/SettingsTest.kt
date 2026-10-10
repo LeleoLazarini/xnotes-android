@@ -493,4 +493,13 @@ class SettingsTest {
         assertEquals(com.xnotes.core.shapes.Head.OPEN, c.headEnd)
         assertTrue(c.fill)
     }
+
+    @Test fun aChosenConnectorAndItsPageRoundTrip() {
+        val shape = com.xnotes.core.tools.ShapeConfig().choose(com.xnotes.core.shapes.ConnectorPresets.byKey("uml_aggregation_elbow")!!)
+            .copy(connectorPage = 1)
+        val back = Settings.fromJson(Settings(shapeConfig = shape).toJson()).shapeConfig
+        assertEquals(shape, back)
+        assertEquals("uml_aggregation_elbow", back.connector!!.key)
+    }
 }
+

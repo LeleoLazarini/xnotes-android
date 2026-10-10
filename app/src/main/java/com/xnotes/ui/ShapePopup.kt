@@ -34,6 +34,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xnotes.R
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.shapes.ConnectorPage
+import com.xnotes.core.shapes.ConnectorPreset
+import com.xnotes.core.shapes.ConnectorPresets
 import com.xnotes.core.shapes.Head
 import com.xnotes.core.shapes.ShapePage
 import com.xnotes.core.shapes.ShapePreset
@@ -45,9 +48,10 @@ import com.xnotes.ui.theme.LocalPalette
 import com.xnotes.ui.theme.toComposeColor
 
 /**
- * The shape tool's popup: its chips page by page, swiped sideways, then the settings the chosen
- * chip takes. A closed chip offers a fill with its own colour, an open one a head at either end,
- * and a star or polygon a minus/plus for its count.
+ * The shape tool's popup: its chips page by page, swiped sideways, the connectors below them the
+ * same way, then the settings the chosen chip takes. A closed chip offers a fill with its own
+ * colour, an open one or a connector a head at either end, and a star or polygon a minus/plus for
+ * its count.
  */
 @Composable
 fun ShapeConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
@@ -57,17 +61,19 @@ fun ShapeConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
         editor.updateShapeConfig(next)
     }
     val chip = config.chip
+    val connecting = config.connector != null
     val ink = editor.hostToolbarColors.getOrNull(editor.hostActiveColorIndex) ?: Rgba(0, 0, 0)
 
     DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
         Column(Modifier.width(284.dp).padding(horizontal = 14.dp, vertical = 8.dp)) {
             PopupTitle(stringResource(R.string.title_shape))
             ShapePager(config, onPage = { emit(config.copy(shapePage = it)) }, onPick = { emit(config.choose(it)) })
-            if (chip.counted) CountRow(config) { emit(config.copy(n = it)) }
+            ConnectorPager(config, onPage = { emit(config.copy(connectorPage = it)) }, onPick = { emit(config.choose(it)) })
+            if (!connecting && chip.counted) CountRow(config) { emit(config.copy(n = it)) }
             SliderRow(stringResource(R.string.caption_width), config.strokeWidth.toFloat(), 1f..20f) {
                 emit(config.copy(strokeWidth = it.toDouble()))
             }
-            if (chip.kind.isClosed) {
+            if (!connecting && chip.kind.isClosed) {
                 ToggleRow(stringResource(R.string.caption_fill), config.fill) { emit(config.copy(fill = it)) }
                 if (config.fill) {
                     FillColourRow(config.fillColor, ink, editor) { emit(config.copy(fillColor = it)) }
@@ -96,37 +102,60 @@ fun ShapeConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
     }
 }
 
-/** The chips, [ShapePresets.COLUMNS] to a row, one family to a page, with its caption and the page dots. */
+/** The shape chips, [ShapePresets.COLUMNS] to a row, one family to a page. */
 @Composable
 private fun ShapePager(config: ShapeConfig, onPage: (Int) -> Unit, onPick: (ShapePreset) -> Unit) {
     val pages = ShapePresets.pages
-    val state = rememberPagerState(initialPage = config.shapePage.coerceIn(0, pages.lastIndex)) { pages.size }
-    LaunchedEffect(state.settledPage) { if (state.settledPage != config.shapePage) onPage(state.settledPage) }
+    ChipPager(pages.size, config.shapePage, { pageLabel(pages[it]) }, ShapePresets.ROWS, onPage) { page ->
+        for (row in pages[page].presets.chunked(ShapePresets.COLUMNS)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(GAP.dp)) {
+                for (p in row) KindChip(ShapeIcons.of(p), stringResource(presetLabel(p.key)), selected = p.key == config.preset) { onPick(p) }
+            }
+        }
+    }
+}
+
+/** The connector chips, [ConnectorPresets.COLUMNS] to a row, two rows to a page. */
+@Composable
+private fun ConnectorPager(config: ShapeConfig, onPage: (Int) -> Unit, onPick: (ConnectorPreset) -> Unit) {
+    val pages = ConnectorPresets.pages
+    ChipPager(pages.size, config.connectorPage, { connectorPageLabel(pages[it]) }, ConnectorPresets.ROWS, onPage) { page ->
+        for (row in pages[page].presets.chunked(ConnectorPresets.COLUMNS)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(GAP.dp)) {
+                for (p in row) KindChip(ShapeIcons.connector(p), stringResource(connectorLabel(p.key)), selected = p.key == config.preset) { onPick(p) }
+            }
+        }
+    }
+}
+
+/**
+ * Chips swiped sideways a page at a time: the page's caption above, the dots below, and every page
+ * [rows] chips tall so a swipe never makes the popup jump. Remembers its page through [onPage].
+ */
+@Composable
+private fun ChipPager(
+    pageCount: Int,
+    initialPage: Int,
+    caption: (Int) -> Int,
+    rows: Int,
+    onPage: (Int) -> Unit,
+    content: @Composable (Int) -> Unit,
+) {
+    val state = rememberPagerState(initialPage = initialPage.coerceIn(0, pageCount - 1)) { pageCount }
+    LaunchedEffect(state.settledPage) { if (state.settledPage != initialPage) onPage(state.settledPage) }
     val palette = LocalPalette.current
     Text(
-        stringResource(pageLabel(pages[state.currentPage])),
+        stringResource(caption(state.currentPage)),
         color = palette.textDim.toComposeColor(),
         fontSize = 12.sp,
         modifier = Modifier.padding(bottom = 4.dp),
     )
-    // As tall as the fullest page, so a swipe never makes the popup jump.
-    val rows = pages.maxOf { (it.presets.size + ShapePresets.COLUMNS - 1) / ShapePresets.COLUMNS }
     HorizontalPager(state = state, modifier = Modifier.fillMaxWidth().height((rows * CHIP + (rows - 1) * GAP).dp)) { page ->
-        Column(verticalArrangement = Arrangement.spacedBy(GAP.dp)) {
-            for (row in pages[page].presets.chunked(ShapePresets.COLUMNS)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(GAP.dp)) {
-                    for (p in row) {
-                        KindChip(ShapeIcons.of(p), stringResource(presetLabel(p.key)), selected = p.key == config.preset) {
-                            onPick(p)
-                        }
-                    }
-                }
-            }
-        }
+        Column(verticalArrangement = Arrangement.spacedBy(GAP.dp)) { content(page) }
     }
-    if (pages.size > 1) {
+    if (pageCount > 1) {
         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.Center) {
-            for (i in pages.indices) {
+            for (i in 0 until pageCount) {
                 val on = i == state.currentPage
                 Box(
                     Modifier.padding(horizontal = 3.dp).size(6.dp).clip(CircleShape)
@@ -240,6 +269,38 @@ private fun StepButton(glyph: String, label: String, enabled: Boolean, onClick: 
             Text(glyph, color = (if (enabled) palette.text else palette.textDim).toComposeColor(), fontSize = 16.sp)
         }
     }
+}
+
+@StringRes
+private fun connectorPageLabel(page: ConnectorPage): Int =
+    if (page.key == "uml") R.string.conn_page_uml else R.string.conn_page_connectors
+
+@StringRes
+internal fun connectorLabel(key: String): Int = when (key) {
+    "conn_straight" -> R.string.conn_straight
+    "conn_straight_arrow" -> R.string.conn_straight_arrow
+    "conn_straight_both" -> R.string.conn_straight_both
+    "conn_elbow" -> R.string.conn_elbow
+    "conn_elbow_arrow" -> R.string.conn_elbow_arrow
+    "conn_elbow_both" -> R.string.conn_elbow_both
+    "conn_curved" -> R.string.conn_curved
+    "conn_curved_arrow" -> R.string.conn_curved_arrow
+    "conn_curved_both" -> R.string.conn_curved_both
+    "conn_rounded" -> R.string.conn_rounded
+    "conn_rounded_arrow" -> R.string.conn_rounded_arrow
+    "conn_rounded_both" -> R.string.conn_rounded_both
+    "uml_association" -> R.string.uml_association
+    "uml_inheritance" -> R.string.uml_inheritance
+    "uml_realization" -> R.string.uml_realization
+    "uml_dependency" -> R.string.uml_dependency
+    "uml_aggregation" -> R.string.uml_aggregation
+    "uml_composition" -> R.string.uml_composition
+    "uml_association_elbow" -> R.string.uml_association_elbow
+    "uml_inheritance_elbow" -> R.string.uml_inheritance_elbow
+    "uml_realization_elbow" -> R.string.uml_realization_elbow
+    "uml_dependency_elbow" -> R.string.uml_dependency_elbow
+    "uml_aggregation_elbow" -> R.string.uml_aggregation_elbow
+    else -> R.string.uml_composition_elbow
 }
 
 @StringRes

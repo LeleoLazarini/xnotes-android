@@ -392,13 +392,15 @@ data class Settings(
             .put("dashed", c.dashed).put("dash_length", c.dashLength).put("dash_gap", c.dashGap)
             .put("n", c.n).put("head_start", c.headStart.id).put("head_end", c.headEnd.id)
             .put("shape_page", c.shapePage)
+            .put("connector_page", c.connectorPage)
 
         private fun shapeConfig(o: JSONObject): ShapeConfig {
             // Settings from before chips name only a kind; its chip and that chip's heads stand in.
             val chip = com.xnotes.core.shapes.ShapePresets.byKey(o.optString("preset", ""))
                 ?: com.xnotes.core.shapes.ShapePresets.forKind(ShapeKind.fromId(o.optString("shape", "rectangle")))
+            val connector = com.xnotes.core.shapes.ConnectorPresets.byKey(o.optString("preset", ""))
             return ShapeConfig(
-                preset = chip.key,
+                preset = connector?.key ?: chip.key,
                 strokeWidth = o.optDouble("stroke_width", 3.0),
                 fill = o.optBoolean("fill", false),
                 fillAlpha = o.optDouble("fill_alpha", ShapeConfig.FILL_ALPHA)
@@ -413,6 +415,7 @@ data class Settings(
                 headStart = com.xnotes.core.shapes.Head.fromId(o.optString("head_start", chip.headStart.id)),
                 headEnd = com.xnotes.core.shapes.Head.fromId(o.optString("head_end", chip.headEnd.id)),
                 shapePage = o.optInt("shape_page", com.xnotes.core.shapes.ShapePresets.pageOf(chip)),
+                connectorPage = o.optInt("connector_page", connector?.let { com.xnotes.core.shapes.ConnectorPresets.pageOf(it) } ?: 0),
             )
         }
 

@@ -19,6 +19,9 @@ import com.xnotes.core.infinite.EraseSession
 import com.xnotes.core.infinite.LiftTransform
 import com.xnotes.core.infinite.OverlayTessellator
 import com.xnotes.core.model.CanvasItem
+import com.xnotes.core.model.ConnectorDraft
+import com.xnotes.core.model.ConnectorItem
+import com.xnotes.core.model.Glue
 import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
@@ -38,7 +41,7 @@ import kotlin.math.exp
 import kotlin.math.max
 
 /** What the current gesture is doing. */
-enum class CanvasPointerMode { IDLE, PAN, PINCH, DRAW, ERASE, SHAPE, BAND, LASSO, MOVE, RESIZE, ROTATE, VERTEX, POLYGON }
+enum class CanvasPointerMode { IDLE, PAN, PINCH, DRAW, ERASE, SHAPE, BAND, LASSO, MOVE, RESIZE, ROTATE, VERTEX, POLYGON, CONNECT }
 
 /**
  * Gestures on the infinite canvas.
@@ -73,10 +76,10 @@ class InfiniteInteraction(
     private val onEraseLifted: () -> Unit = {},
     /** Where the eraser cursor sits in viewport pixels, and how wide, or null to hide it. */
     private val onEraserCursor: (Pt?, Double) -> Unit = { _, _ -> },
-    /** The shape being dragged out, re-tessellated as it grows, or null to clear the preview. */
-    private val onPendingShape: (ShapeItem?) -> Unit = {},
-    /** A finished shape: add it to the document and push the undo command. */
-    private val onCommitShape: (ShapeItem) -> Unit = {},
+    /** The shape or connector being drawn, re-tessellated as it grows, or null to clear the preview. */
+    private val onPendingShape: (CanvasItem?) -> Unit = {},
+    /** A finished shape or connector: add it to the document and push the undo command. */
+    private val onCommitShape: (CanvasItem) -> Unit = {},
     /** The shape tool's style, and the active ink colour it draws in. */
     private val shapeConfig: () -> ShapeConfig = { ShapeConfig() },
     private val inkColor: () -> Rgba = { InkPalette.DEFAULT },
@@ -124,6 +127,12 @@ class InfiniteInteraction(
 
         /** How far a press may wander and still count as a tap, in device pixels. */
         const val TAP_SLOP_PX = 12.0
+
+        /** How far a drawn connector's route keeps clear of what it goes round, in dp. */
+        const val ROUTE_MARGIN_DP = 12.0
+
+        /** Past this many connection points on screen, none are marked. */
+        const val MAX_MARKS = 4000
     }
 
     /** The armed tool. */
@@ -155,6 +164,16 @@ class InfiniteInteraction(
 
     // The shape being dragged out with the shape tool.
     private var pendingShape: ShapeItem? = null
+
+    // A connector being drawn with a connector chip armed.
+    private var connectorDraft: ConnectorDraft? = null
+
+    /** The connection points lit for the chrome: under a hovering pen, where a connector set off and where it is going. */
+    var connectHot: List<Pt> = emptyList()
+        private set
+
+    /** True when the shape tool has a connector chip armed, so the points connectors glue to show. */
+    val connecting: Boolean get() = tool == Tool.SHAPE && shapeConfig().connector != null
 
     // Band and lasso, in content space, live only while their gesture runs.
     var bandRect: Rect? = null
@@ -390,6 +409,15 @@ class InfiniteInteraction(
         val buttonHeld = stylusButtons.heldFor(e)
         val at = viewport.viewportToContent(Pt(vx, vy))
         val drawing = (tool.isStroke || tool == Tool.SHAPE) && toolType != MotionEvent.TOOL_TYPE_FINGER
+        // With a connector armed, a press on a point it can glue to starts one, whatever is selected.
+        val inks = toolType != MotionEvent.TOOL_TYPE_FINGER || fingerDraws
+        if (connecting && inks && !buttonHeld && toolType != MotionEvent.TOOL_TYPE_ERASER && glueHitAt(at) != null) {
+            cancelLongPress()
+            clearSelection()
+            if (polygonDraft != null) finishPolygonDraft()
+            beginConnector(vx, vy)
+            return
+        }
         // A drawing tool grabs a lone shape only by the shape itself; a finger grabs the whole box.
         val onSelection = if (drawing) drawingGrabsSelection(at) else hitsSelection(at)
         val effective: Tool = when {
@@ -420,6 +448,7 @@ class InfiniteInteraction(
             effective.isStroke -> beginDraw(vx, vy, effective, e)
             effective == Tool.ERASER -> beginErase(vx, vy)
             placing -> beginPolygonTap(vx, vy)
+            effective == Tool.SHAPE && shapeConfig().connector != null -> beginConnector(vx, vy)
             effective == Tool.SHAPE -> beginShape(vx, vy)
             effective == Tool.SELECT -> beginSelect(vx, vy)
             effective == Tool.LASSO -> beginLasso(vx, vy)
@@ -476,6 +505,7 @@ class InfiniteInteraction(
         // follows is not fighting a drag, and stop the press from also dismissing the selection.
         if (mode == CanvasPointerMode.DRAW) abandonStroke()
         if (mode == CanvasPointerMode.SHAPE) abandonShape()
+        if (mode == CanvasPointerMode.CONNECT) abandonConnector()
         mode = CanvasPointerMode.IDLE
         panMayDismiss = false
         if (candidate != null) {
@@ -531,6 +561,7 @@ class InfiniteInteraction(
             CanvasPointerMode.DRAW -> extendDraw(e)
             CanvasPointerMode.ERASE -> extendErase(e)
             CanvasPointerMode.SHAPE -> extendShape(e.getX(0).toDouble(), e.getY(0).toDouble())
+            CanvasPointerMode.CONNECT -> extendConnector(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.BAND -> extendBand(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.LASSO -> extendLasso(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.MOVE -> extendMove(e.getX(0).toDouble(), e.getY(0).toDouble())
@@ -574,6 +605,7 @@ class InfiniteInteraction(
             onEraseLifted()
         }
         if (mode == CanvasPointerMode.SHAPE) endShape()
+        if (mode == CanvasPointerMode.CONNECT) endConnector()
         when (mode) {
             CanvasPointerMode.BAND -> endBand()
             CanvasPointerMode.LASSO -> endLasso()
@@ -598,6 +630,7 @@ class InfiniteInteraction(
         if (mode == CanvasPointerMode.DRAW) abandonStroke()
         if (mode == CanvasPointerMode.ERASE) endErase()
         if (mode == CanvasPointerMode.SHAPE) abandonShape()
+        if (mode == CanvasPointerMode.CONNECT) abandonConnector()
         // A cancelled drag never happened: the model was never touched, so putting the box back and
         // dropping the lift is the whole undo.
         if (mode == CanvasPointerMode.MOVE) {
@@ -1244,7 +1277,9 @@ class InfiniteInteraction(
     private fun selectShapeAt(at: Pt) {
         val reach = InteractionController.OUTLINE_GRAB / viewport.zoom
         val near = Rect(at.x - reach, at.y - reach, 2 * reach, 2 * reach)
-        val hit = itemsIn(near).lastOrNull { it is ShapeItem && !it.locked && it.touches(at, reach) } ?: return
+        val hit = itemsIn(near).lastOrNull {
+            !it.locked && ((it is ShapeItem && it.touches(at, reach)) || (it is ConnectorItem && it.touches(at, reach)))
+        } ?: return
         selection()?.select(listOf(hit))
         onSelectionChanged()
     }
@@ -1274,6 +1309,99 @@ class InfiniteInteraction(
             fromHoriz >= Math.PI / 2.0 - snap -> Pt(anchor.x, p.y)
             else -> p
         }
+    }
+
+    // --- connectors ---
+
+    /** The glue targets near [at], for a pen within [reach] of their points. */
+    private fun glueTargetsNear(at: Pt, reach: Double): List<CanvasItem> =
+        itemsIn(Rect(at.x - reach, at.y - reach, 2 * reach, 2 * reach))
+
+    /** The connection point within reach of [at], if a connector would glue there. */
+    private fun glueHitAt(at: Pt): Glue.Hit? {
+        val reach = OverlayTessellator.DOT_TOUCH_PX / viewport.zoom
+        return Glue.nearest(glueTargetsNear(at, reach), at, reach)
+    }
+
+    /** How far a route keeps clear of what it goes round: a fixed distance on screen. */
+    private fun routeMargin(): Double = ROUTE_MARGIN_DP * devicePxPerDp() / viewport.zoom
+
+    /**
+     * Every connection point on screen, for the chrome to mark while a connector is armed. A canvas
+     * so dense that it would mark more than [MAX_MARKS] marks none.
+     */
+    fun connectionMarks(): List<Pt> {
+        if (!connecting) return emptyList()
+        val out = ArrayList<Pt>()
+        val drawing = connectorDraft?.connector
+        for (item in itemsIn(viewport.visibleContentRect())) {
+            if (item === drawing) continue
+            for (cp in Glue.points(item)) out += cp.at
+            if (out.size > MAX_MARKS) return emptyList()
+        }
+        return out
+    }
+
+    /** A hovering pen lights the connection point under it while a connector is armed. */
+    fun onHover(e: MotionEvent): Boolean {
+        val hovering = connecting && mode == CanvasPointerMode.IDLE && e.actionMasked != MotionEvent.ACTION_HOVER_EXIT
+        val hot = if (hovering) listOfNotNull(glueHitAt(viewport.viewportToContent(Pt(e.x.toDouble(), e.y.toDouble())))?.point?.at) else emptyList()
+        if (hot != connectHot) {
+            connectHot = hot
+            onSelectionChanged()
+        }
+        return hovering
+    }
+
+    /** A press with a connector chip: the connector sets off, glued to the point under the pen if there is one. */
+    private fun beginConnector(vx: Double, vy: Double) {
+        val cfg = shapeConfig()
+        val at = viewport.viewportToContent(Pt(vx, vy))
+        val reach = OverlayTessellator.DOT_TOUCH_PX / viewport.zoom
+        val width = cfg.strokeWidth * InteractionController.SHAPE_PEN_PARITY
+        val draft = ConnectorDraft.startAt(at, glueTargetsNear(at, reach), reach) { cfg.startConnector(it, inkColor(), width) } ?: return
+        connectorDraft = draft
+        mode = CanvasPointerMode.CONNECT
+        setInteractive(false, false)
+        connectHot = listOfNotNull(draft.connector.start.takeIf { it.glued }?.at)
+        onPendingShape(draft.connector)
+        requestRender()
+    }
+
+    /** The far end follows the pen, gluing near a point, and the route is planned afresh round what is in the way. */
+    private fun extendConnector(vx: Double, vy: Double) {
+        val draft = connectorDraft ?: return
+        val at = viewport.viewportToContent(Pt(vx, vy))
+        val reach = OverlayTessellator.DOT_TOUCH_PX / viewport.zoom
+        val margin = routeMargin()
+        val area = Glue.routeArea(draft.connector.start.at, at, margin).union(Rect(at.x - reach, at.y - reach, 2 * reach, 2 * reach))
+        draft.drag(at, itemsIn(area), reach, margin)
+        connectHot = listOfNotNull(draft.connector.start.takeIf { it.glued }?.at, draft.hot?.point?.at)
+        onPendingShape(draft.connector)
+        requestRender()
+    }
+
+    /** Pen up: a connector worth keeping goes in and stays selected; a tap picks up what is under it. */
+    private fun endConnector() {
+        val draft = connectorDraft ?: return
+        connectorDraft = null
+        connectHot = emptyList()
+        onPendingShape(null)
+        if (draft.worthKeeping(InteractionController.SHAPE_MIN_DRAG)) {
+            onCommitShape(draft.connector)
+            selection()?.select(listOf(draft.connector))
+        } else {
+            selectShapeAt(draft.connector.start.at)
+        }
+        onSelectionChanged()
+        requestRender()
+    }
+
+    private fun abandonConnector() {
+        connectorDraft = null
+        connectHot = emptyList()
+        onPendingShape(null)
+        onSelectionChanged()
     }
 
     // --- hold still to snap a freehand stroke into a shape ---

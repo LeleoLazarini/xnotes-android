@@ -138,6 +138,44 @@ object OverlayTessellator {
         return parts
     }
 
+    /** A connection point's cross, end to end, and its line, in device pixels. */
+    const val MARK_PX = 9.0
+    const val MARK_LINE_PX = 1.4
+
+    /** The ring round the connection point a pen is over, in device pixels. */
+    const val HOT_PX = 15.0
+    const val HOT_CORE_PX = 7.0
+
+    /**
+     * Where a connector can glue, while one is armed: a small cross on every point in [points], and
+     * a solid ring on each of [hot], the points under the pen and the one a connector set off from.
+     */
+    fun connectionMarks(points: List<Pt>, hot: List<Pt>, zoom: Double, accent: Rgba, tolerance: Double): List<MeshPart> {
+        if (zoom <= 0.0) return emptyList()
+        val parts = ArrayList<MeshPart>(3)
+        if (points.isNotEmpty()) {
+            val b = MeshBuilder()
+            val r = MARK_PX / zoom / 2.0
+            val half = MARK_LINE_PX / zoom / 2.0
+            for (p in points) {
+                b.polylineRibbon(listOf(Pt(p.x - r, p.y - r), Pt(p.x + r, p.y + r)), half, closed = false, tolerance = tolerance)
+                b.polylineRibbon(listOf(Pt(p.x - r, p.y + r), Pt(p.x + r, p.y - r)), half, closed = false, tolerance = tolerance)
+            }
+            parts.add(MeshPart(b.build(), accent, InkPass.OPAQUE))
+        }
+        if (hot.isNotEmpty()) {
+            val rings = MeshBuilder()
+            val cores = MeshBuilder()
+            for (h in hot) {
+                rings.circle(h.x, h.y, HOT_PX / zoom / 2.0, tolerance)
+                cores.circle(h.x, h.y, HOT_CORE_PX / zoom / 2.0, tolerance)
+            }
+            parts.add(MeshPart(rings.build(), accent, InkPass.OPAQUE))
+            parts.add(MeshPart(cores.build(), DOT_CORE, InkPass.OPAQUE))
+        }
+        return parts
+    }
+
     /** The rectangle a band-select drag has swept out so far, dashed like every other marquee. */
     fun band(
         rect: Rect,
