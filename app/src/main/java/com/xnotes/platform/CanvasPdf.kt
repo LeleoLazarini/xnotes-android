@@ -12,6 +12,7 @@ import com.xnotes.core.infinite.CanvasPdfLayout
 import com.xnotes.core.infinite.InfiniteDocument
 import com.xnotes.core.infinite.isFinite
 import com.xnotes.core.model.CanvasItem
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.PagePattern
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
@@ -118,6 +119,7 @@ object CanvasPdfExporter {
                     raster.bmp.recycle()
                 }
                 if (item is ShapeItem) item.paintLabel(r)
+                if (item is ConnectorItem) item.paintLabel(r)
             } else {
                 item.paint(r)
             }

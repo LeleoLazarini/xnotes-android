@@ -2,6 +2,7 @@ package com.xnotes.core.infinite
 
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.CanvasItem
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
@@ -99,6 +100,7 @@ object ItemMesher {
         when (item) {
             is Stroke -> meshStroke(item, tolerance)
             is ShapeItem -> meshShape(item, tolerance)
+            is ConnectorItem -> meshConnector(item, tolerance)
             else -> null // images carry a texture rather than a colour, and take their own path
         }
 
@@ -211,6 +213,12 @@ object ItemMesher {
         // Drawn text has no line to fade when it thins out on screen.
         val half = if (shape.shape == com.xnotes.core.shapes.ShapeKind.GLYPHS) 0.0 else shape.strokeWidth / 2.0
         return MeshedItem(parts, shape.paintBounds(), half)
+    }
+
+    private fun meshConnector(connector: ConnectorItem, tolerance: Double): MeshedItem? {
+        val parts = ShapeTessellator.tessellate(connector, tolerance) + listOfNotNull(ShapeTessellator.labelPart(connector))
+        if (parts.isEmpty()) return null
+        return MeshedItem(parts, connector.paintBounds(), connector.strokeWidth / 2.0)
     }
 
     /** The pass a stroke has to take, from its tool and its resolved ink alpha. */

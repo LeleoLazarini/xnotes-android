@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.CanvasItem
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.pal.Renderer
@@ -38,6 +39,7 @@ internal object PdfItemRaster {
             item.renderColor.a < 255
         // A shape's fill and outline are single paths, so PDF transparency draws them as on screen.
         is ShapeItem -> item.neon
+        is ConnectorItem -> item.neon
         else -> false // text boxes are real text and images are image XObjects, both from the renderer
     }
 
@@ -45,7 +47,13 @@ internal object PdfItemRaster {
     fun item(item: CanvasItem, cover: Rect): Raster? {
         val multiply = item is Stroke && item.tool == Tool.HIGHLIGHTER
         // A shape's label stays out of its picture: the exporter writes it on top as real text.
-        return region(item.paintBounds(), cover, multiply) { r, _ -> if (item is ShapeItem) item.paintBody(r) else item.paint(r) }
+        return region(item.paintBounds(), cover, multiply) { r, _ ->
+            when (item) {
+                is ShapeItem -> item.paintBody(r)
+                is ConnectorItem -> item.paintBody(r)
+                else -> item.paint(r)
+            }
+        }
     }
 
     /**

@@ -18,6 +18,9 @@ class ShapeLabel(val text: String, val style: TextStyle, val measurer: TextMeasu
     /** One line's height, which also bounds how narrow the label may wrap. */
     val lineHeight: Double by lazy { measurer.lineHeight(font) }
 
+    /** How wide the text sets unwrapped: its longest line. */
+    val naturalWidth: Double by lazy { text.split('\n').maxOf { measurer.advances(it, font).sum() } }
+
     @Volatile
     private var measured: Measured? = null
 

@@ -1,13 +1,13 @@
 package com.xnotes.core.model
 
 import com.xnotes.core.geometry.Affine
-import com.xnotes.core.geometry.Geometry
 import com.xnotes.core.geometry.Obb
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.pal.Mark
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.Renderer
+import com.xnotes.core.shapes.ConnectionPoint
 import com.xnotes.core.shapes.EditDot
 import com.xnotes.core.shapes.FreePath
 import com.xnotes.core.shapes.Head
@@ -19,9 +19,6 @@ import com.xnotes.core.shapes.ShapePainter
 import com.xnotes.core.shapes.ShapeParams
 import com.xnotes.core.shapes.ShapePath
 import com.xnotes.core.shapes.VertexEdit
-import com.xnotes.core.stroke.Sample
-import com.xnotes.core.tools.Tool
-import com.xnotes.core.tools.ToolDefaults
 import com.xnotes.core.vector.PathFlattener
 import com.xnotes.core.vector.VectorContour
 import com.xnotes.core.vector.VectorSeg
@@ -31,7 +28,6 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.round
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -169,7 +165,7 @@ class ShapeItem(
     /** Everything but the label: fills, then the outline, glowing when neon. */
     fun paintBody(r: Renderer) {
         val paths = paths()
-        if (neon) return paintNeon(r, paths)
+        if (neon) return Outline.paintNeon(r, paths, fillRgba, pen(), neonStrength, paintBounds())
         ShapePainter.fill(r, paths, fillRgba, strokeRgba)
         ShapePainter.stroke(r, paths, pen())
     }
@@ -201,6 +197,16 @@ class ShapeItem(
         val w = max(t.w, l.lineHeight * ShapeLabel.MIN_WIDTH_LINES)
         val h = l.height(w)
         return Rect(t.centerX - w / 2.0, t.centerY - h / 2.0, w, h)
+    }
+
+    /** Where a connector may glue, on the page, each with its ways out turned with the shape; none for a line or arrow. */
+    fun connectionPoints(): List<ConnectionPoint> {
+        if (shape.isEndpointShape) return emptyList()
+        val local = localGeometry().connections
+        if (rotation == 0.0) return local
+        val cs = cos(rotation)
+        val sn = sin(rotation)
+        return local.map { cp -> ConnectionPoint(toPage(cp.at), cp.normals.map { n -> Pt(n.x * cs - n.y * sn, n.x * sn + n.y * cs) }) }
     }
 
     /** Closed kinds take a typed label; lines and arrows get theirs with connectors. */
@@ -252,42 +258,9 @@ class ShapeItem(
     /** True when page point [p] lands on the label's lines. */
     fun labelContains(p: Pt): Boolean = labelRect()?.contains(toLocal(p)) == true
 
-    /**
-     * Neon: the outline as a glowing glass tube — a blurred ink-colour **halo**
-     * (composited once at a glow-intensity alpha so corners don't blow out), the
-     * opaque colour **body**, then a thinner **white-hot core** down the centre so
-     * the colour reads at the tube's edges. [neonStrength] scales the halo only.
-     */
-    internal fun neonGlowRadius(): Double {
-        val s = neonStrength.coerceIn(0.0, 1.0)
-        return (strokeWidth * (GLOW_FACTOR_MIN + GLOW_FACTOR_SPAN * s)).coerceAtLeast(GLOW_MIN)
-    }
-
     override fun paintBounds(): Rect =
-        if (neon) bounds().outset(neonGlowRadius() * 2.0 + 4.0)
+        if (neon) bounds().outset(Outline.glowRadius(strokeWidth, neonStrength) * 2.0 + 4.0)
         else bounds()
-
-    private fun paintNeon(r: Renderer, paths: List<ShapePath>) {
-        val glowR = neonGlowRadius()
-        val s = neonStrength.coerceIn(0.0, 1.0)
-        val color = strokeRgba.withAlpha(255)
-        val white = Rgba(255, 255, 255, 255)
-        val glowAlpha = GLOW_ALPHA_MIN + GLOW_ALPHA_SPAN * s
-        val coreW = (strokeWidth * CORE_WIDTH_FRAC).coerceAtLeast(CORE_WIDTH_MIN)
-
-        ShapePainter.fill(r, paths, fillRgba, strokeRgba)
-
-        // 1) Outer halo (ink colour), bounded in its own glow-alpha layer.
-        r.saveLayerAlpha(paintBounds(), glowAlpha)
-        ShapePainter.stroke(r, paths, pen().copy(color = color, glowRadius = glowR))
-        r.restore()
-
-        // 2) Tube body — saturated colour shows at the rim.
-        ShapePainter.stroke(r, paths, pen())
-
-        // 3) White-hot core — a thinner white line down the centre of the shaft and the chevron.
-        ShapePainter.stroke(r, paths, pen().copy(color = white, width = coreW))
-    }
 
     override fun bounds(): Rect {
         val pad = strokeWidth / 2.0 + 1.0
@@ -457,40 +430,12 @@ class ShapeItem(
     fun interior(): (Pt) -> Boolean {
         val regions = localGeometry().paths
             .filter { it.role == PathRole.OUTLINE || it.role == PathRole.FILL_ONLY }
-            .map { path -> path.contours.map { PathFlattener.flatten(it, HIT_FLATTEN) } }
-        return { p -> toLocal(p).let { q -> regions.any { inRings(it, q) } } }
-    }
-
-    /** Inside an odd number of [rings]: in their fill, holes left out. */
-    private fun inRings(rings: List<List<Pt>>, p: Pt): Boolean {
-        var inside = false
-        for (ring in rings) if (ring.size >= 3 && Geometry.pointInPolygon(ring, p)) inside = !inside
-        return inside
+            .map { path -> path.contours.map { PathFlattener.flatten(it, Outline.HIT_FLATTEN) } }
+        return { p -> toLocal(p).let { q -> regions.any { Outline.inRings(it, q) } } }
     }
 
     /** Does [p] (unturned frame) land within [tol] of a stroked edge, or inside the fill? */
-    private fun hits(p: Pt, tol: Double): Boolean {
-        for (path in localGeometry().paths) {
-            val rings = path.contours.map { PathFlattener.flatten(it, HIT_FLATTEN) }
-            if ((path.role == PathRole.HEAD_FILLED || (fillRgba != null && path.role.fills)) && inRings(rings, p)) return true
-            if (path.role.strokes) {
-                for (i in rings.indices) if (nearPolyOutline(rings[i], p, tol, path.contours[i].closed)) return true
-            }
-        }
-        return false
-    }
-
-    private fun nearPolyOutline(verts: List<Pt>, p: Pt, tol: Double, closed: Boolean): Boolean {
-        if (verts.isEmpty()) return false
-        if (verts.size == 1) return verts[0].distanceTo(p) <= tol
-        val edges = if (closed) verts.size else verts.size - 1
-        for (i in 0 until edges) {
-            val a = verts[i]
-            val b = verts[(i + 1) % verts.size]
-            if (Geometry.distancePointToSegment(p, a, b) <= tol) return true
-        }
-        return false
-    }
+    private fun hits(p: Pt, tol: Double): Boolean = Outline.hits(localGeometry().paths, p, tol, fillRgba != null)
 
     /**
      * AREA-erase: what survives an eraser circle (page-local [cx], [cy], [radius]), with the same
@@ -505,134 +450,9 @@ class ShapeItem(
         val c = Pt(cx, cy)
         if (bounds().distanceTo(c) > radius) return null
         val fillHit = fillRgba != null && intersectsCircle(cx, cy, radius)
-        val pen = pen()
-        val outlines = paths()
-            .filter { it.role.strokes }
-            .flatMap { p ->
-                val dashes = ShapePainter.strokePen(p.role, pen)?.takeIf { it.dashed }
-                p.contours.map { Triple(PathFlattener.flatten(it, ERASE_FLATTEN), it.closed, dashes) }
-            }
-            .filter { it.first.size >= 2 }
-        if (outlines.isEmpty()) return if (intersectsCircle(cx, cy, radius)) emptyList() else null
-        var touched = fillHit
-        val ink = ArrayList<CanvasItem>()
-        for ((pts, closed, dashes) in outlines) {
-            val (hit, survivors) = cut(pts, closed, c, radius)
-            touched = touched || hit
-            for (run in survivors) ink.add(inkOf(run, dashes))
-        }
-        return if (touched) ink else null
-    }
-
-    /** A run of this shape's outline as a pen stroke: its colour and width, held constant, never smoothed. */
-    private fun inkOf(run: List<Pt>, dashes: Pen?): Stroke {
-        val tool = if (dashes != null) Tool.DASHED else Tool.PEN
-        val config = ToolDefaults.configFor(tool).copy(
-            baseWidth = strokeWidth,
-            rgba = strokeRgba,
-            pressureEnabled = false,
-            taperEnabled = false,
-            neon = neon,
-            neonStrength = neonStrength,
-            dashLength = dashes?.dashOn ?: dashLength,
-            dashGap = dashes?.dashGap ?: dashGap,
-        )
-        // Close-spaced samples, so the eraser can go on cutting the ink anywhere along it.
-        val samples = ArrayList<Sample>()
-        for (i in run.indices) {
-            val a = run[i]
-            if (i == 0) {
-                samples.add(Sample(a.x, a.y, 1.0))
-                continue
-            }
-            val from = run[i - 1]
-            val steps = kotlin.math.ceil(from.distanceTo(a) / INK_SPACING).toInt().coerceAtLeast(1)
-            for (k in 1..steps) {
-                val t = k.toDouble() / steps
-                samples.add(Sample(from.x + (a.x - from.x) * t, from.y + (a.y - from.y) * t, 1.0))
-            }
-        }
-        return Stroke(tool, config, samples, smoothScale = 0.0)
-    }
-
-    /** One outline cut by the eraser circle: whether it was touched, and the runs left outside it. */
-    private fun cut(verts: List<Pt>, closed: Boolean, c: Pt, radius: Double): Pair<Boolean, List<List<Pt>>> {
-        val pts = if (closed) verts + verts.first() else verts
-        var touched = false
-        val runs = mutableListOf<MutableList<Pt>>()
-        var current = mutableListOf<Pt>()
-        fun flush() {
-            if (current.size >= 2 && polylineLength(current) > 1e-6) runs.add(current)
-            current = mutableListOf()
-        }
-        for (i in 0 until pts.size - 1) {
-            val a = pts[i]
-            val b = pts[i + 1]
-            val outside = outsideSpans(a, b, c, radius)
-            if (outside.size == 1 && outside[0].first == 0.0 && outside[0].second == 1.0) {
-                if (current.isEmpty()) current.add(a)
-                current.add(b)
-                continue
-            }
-            touched = true
-            if (outside.isEmpty()) { // the whole segment sits inside the circle
-                flush()
-                continue
-            }
-            for ((ta, tb) in outside) {
-                if (ta == 0.0) {
-                    if (current.isEmpty()) current.add(a)
-                } else {
-                    flush()
-                    current.add(lerp(a, b, ta))
-                }
-                current.add(if (tb == 1.0) b else lerp(a, b, tb))
-                if (tb < 1.0) flush()
-            }
-        }
-        flush()
-
-        // A closed outline cut away from the seam vertex leaves the seam intact in two runs;
-        // join them so the survivor is one continuous polyline instead of splitting at v0.
-        if (touched && closed && runs.size >= 2) {
-            val first = runs.first()
-            val last = runs.last()
-            if (first.first().distanceTo(pts.first()) < 1e-9 && last.last().distanceTo(pts.first()) < 1e-9) {
-                runs.removeAt(runs.size - 1)
-                runs[0] = (last + first.drop(1)).toMutableList()
-            }
-        }
-        return touched to runs
-    }
-
-    /** Sub-intervals of the segment [a]→[b] (as fractions) lying outside the circle at [c]. */
-    private fun outsideSpans(a: Pt, b: Pt, c: Pt, r: Double): List<Pair<Double, Double>> {
-        val dx = b.x - a.x
-        val dy = b.y - a.y
-        val fx = a.x - c.x
-        val fy = a.y - c.y
-        val qa = dx * dx + dy * dy
-        if (qa < 1e-12) return if (fx * fx + fy * fy > r * r) listOf(0.0 to 1.0) else emptyList()
-        val qb = 2.0 * (fx * dx + fy * dy)
-        val qc = fx * fx + fy * fy - r * r
-        val disc = qb * qb - 4.0 * qa * qc
-        if (disc <= 0.0) return listOf(0.0 to 1.0) // misses (or grazes) the segment's line
-        val sq = sqrt(disc)
-        val t1 = (-qb - sq) / (2.0 * qa)
-        val t2 = (-qb + sq) / (2.0 * qa)
-        if (t2 <= 0.0 || t1 >= 1.0) return listOf(0.0 to 1.0) // chord lies beyond the segment span
-        val spans = mutableListOf<Pair<Double, Double>>()
-        if (t1 > 0.0) spans.add(0.0 to min(t1, 1.0))
-        if (t2 < 1.0) spans.add(max(t2, 0.0) to 1.0)
-        return spans
-    }
-
-    private fun lerp(a: Pt, b: Pt, t: Double) = Pt(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
-
-    private fun polylineLength(pts: List<Pt>): Double {
-        var len = 0.0
-        for (i in 0 until pts.size - 1) len += pts[i].distanceTo(pts[i + 1])
-        return len
+        val (hit, ink) = Outline.cut(paths(), pen(), neon, neonStrength, c, radius)
+            ?: return if (intersectsCircle(cx, cy, radius)) emptyList() else null
+        return if (hit || fillHit) ink else null
     }
 
     override fun geometry(): GeoHandle = ShapeHandle(start, end)
@@ -874,10 +694,8 @@ class ShapeItem(
         /** Points earlier versions baked a turned ellipse into. */
         private const val BAKED_ELLIPSE_POINTS = 48
 
-        /** Content px a curve may stray when flattened for hit tests, bounds, erasing and stand-ins. */
-        private const val HIT_FLATTEN = 0.5
+        /** Content px a curve may stray when flattened for bounds and stand-ins. */
         private const val BOUNDS_FLATTEN = 0.05
-        private const val ERASE_FLATTEN = 0.25
 
         /** Drawn text is never stroked; its width only pads its bounds. */
         private const val GLYPH_PEN = 0.5
@@ -885,8 +703,6 @@ class ShapeItem(
         /** The kind a file gives drawn text, which readers that predate it skip rather than misdraw. */
         const val GLYPHS_KIND = "glyphs"
 
-        /** How far apart a cut shape's ink is sampled, in content px: a pen's own density. */
-        private const val INK_SPACING = 1.5
         private const val LEGACY_FLATTEN = 0.25
 
         /** [a] folded into (-PI, PI]. */
@@ -926,19 +742,6 @@ class ShapeItem(
                 path = FreePath.normalize(contours, box),
             )
         }
-
-        /** Halo blur = stroke_width × (MIN + SPAN × neonStrength), floored in page px. */
-        private const val GLOW_FACTOR_MIN = 1.2
-        private const val GLOW_FACTOR_SPAN = 2.6
-        private const val GLOW_MIN = 4.0
-
-        /** Halo opacity = MIN + SPAN × neonStrength. */
-        internal const val GLOW_ALPHA_MIN = 0.25
-        internal const val GLOW_ALPHA_SPAN = 0.55
-
-        /** White-hot core line width as a fraction of the stroke width, with a page-px floor. */
-        internal const val CORE_WIDTH_FRAC = 0.4
-        internal const val CORE_WIDTH_MIN = 1.0
     }
 }
 

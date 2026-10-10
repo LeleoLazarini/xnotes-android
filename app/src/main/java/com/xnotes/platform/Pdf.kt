@@ -17,6 +17,7 @@ import com.tom_roush.pdfbox.pdmodel.common.PDRectangle
 import com.xnotes.R
 import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Rect
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Document
 import com.xnotes.core.model.Page
 import com.xnotes.core.model.PageInsets
@@ -418,6 +419,7 @@ object PdfExporter {
                     raster.bmp.recycle()
                 }
                 if (item is ShapeItem) item.paintLabel(renderer)
+                if (item is ConnectorItem) item.paintLabel(renderer)
             } else {
                 item.paint(renderer)
             }

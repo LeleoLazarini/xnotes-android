@@ -1,8 +1,11 @@
 package com.xnotes.core.infinite
 
 import com.xnotes.core.geometry.Pt
+import com.xnotes.core.geometry.Rect
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.pal.FillRule
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.shapes.PathRole
@@ -30,6 +33,10 @@ object ShapeTessellator {
     fun tessellate(shape: ShapeItem, tolerance: Double = StrokeTessellator.DEFAULT_TOLERANCE): List<MeshPart> =
         tessellate(shape.paths(), shape.fillRgba, shape.pen(), tolerance)
 
+    /** A connector's line and heads, drawn like an open shape's. */
+    fun tessellate(connector: ConnectorItem, tolerance: Double = StrokeTessellator.DEFAULT_TOLERANCE): List<MeshPart> =
+        tessellate(connector.paths(), null, connector.pen(), tolerance)
+
     /** [paths] filled with [fill] when there is one, then stroked with [pen]: a shape's parts. */
     internal fun tessellate(paths: List<ShapePath>, fill: Rgba?, pen: Pen, tolerance: Double): List<MeshPart> {
         val flat = flatten(paths, tolerance)
@@ -49,12 +56,21 @@ object ShapeTessellator {
      */
     fun labelPart(shape: ShapeItem): MeshPart? {
         if (shape.labelHidden) return null
-        val l = shape.label ?: return null
-        val frame = shape.labelRect() ?: return null
+        return glyphPart(shape.label ?: return null, shape.labelRect() ?: return null, shape::toPage)
+    }
+
+    /** A connector's label as filled glyphs, upright where it sits on the line; null without one or while typed. */
+    fun labelPart(connector: ConnectorItem): MeshPart? {
+        if (connector.labelHidden) return null
+        return glyphPart(connector.label ?: return null, connector.labelRect() ?: return null) { it }
+    }
+
+    /** [l]'s glyphs set in [frame] and moved onto the page by [toPage], in the label's colour. */
+    private fun glyphPart(l: ShapeLabel, frame: Rect, toPage: (Pt) -> Pt): MeshPart? {
         val glyphs = l.outline(frame.w)
         if (glyphs.isEmpty()) return null
         val rings = glyphs.map { c ->
-            PathFlattener.flatten(c, GLYPH_FLATTEN).map { shape.toPage(Pt(frame.left + it.x, frame.top + it.y)) }
+            PathFlattener.flatten(c, GLYPH_FLATTEN).map { toPage(Pt(frame.left + it.x, frame.top + it.y)) }
         }.filter { it.size >= 3 }
         if (rings.isEmpty()) return null
         Triangulator.triangulate(rings, FillRule.NONZERO)?.let { mesh ->

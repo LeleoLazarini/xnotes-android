@@ -35,7 +35,7 @@ import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.DrawStyle
 import com.xnotes.core.model.ImageData
 import com.xnotes.core.model.ImageItem
-import com.xnotes.core.model.deepCopy
+import com.xnotes.core.model.deepCopyAll
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.ShapeLabel
@@ -502,7 +502,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     private fun copyToClipboard() {
         clipboard.clear()
         clipboardFromCut = false
-        selection.items.mapTo(clipboard) { it.deepCopy(textMeasurer) }
+        clipboard.addAll(selection.items.deepCopyAll(textMeasurer))
     }
 
     override fun cutSelection() {
@@ -515,7 +515,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     /** Clone the selection a nudge down and right, and leave the copies selected. */
     override fun duplicateSelection() {
         if (selection.isEmpty) return
-        val clones = selection.items.map { it.deepCopy(textMeasurer) }
+        val clones = selection.items.deepCopyAll(textMeasurer)
         for (clone in clones) clone.translate(DUPLICATE_NUDGE, DUPLICATE_NUDGE)
         document.addAll(clones)
         history.push(AddCanvasItems(document, clones))
@@ -553,7 +553,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     /** Paste the clipboard at [atContent], or a nudge from where it was copied. */
     fun pasteClipboard(atContent: Pt? = null) {
         if (clipboard.isEmpty()) return
-        val clones = clipboard.map { it.deepCopy(textMeasurer) }
+        val clones = clipboard.deepCopyAll(textMeasurer)
         var box: Rect? = null
         for (clone in clones) box = box?.union(clone.bounds()) ?: clone.bounds()
         val bounds = box ?: return

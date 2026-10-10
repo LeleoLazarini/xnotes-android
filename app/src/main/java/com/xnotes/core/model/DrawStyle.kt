@@ -29,6 +29,14 @@ data class DrawStyle(val color: Rgba, val width: Double) {
                 item.strokeRgba = color
                 item.strokeWidth = width
             }
+            is ConnectorItem -> {
+                item.label = item.label?.let { l ->
+                    val c = l.style.rgba
+                    if (c.r == item.strokeRgba.r && c.g == item.strokeRgba.g && c.b == item.strokeRgba.b) l.withStyle(l.style.copy(rgba = color.copy(a = c.a))) else l
+                }
+                item.strokeRgba = color
+                item.strokeWidth = width
+            }
             else -> Unit
         }
     }
@@ -38,6 +46,7 @@ data class DrawStyle(val color: Rgba, val width: Double) {
         fun of(item: CanvasItem): DrawStyle? = when (item) {
             is Stroke -> DrawStyle(item.config.rgba, item.config.baseWidth)
             is ShapeItem -> DrawStyle(item.strokeRgba, item.strokeWidth)
+            is ConnectorItem -> DrawStyle(item.strokeRgba, item.strokeWidth)
             else -> null
         }
 

@@ -32,7 +32,7 @@ import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.Carry
 import com.xnotes.core.model.Document
 import com.xnotes.core.model.DrawStyle
-import com.xnotes.core.model.deepCopy
+import com.xnotes.core.model.deepCopyAll
 import com.xnotes.core.model.GeoHandle
 import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.Page
@@ -3043,7 +3043,7 @@ class InteractionController(
         if (selection.isEmpty()) return
         itemClipboard.clear()
         clipboardFromCut = false
-        selection.forEach { itemClipboard.add(cloneItem(it.item)) }
+        itemClipboard.addAll(selection.map { it.item }.deepCopyAll(textMeasurer))
     }
 
     fun copySelection() {
@@ -3102,7 +3102,7 @@ class InteractionController(
         if (itemClipboard.isEmpty()) return
         val page = state.document.pages.getOrNull(pageIndex) ?: return
         if (state.pageRects.getOrNull(pageIndex) == null) return
-        val clones = itemClipboard.map { cloneItem(it) }
+        val clones = itemClipboard.deepCopyAll(textMeasurer)
         // Collective bounds (page-local) of the clones.
         var box: Rect? = null
         for (c in clones) box = box?.union(c.bounds()) ?: c.bounds()
@@ -3126,8 +3126,6 @@ class InteractionController(
         refreshSelectionMenu()
         onContentChanged()
     }
-
-    private fun cloneItem(item: CanvasItem): CanvasItem = item.deepCopy(textMeasurer)
 
     // --- selection menu ---
 
