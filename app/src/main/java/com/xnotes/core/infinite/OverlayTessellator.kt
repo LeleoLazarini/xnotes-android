@@ -50,9 +50,9 @@ object OverlayTessellator {
     /** How close a press has to land to a dot to grab it, in device pixels. */
     const val DOT_TOUCH_PX = 20.0
 
-    /** A knob diamond's diagonal and its edge, in device pixels. */
-    const val KNOB_PX = 14.0
-    const val KNOB_EDGE_PX = 1.2
+    /** A knob diamond's diagonal and its edge, in device pixels: big enough to stand out among the dots. */
+    const val KNOB_PX = 22.0
+    const val KNOB_EDGE_PX = 1.5
 
     /** Knobs are amber, PowerPoint's colour for them, so they never read as a handle or a vertex. */
     val KNOB_FILL = Rgba(255, 196, 0, 255)
