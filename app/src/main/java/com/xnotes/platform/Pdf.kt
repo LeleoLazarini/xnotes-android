@@ -50,23 +50,31 @@ object PdfImporter {
     fun import(source: PdfSource, dpi: Int = PageSize.DEFAULT_DPI): Document {
         val doc = Document(dpi = dpi)
         doc.pdfFile = source.file
-        val sizes = source.allPageSizePoints() ?: FloatArray(0)
+        doc.pages.addAll(pages(source.allPageSizePoints() ?: FloatArray(0), 0, dpi, null))
+        if (doc.pages.isEmpty()) doc.pages.add(Page.blank(PageSize.A4, com.xnotes.core.model.Orientation.PORTRAIT, dpi))
+        return doc
+    }
+
+    /**
+     * A note page per PDF page sized by [sizes] (width, height pairs in points), showing source
+     * pages from [first] on. A page that doesn't load sizes itself after the page before it,
+     * the first one after [before].
+     */
+    fun pages(sizes: FloatArray, first: Int, dpi: Int, before: Page?): List<Page> {
+        val out = ArrayList<Page>(sizes.size / 2)
         for (i in 0 until sizes.size / 2) {
             val wPts = sizes[2 * i]
             val hPts = sizes[2 * i + 1]
             if (wPts < 1f || hPts < 1f) {
                 // A page that doesn't load (0x0), or one too small to see, takes the previous page's size
-                val (w, h) = doc.pages.lastOrNull()?.let { it.width to it.height }
+                val (w, h) = (out.lastOrNull() ?: before)?.let { it.width to it.height }
                     ?: PageSize.A4.pixels(com.xnotes.core.model.Orientation.PORTRAIT, dpi)
-                doc.pages.add(Page(w, h))
+                out.add(Page(w, h))
                 continue
             }
-            val w = wPts / 72.0 * dpi
-            val h = hPts / 72.0 * dpi
-            doc.pages.add(Page(w, h, pdfPage = i))
+            out.add(Page(wPts / 72.0 * dpi, hPts / 72.0 * dpi, pdfPage = first + i))
         }
-        if (doc.pages.isEmpty()) doc.pages.add(Page.blank(PageSize.A4, com.xnotes.core.model.Orientation.PORTRAIT, dpi))
-        return doc
+        return out
     }
 }
 

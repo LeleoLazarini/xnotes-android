@@ -505,6 +505,7 @@
     <string name="err_save_images">无法保存图片。</string>
     <string name="err_read_image">无法读取图片。</string>
     <string name="err_read_file">无法读取文件。</string>
+    <string name="err_insert_pdf">无法插入该 PDF。</string>
     <string name="err_open_second">无法打开第二个笔记。</string>
     <string name="share_named">分享 %1$s</string>
     <string name="err_share_note">无法分享笔记。</string>
@@ -566,6 +567,7 @@
     <string name="image_png">图片（PNG）</string>
     <string name="back_save_as">"‹  另存为"</string>
     <string name="add_page">添加页面</string>
+    <string name="insert_pdf">插入 PDF</string>
     <string name="erase_page">清空页面</string>
     <string name="share_ellipsis">分享…</string>
     <string name="save_as_ellipsis">另存为…</string>

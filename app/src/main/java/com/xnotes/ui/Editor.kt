@@ -3806,7 +3806,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         return uri
     }
 
-    /** Why the last PDF given to [createPdfNoteFile] did not open, null when it did. */
+    /** Why the last PDF given to [createPdfNoteFile] or [insertPdfAfter] did not open, null when it did. */
     var lastImportError: com.xnotes.platform.PdfOpenError? = null
         private set
 
@@ -5707,6 +5707,74 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     /** Insert a blank page right after [index] (sized from it) and reveal it. */
     fun insertPageAfter(index: Int) {
         goToPage(insertBlankPageAt(index + 1, index))
+    }
+
+    /** A PDF joined onto the note's source: the source to keep, where its pages start in it, and their sizes. */
+    private class JoinedPdf(val file: java.io.File, val first: Int, val sizes: FloatArray)
+
+    /**
+     * Insert the pages of the PDF at [uri] right after page [index], as one undoable step, behind
+     * the import dialog. They join the note's source PDF, so the note still embeds a single PDF.
+     */
+    suspend fun insertPdfAfter(index: Int, uri: String) {
+        val doc = state.document
+        val base = doc.pdfFile
+        val baseSource = pdfSource
+        importCancelled.set(false)
+        importing = true
+        val joined = try {
+            withContext(Dispatchers.IO) { joinPdf(uri, base, baseSource) }
+        } finally {
+            importing = false
+        }
+        if (joined == null || importCancelled.get() || state.document !== doc || doc.pdfFile != base) {
+            joined?.file?.delete()
+            if (joined == null && !importCancelled.get()) {
+                val password = lastImportError == com.xnotes.platform.PdfOpenError.PASSWORD
+                message = appContext.getString(if (password) R.string.err_pdf_password else R.string.err_insert_pdf)
+            }
+            return
+        }
+        doc.pdfFile = joined.file
+        adoptOpenPdf(doc)
+        rebuildPdfSource()
+        val pages = com.xnotes.platform.PdfImporter.pages(joined.sizes, joined.first, doc.dpi, doc.pages.getOrNull(index))
+        val at = (index + 1).coerceIn(0, doc.pages.size)
+        val cmds = pages.mapIndexed { i, page ->
+            doc.pages.add(at + i, page)
+            AddPage(doc, page, at + i)
+        }
+        history.push(CompositeCommand(cmds))
+        afterPageEdit()
+        goToPage(at)
+    }
+
+    /** Stage the PDF at [uri] and join it onto [base], the note's source, read by [baseSource]. IO. */
+    private fun joinPdf(uri: String, base: java.io.File?, baseSource: com.xnotes.platform.PdfSource?): JoinedPdf? {
+        lastImportError = null
+        val staged = runCatching {
+            appContext.contentResolver.openInputStream(android.net.Uri.parse(uri))?.let { stageImport(it) }
+        }.getOrNull() ?: return null
+        val extra = com.xnotes.platform.PdfSource.open(staged)
+        val sizes = extra.allPageSizePoints()?.takeIf { it.isNotEmpty() }
+        lastImportError = extra.openError
+        extra.close()
+        if (sizes == null) {
+            staged.delete()
+            return null
+        }
+        if (base == null) return JoinedPdf(staged, 0, sizes) // a plain note takes the PDF as it is
+        try {
+            val baseSizes = baseSource?.takeIf { it.file == base }?.allPageSizePoints() ?: return null
+            val out = runCatching { java.io.File.createTempFile("source", ".pdf", pdfDir) }.getOrNull() ?: return null
+            if (com.xnotes.platform.PdfJoin.append(appContext, base, staged, out, baseSizes, sizes) { importCancelled.get() }) {
+                return JoinedPdf(out, baseSizes.size / 2, sizes)
+            }
+            out.delete()
+            return null
+        } finally {
+            staged.delete()
+        }
     }
 
     /** Clear all of a page's items but keep the page (and its PDF/template background). Undoable. */

@@ -525,6 +525,7 @@
     <string name="err_save_images">Could not save the images.</string>
     <string name="err_read_image">Could not read the image.</string>
     <string name="err_read_file">Could not read the file.</string>
+    <string name="err_insert_pdf">Could not insert that PDF.</string>
     <string name="err_open_second">Could not open the second note.</string>
     <string name="share_named">Share %1$s</string>
     <string name="err_share_note">Could not share the note.</string>
@@ -597,6 +598,7 @@
     <string name="image_png">Image (PNG)</string>
     <string name="back_save_as">"‹  Save as"</string>
     <string name="add_page">Add page</string>
+    <string name="insert_pdf">Insert PDF</string>
     <string name="erase_page">Erase page</string>
     <string name="share_ellipsis">Share…</string>
     <string name="save_as_ellipsis">Save as…</string>

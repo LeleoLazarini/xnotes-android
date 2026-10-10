@@ -306,6 +306,8 @@ private fun EditorScreen(
     var pendingInsert by remember { mutableStateOf<PendingInsert?>(null) }
     // The same, for the infinite canvas.
     var pendingCanvasInsert by remember { mutableStateOf<PendingInsert?>(null) }
+    // The pane and page a side-panel "Insert PDF" picked a file for.
+    var pendingPdfInsert by remember { mutableStateOf<PendingPdfInsert?>(null) }
     var pendingShareUri by remember { mutableStateOf<String?>(null) }
     var pendingSaveCopyUri by remember { mutableStateOf<String?>(null) }
     // A finished PDF render awaiting a SAF "Save as" destination (open-note / file / pages export).
@@ -430,6 +432,12 @@ private fun EditorScreen(
                 resolver.openInputStream(uri)?.use { s -> pending.editor.insertImageAt(s.readBytes(), pending.at) }
             }.onFailure { editor.message = context.getString(R.string.err_read_image) }
         }
+    }
+
+    // A PDF picked from a page's menu in the side panel; its pages go in right after that page.
+    val insertPdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val pending = pendingPdfInsert; pendingPdfInsert = null
+        if (uri != null && pending != null) scope.launch { pending.editor.insertPdfAfter(pending.after, uri.toString()) }
     }
 
     // Images picked for the sticker library (multi-select), stored on disk by the editor.
@@ -855,6 +863,10 @@ private fun EditorScreen(
                 onSharePages = { pane, pages, asPdf -> sharePages(pane, pages, asPdf) },
                 onSavePagesAsPdf = { pane, pages -> savePagesAsPdf(pane, pages) },
                 onSavePagesAsImages = { pane, pages -> savePagesAsImages(pane, pages) },
+                onInsertPdf = { pane, after ->
+                    pendingPdfInsert = PendingPdfInsert(pane, after)
+                    insertPdfLauncher.launch(arrayOf("application/pdf"))
+                },
             )
             SplitHost(editor, actions)
         }
@@ -924,11 +936,13 @@ private fun EditorScreen(
             exportProgress = null   // hide at once; the job then discards the half-written temp
         })
     }
-    if (editor.importing) {
+    // Either pane may be importing: a PDF inserted into its note.
+    val importer = editor.takeIf { it.importing } ?: editor.secondary?.takeIf { it.importing }
+    if (importer != null) {
         // A batch counts files, so it gets a determinate ring; a single import has nothing to count.
-        val batch = editor.importProgress
-        if (batch != null) PdfImportBatchDialog(batch.done, batch.total) { editor.cancelImportInProgress() }
-        else PdfImportDialog(onCancel = { editor.cancelImportInProgress() }) // the stream-copy stops at its next buffer
+        val batch = importer.importProgress
+        if (batch != null) PdfImportBatchDialog(batch.done, batch.total) { importer.cancelImportInProgress() }
+        else PdfImportDialog(onCancel = { importer.cancelImportInProgress() }) // the stream-copy stops at its next buffer
     }
     // Tapping a note reads it off-thread (editor.opening). Only show the spinner once the read has run
     // long enough to matter, so opening a small note never flashes a dialog; a big PDF gets the loader.
@@ -964,6 +978,9 @@ private class PendingInsert(val editor: Editor, val at: com.xnotes.core.geometry
 /** Side-panel pages of [editor] waiting on a SAF "Save as" destination. */
 private class PendingPages(val editor: Editor, val pages: List<Int>)
 
+/** A side-panel "Insert PDF" waiting on the picker: the pane, and the page its pages go after. */
+private class PendingPdfInsert(val editor: Editor, val after: Int)
+
 /**
  * A running PDF export's progress: [done] of [total], and what those are. [counting] exists because
  * a canvas has no pages to count — it exports as one, and reports the items it is drawing instead —
@@ -996,6 +1013,7 @@ private class PaneActions(
     val onSharePages: (Editor, List<Int>, Boolean) -> Unit,
     val onSavePagesAsPdf: (Editor, List<Int>) -> Unit,
     val onSavePagesAsImages: (Editor, List<Int>) -> Unit,
+    val onInsertPdf: (Editor, Int) -> Unit,
 )
 
 /** Neither pane of a split may be squeezed below this share of the split axis. */
@@ -1194,6 +1212,7 @@ private fun EditorPane(
                             onSharePages = { pages, asPdf -> actions.onSharePages(editor, pages, asPdf) },
                             onSavePagesAsPdf = { pages -> actions.onSavePagesAsPdf(editor, pages) },
                             onSavePagesAsImages = { pages -> actions.onSavePagesAsImages(editor, pages) },
+                            onInsertPdf = { after -> actions.onInsertPdf(editor, after) },
                         )
                     }
                     Box(modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds()) {

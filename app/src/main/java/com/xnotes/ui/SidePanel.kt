@@ -83,6 +83,7 @@ fun SidePanel(
     onSharePages: (indices: List<Int>, asPdf: Boolean) -> Unit = { _, _ -> },
     onSavePagesAsPdf: (indices: List<Int>) -> Unit = {},
     onSavePagesAsImages: (indices: List<Int>) -> Unit = {},
+    onInsertPdf: (after: Int) -> Unit = {},
 ) {
     val palette = LocalPalette.current
     val tab = editor.sidePanelTab
@@ -100,7 +101,7 @@ fun SidePanel(
         }
         Box(Modifier.fillMaxWidth().weight(1f)) {
             when (tab) {
-                SidePanelTab.PAGES -> PagesTab(editor, onSharePages, onSavePagesAsPdf, onSavePagesAsImages)
+                SidePanelTab.PAGES -> PagesTab(editor, onSharePages, onSavePagesAsPdf, onSavePagesAsImages, onInsertPdf)
                 SidePanelTab.CONTENTS -> ContentsTab(editor)
                 SidePanelTab.BOOKMARKS -> BookmarksTab(editor)
                 SidePanelTab.SEARCH -> SearchTab(editor)
@@ -133,6 +134,7 @@ private fun PagesTab(
     onSharePages: (List<Int>, Boolean) -> Unit,
     onSavePagesAsPdf: (List<Int>) -> Unit,
     onSavePagesAsImages: (List<Int>) -> Unit,
+    onInsertPdf: (Int) -> Unit,
 ) {
     val listState = rememberLazyListState()
     // Open the panel on the current page, not page 1 (re-runs each open: a hidden panel leaves composition).
@@ -164,7 +166,7 @@ private fun PagesTab(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             itemsIndexed(pages, key = { _, page -> page.uid }) { index, page ->
-                PageThumb(editor, index, page, selecting, settled, Modifier.animateItem(), onSharePages, onSavePagesAsPdf, onSavePagesAsImages)
+                PageThumb(editor, index, page, selecting, settled, Modifier.animateItem(), onSharePages, onSavePagesAsPdf, onSavePagesAsImages, onInsertPdf)
             }
         }
         VerticalScrollbar(listState, Modifier.align(Alignment.CenterEnd))
@@ -183,6 +185,7 @@ private fun PageThumb(
     onSharePages: (List<Int>, Boolean) -> Unit,
     onSavePagesAsPdf: (List<Int>) -> Unit,
     onSavePagesAsImages: (List<Int>) -> Unit,
+    onInsertPdf: (Int) -> Unit,
 ) {
     val palette = LocalPalette.current
     val current = index == editor.pageIndex
@@ -242,7 +245,7 @@ private fun PageThumb(
                             Icon(XnotesIcons.more, stringResource(R.string.page_options), tint = palette.text.toComposeColor(), modifier = Modifier.size(16.dp))
                         }
                     }
-                    PageContextMenu(editor, index, menuOpen, { menuOpen = false }, onSharePages, onSavePagesAsPdf, onSavePagesAsImages)
+                    PageContextMenu(editor, index, menuOpen, { menuOpen = false }, onSharePages, onSavePagesAsPdf, onSavePagesAsImages, onInsertPdf)
                 }
             }
         }
@@ -268,6 +271,7 @@ private fun PageContextMenu(
     onSharePages: (List<Int>, Boolean) -> Unit,
     onSavePagesAsPdf: (List<Int>) -> Unit,
     onSavePagesAsImages: (List<Int>) -> Unit,
+    onInsertPdf: (Int) -> Unit,
 ) {
     val palette = LocalPalette.current
     var sub by remember { mutableStateOf(MENU_MAIN) }
@@ -288,6 +292,7 @@ private fun PageContextMenu(
             }
             else -> {
                 DropdownMenuItem(text = { Text(stringResource(R.string.add_page)) }, leadingIcon = menuIcon(XnotesIcons.plus), onClick = { editor.insertPageAfter(index); onDismiss() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.insert_pdf)) }, leadingIcon = menuIcon(XnotesIcons.importDoc), onClick = { onInsertPdf(index); onDismiss() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.copy)) }, leadingIcon = menuIcon(XnotesIcons.copy), onClick = { editor.copyPages(one); onDismiss() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.cut)) }, leadingIcon = menuIcon(XnotesIcons.cut), onClick = { editor.cutPages(one); onDismiss() })
                 if (editor.canPastePages) {
