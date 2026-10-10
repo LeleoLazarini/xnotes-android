@@ -264,6 +264,46 @@ class ConnectorItem(
         return out
     }
 
+    // --- editing ---
+
+    /** The handle on each middle segment of a square route, by segment from the first middle one; none for a straight connector. */
+    fun segmentHandles(): List<Pt> {
+        if (!routing.orthogonal) return emptyList()
+        val pts = elbow.points(start.at, end.at)
+        return (1..elbow.coords.size).map { i -> (pts[i] + pts[i + 1]) * 0.5 }
+    }
+
+    /** Slide middle segment [segment] (1 to the coordinate count) across to where [to] is. */
+    fun slideSegment(segment: Int, to: Pt) {
+        elbow = elbow.withCoord(segment, elbow.axisOf(segment).across(to))
+    }
+
+    /** The middle of each stretch of a straight connector, where a drag adds a waypoint; none for a square route. */
+    fun midpointDots(): List<Pt> {
+        if (routing.orthogonal) return emptyList()
+        val pts = listOf(start.at) + waypoints + end.at
+        return (0 until pts.size - 1).map { (pts[it] + pts[it + 1]) * 0.5 }
+    }
+
+    /** Add a waypoint at [to], [index]th among them. */
+    fun insertWaypoint(index: Int, to: Pt) {
+        waypoints = waypoints.toMutableList().also { it.add(index.coerceIn(0, it.size), to) }
+    }
+
+    fun moveWaypoint(index: Int, to: Pt) {
+        if (index in waypoints.indices) waypoints = waypoints.toMutableList().also { it[index] = to }
+    }
+
+    fun removeWaypoint(index: Int) {
+        if (index in waypoints.indices) waypoints = waypoints.toMutableList().also { it.removeAt(index) }
+    }
+
+    /** Let go of both ends where they are. */
+    fun letGo() {
+        start = start.loose()
+        end = end.loose()
+    }
+
     override fun snapshotGeometry(): GeometrySnapshot = ConnectorSnapshot(start, end, waypoints, elbow, labelAt)
 
     override fun restoreGeometry(snap: GeometrySnapshot) {

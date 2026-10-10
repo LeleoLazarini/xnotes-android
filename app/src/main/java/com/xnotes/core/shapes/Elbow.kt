@@ -2,7 +2,10 @@ package com.xnotes.core.shapes
 
 import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Pt
+import com.xnotes.core.geometry.Rect
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 /** A page axis: the way a square-cornered segment runs. */
 enum class Axis {
@@ -90,6 +93,49 @@ class Elbow(val first: Axis, val coords: DoubleArray) {
         return Elbow(turned, out)
     }
 
+    /**
+     * This route made to leave [from] the way a glued end must: along one of [ways] (its outward
+     * normals), heading out. What is there stays as far as it can. A route on the wrong axis drops
+     * its first coordinate when the route that leaves already leaves well, else gains one that
+     * turns it out by [stub]; a route heading back into the end's [box] gains a stub out and a
+     * coordinate that takes it round. No obstacle is looked at: this is how a connector follows.
+     */
+    fun fitStart(from: Pt, to: Pt, ways: List<Pt>, stub: Double, box: Rect?): Elbow {
+        if (ways.isEmpty() || leaves(from, to, ways)) return this
+        val onAxis = ways.firstOrNull { Axis.of(it) == first }
+        if (onAxis == null) {
+            if (coords.isNotEmpty()) {
+                val dropped = Elbow(first.other, coords.copyOfRange(1, coords.size))
+                if (dropped.leaves(from, to, ways)) return dropped
+            }
+            val axis = Axis.of(ways[0])
+            return Elbow(axis, doubleArrayOf(axis.along(from) + stub * sign(axis.along(ways[0]))) + coords)
+        }
+        val out = first.along(from) + stub * sign(first.along(onAxis))
+        val k0 = first.across(from)
+        val toward = if (coords.size >= 2) coords[1] else first.across(to)
+        val side = if (toward >= k0) 1.0 else -1.0
+        val clear = when {
+            box == null -> k0
+            side > 0.0 -> max(first.across(Pt(box.right, box.bottom)), k0)
+            else -> min(first.across(box.topLeft), k0)
+        }
+        return Elbow(first, doubleArrayOf(out, clear + side * stub) + coords)
+    }
+
+    /** [fitStart] for the end: the route made to arrive at [to] from outside, along one of [ways]. */
+    fun fitEnd(from: Pt, to: Pt, ways: List<Pt>, stub: Double, box: Rect?): Elbow =
+        reversed().fitStart(to, from, ways, stub, box).reversed()
+
+    /** True when the first segment leaves [from] along one of [ways], heading out. */
+    private fun leaves(from: Pt, to: Pt, ways: List<Pt>): Boolean {
+        val pts = points(from, to)
+        val run = first.along(pts[1]) - first.along(pts[0])
+        return ways.any { Axis.of(it) == first && run * first.along(it) > LEAVE_EPS }
+    }
+
+    private fun sign(v: Double): Double = if (v < 0.0) -1.0 else 1.0
+
     override fun equals(other: Any?): Boolean = other is Elbow && other.first == first && other.coords.contentEquals(coords)
 
     override fun hashCode(): Int = first.hashCode() * 31 + coords.contentHashCode()
@@ -131,5 +177,8 @@ class Elbow(val first: Axis, val coords: DoubleArray) {
         }
 
         private const val EPS = 1e-9
+
+        /** A first segment this short leaves nowhere. */
+        private const val LEAVE_EPS = 1e-6
     }
 }

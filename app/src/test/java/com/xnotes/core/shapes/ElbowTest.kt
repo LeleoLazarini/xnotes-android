@@ -2,6 +2,7 @@ package com.xnotes.core.shapes
 
 import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Pt
+import com.xnotes.core.geometry.Rect
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -97,4 +98,54 @@ class ElbowTest {
         assertEquals(listOf(a, Pt(50.0, 0.0), Pt(50.0, 60.0), b), Elbow.corners(path))
         assertEquals(listOf(a, Pt(10.0, 0.0)), Elbow.corners(listOf(a, Pt(30.0, 0.0), Pt(10.0, 0.0))))
     }
+
+    // --- mending a route an end has moved ---
+
+    private val right = Pt(1.0, 0.0)
+    private val up = Pt(0.0, -1.0)
+
+    @Test fun aRouteThatAlreadyLeavesWellIsLeftAlone() {
+        val e = Elbow(Axis.H, doubleArrayOf(40.0))
+        assertEquals(e, e.fitStart(a, b, listOf(right), 10.0, null))
+    }
+
+    @Test fun aRouteOnTheWrongAxisDropsACoordinateWhenThatLeavesWell() {
+        // Out up, across at x = 50, up again: from a point whose way is right, the drop leaves along it.
+        val e = Elbow(Axis.V, doubleArrayOf(-20.0, 50.0))
+        val fitted = e.fitStart(Pt(0.0, 0.0), Pt(100.0, -60.0), listOf(right), 10.0, null)
+        assertEquals(Axis.H, fitted.first)
+        assertArrayEquals(doubleArrayOf(50.0), fitted.coords, 0.0)
+    }
+
+    @Test fun aRouteOnTheWrongAxisOtherwiseGainsATurnOut() {
+        val e = Elbow(Axis.H, doubleArrayOf(40.0))
+        val fitted = e.fitStart(Pt(0.0, 0.0), Pt(100.0, 60.0), listOf(up), 10.0, null)
+        assertEquals(Axis.V, fitted.first)
+        assertArrayEquals(doubleArrayOf(-10.0, 40.0), fitted.coords, 0.0)
+        val pts = fitted.points(Pt(0.0, 0.0), Pt(100.0, 60.0))
+        assertEquals(Pt(0.0, -10.0), pts[1])
+    }
+
+    @Test fun aRouteHeadingBackIntoItsBoxGoesOutAndRound() {
+        // Leaving the box's right side but turning back left above the box towards a point below.
+        val box = Rect(-100.0, -30.0, 100.0, 60.0)
+        val e = Elbow(Axis.H, doubleArrayOf(-50.0))
+        val fitted = e.fitStart(Pt(0.0, 0.0), Pt(-200.0, 200.0), listOf(right), 10.0, box)
+        assertArrayEquals(doubleArrayOf(10.0, 40.0, -50.0), fitted.coords, 0.0)
+        val pts = fitted.points(Pt(0.0, 0.0), Pt(-200.0, 200.0))
+        assertEquals(Pt(10.0, 0.0), pts[1])
+        assertEquals(Pt(10.0, 40.0), pts[2])
+        assertEquals(Pt(-50.0, 40.0), pts[3])
+    }
+
+    @Test fun theEndIsMendedTheSameWayFromItsSide() {
+        val e = Elbow(Axis.H, doubleArrayOf(40.0))
+        // The end now sits on a top edge: the route must come down onto it.
+        val fitted = e.fitEnd(Pt(0.0, 0.0), Pt(100.0, 60.0), listOf(up), 10.0, null)
+        val pts = fitted.points(Pt(0.0, 0.0), Pt(100.0, 60.0))
+        val last = pts[pts.size - 2]
+        assertEquals(100.0, last.x, 1e-9)
+        assertTrue(last.y < 60.0)
+    }
 }
+
