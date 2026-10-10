@@ -4,6 +4,8 @@ import android.text.StaticLayout
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.TextItem
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.Renderer
@@ -102,6 +104,16 @@ class SearchTints(
 
     private fun paint(r: Renderer, hit: SearchHit, color: Rgba, outline: Pen?) {
         val b = boxesOf(hit) ?: return
+        val target = hit.target
+        if (target is SearchTarget.Label) {
+            // A label turns with its shape, so its pieces are drawn as turned quads.
+            for (k in b.rects.indices) {
+                val quad = labelQuad(hit, target.item, b.rects[k]) ?: continue
+                r.fillPolygon(quad, color)
+                if (outline != null) r.strokePolygon(quad, outline)
+            }
+            return
+        }
         for (k in b.rects.indices) {
             val rect = contentRect(hit, b, k) ?: continue
             r.fillRect(rect, color)
@@ -111,6 +123,11 @@ class SearchTints(
 
     private fun boundsOf(hit: SearchHit): Rect? {
         val b = boxesOf(hit) ?: return null
+        val target = hit.target
+        if (target is SearchTarget.Label) {
+            val corners = b.rects.mapNotNull { labelQuad(hit, target.item, it) }.flatten()
+            return if (corners.isEmpty()) null else Rect.bounding(corners)
+        }
         var acc: Rect? = null
         for (k in b.rects.indices) contentRect(hit, b, k)?.let { acc = acc?.union(it) ?: it }
         return acc
@@ -130,7 +147,14 @@ class SearchTints(
 
     private fun boxesOf(hit: SearchHit): Boxes? {
         val target = hit.target
-        boxes[hit]?.let { b -> if (target !is SearchTarget.Box || b.width == target.item.width) return b }
+        boxes[hit]?.let { b ->
+            val fresh = when (target) {
+                is SearchTarget.Box -> b.width == target.item.width
+                is SearchTarget.Label -> b.width == target.item.labelFrame()?.w
+                else -> true
+            }
+            if (fresh) return b
+        }
         val b = when (target) {
             SearchTarget.Pdf -> {
                 val text = texts.peek(hit.page) ?: return readPage(hit.page)
@@ -138,6 +162,7 @@ class SearchTints(
             }
             is SearchTarget.Flow -> flowBoxes(hit, target.para)
             is SearchTarget.Box -> textBoxBoxes(hit, target.item)
+            is SearchTarget.Label -> labelBoxes(hit, target.item) ?: return null
         }
         boxes[hit] = b
         return b
@@ -197,6 +222,38 @@ class SearchTints(
             }
         }
         return Boxes(IntArray(0), out.toTypedArray(), item.width)
+    }
+
+    /** The match's line pieces in the label's own centred layout, from the top-left of its frame. */
+    private fun labelBoxes(hit: SearchHit, item: ShapeItem): Boxes? {
+        val label = item.label ?: return null
+        val frame = item.labelFrame() ?: return null
+        val text = label.text
+        val l = AndroidText.layout(text, frame.w.toInt(), AndroidText.textPaint(label.font), ShapeLabel.FLAGS)
+        val a = hit.sourceStart.coerceIn(0, text.length)
+        val b = hit.sourceEnd.coerceIn(a, text.length)
+        val out = ArrayList<Rect>()
+        if (b > a) {
+            for (line in l.getLineForOffset(a)..l.getLineForOffset(b - 1)) {
+                val s = maxOf(a, l.getLineStart(line))
+                val e = minOf(b, l.getLineEnd(line))
+                if (e <= s) continue
+                val x0 = l.getPrimaryHorizontal(s).toDouble()
+                val x1 = if (e == l.getLineEnd(line) && line + 1 < l.lineCount) l.getLineRight(line).toDouble() else l.getPrimaryHorizontal(e).toDouble()
+                val top = l.getLineTop(line).toDouble()
+                out += Rect(minOf(x0, x1), top, kotlin.math.abs(x1 - x0), l.getLineBottom(line) - top)
+            }
+        }
+        return Boxes(IntArray(0), out.toTypedArray(), frame.w)
+    }
+
+    /** [rel], a piece of a label match from its frame's corner, as the turned quad it covers in content space. */
+    private fun labelQuad(hit: SearchHit, item: ShapeItem, rel: Rect): List<Pt>? {
+        if (state.pageRects.getOrNull(hit.page) == null) return null
+        val frame = item.labelFrame() ?: return null
+        val r = Rect(frame.left + rel.left, frame.top + rel.top, rel.w, rel.h)
+        return listOf(r.topLeft, Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom))
+            .map { state.fromPageSpace(hit.page, item.toPage(it)) }
     }
 
     private fun layoutFor(item: TextItem): StaticLayout {

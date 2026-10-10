@@ -1,5 +1,6 @@
 package com.xnotes.core.search
 
+import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.TextItem
 
 /** What a match lies in. */
@@ -12,6 +13,9 @@ sealed interface SearchTarget {
 
     /** A text box. */
     data class Box(val item: TextItem) : SearchTarget
+
+    /** A shape's typed label. */
+    data class Label(val item: ShapeItem) : SearchTarget
 }
 
 /** One match: chars [start, end) of [text], which lies in [target] on note page [page]. */
@@ -25,7 +29,7 @@ class SearchHit(val page: Int, val target: SearchTarget, val text: SearchText, v
 
 /**
  * The matches found so far, in page order; on a page the PDF's come first, then the flow's, then
- * the text boxes'. Each update is a new object, and the hits it shares with the one before are the
+ * the text boxes' and shape labels' in their stacking order. Each update is a new object, and the hits it shares with the one before are the
  * same objects, so a hit can be followed by identity while a scan goes on.
  */
 class SearchResults internal constructor(

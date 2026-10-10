@@ -3,7 +3,13 @@ package com.xnotes.core.search
 import com.xnotes.core.FakeTextMeasurer
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.model.Page
+import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.TextItem
+import com.xnotes.core.model.TextStyle
+import com.xnotes.core.pal.FontFace
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.text.FlowLayout
 import com.xnotes.core.text.FlowMargins
 import com.xnotes.core.text.PageBox
@@ -47,5 +53,22 @@ class TypedTextsTest {
         pages[0].items += TextItem(Pt(0.0, 0.0), text = "  ", measurer = measurer)
         val typed = TypedTexts.of(pages, flowOf("flow"), null)
         assertEquals(listOf("box"), typed.map { it.source })
+    }
+
+    @Test
+    fun shapeLabelsAreSearchedInStackingOrderAndBlankOnesSkipped() {
+        val pages = pages(2)
+        val ink = Rgba(1, 2, 3, 255)
+        fun shape(text: String?) = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(40.0, 20.0), ink).apply {
+            label = text?.let { ShapeLabel(it, TextStyle(ink, 12.0, FontFace.SANS), measurer) }
+        }
+        val first = shape("Start")
+        val box = TextItem(Pt(0.0, 0.0), text = "box", measurer = measurer)
+        val last = shape("End")
+        pages[1].items += listOf(first, shape(null), shape(" "), box, last)
+        val typed = TypedTexts.of(pages, flowOf(), null)
+        assertEquals(listOf(SearchTarget.Label(first), SearchTarget.Box(box), SearchTarget.Label(last)), typed.map { it.target })
+        assertEquals(listOf("Start", "box", "End"), typed.map { it.source })
+        assertEquals(1, typed[0].pageOf(0))
     }
 }

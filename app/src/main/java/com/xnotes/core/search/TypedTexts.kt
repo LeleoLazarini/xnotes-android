@@ -1,12 +1,13 @@
 package com.xnotes.core.search
 
 import com.xnotes.core.model.Page
+import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.TextItem
 import com.xnotes.core.text.FlowFrame
 import com.xnotes.core.text.FlowPos
 import com.xnotes.core.text.TextFlow
 
-/** A note's typed text to search: the flow's paragraphs as [frame] lays them out, then each page's text boxes. */
+/** A note's typed text to search: the flow's paragraphs as [frame] lays them out, then each page's text boxes and shape labels. */
 object TypedTexts {
     fun of(pages: List<Page>, flow: TextFlow, frame: FlowFrame?): List<TypedText> {
         val out = ArrayList<TypedText>()
@@ -20,6 +21,8 @@ object TypedTexts {
         for ((p, page) in pages.withIndex()) {
             for (item in page.items) {
                 if (item is TextItem && item.text.isNotBlank()) out += TypedText(SearchTarget.Box(item), item.text) { p }
+                val label = (item as? ShapeItem)?.label
+                if (label != null && label.text.isNotBlank()) out += TypedText(SearchTarget.Label(item), label.text) { p }
             }
         }
         return out
