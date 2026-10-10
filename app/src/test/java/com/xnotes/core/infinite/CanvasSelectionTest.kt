@@ -438,4 +438,70 @@ class CanvasSelectionTest {
         for (i in 0 until mesh.vertexCount) maxX = maxOf(maxX, mesh.positions[2 * i])
         return maxX - 100.0
     }
+
+    // --- carrying what a shape holds ---
+
+    private fun frame() = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(200.0, 100.0), Rgba(1, 2, 3, 255), 2.0)
+
+    @Test fun aMovedFrameTakesItsContentsAndOneUndoPutsAllBack() {
+        val f = frame()
+        val note = line(20.0, 50.0)
+        val stray = line(400.0, 50.0)
+        val doc = docOf(f, note, stray)
+        val sel = CanvasSelection(doc).apply { select(listOf(f)) }
+        sel.beginTransform(carrying = true)
+        assertEquals(listOf<CanvasItem>(note), sel.carry.items)
+        val was = note.bounds()
+        sel.moveLive(30.0, 5.0)
+        assertEquals(was.left + 30.0, note.bounds().left, 1e-6)
+        assertEquals(400.0 - 1.5, stray.bounds().left, 1e-6)
+        val cmd = sel.buildCommand(movedOnly = true, dx = 30.0, dy = 5.0)!!
+        cmd.undo()
+        assertEquals(was.left, note.bounds().left, 1e-6)
+        assertEquals(0.0, f.box.left, 1e-9)
+        cmd.redo()
+        assertEquals(was.left + 30.0, note.bounds().left, 1e-6)
+    }
+
+    @Test fun aResizedFrameKeepsItsContentsTheirSize() {
+        val f = frame()
+        val note = line(80.0, 50.0)
+        val doc = docOf(f, note)
+        val sel = CanvasSelection(doc).apply { select(listOf(f)) }
+        val w0 = note.bounds().w
+        val c0 = note.bounds().center
+        sel.beginTransform(carrying = true)
+        val right = sel.handles().first { it.id == HandleId.R }.content
+        sel.resizeLive(HandleId.R, Pt(right.x + 200.0, right.y))
+        assertEquals(w0, note.bounds().w, 1e-6)
+        val b = f.box
+        assertEquals("at the same place across the frame", c0.x / 200.0, (note.bounds().centerX - b.left) / b.w, 1e-6)
+        val cmd = sel.buildCommand(movedOnly = false)!!
+        cmd.undo()
+        assertEquals(c0.x, note.bounds().centerX, 1e-6)
+    }
+
+    @Test fun aTurnedFrameTurnsItsContentsWithIt() {
+        val f = frame()
+        val note = line(20.0, 50.0)
+        val doc = docOf(f, note)
+        val sel = CanvasSelection(doc).apply { select(listOf(f)) }
+        sel.beginTransform(Pt(100.0, -40.0), carrying = true)
+        sel.rotateLive(Pt(240.0, 50.0))
+        val first = note.samples.first().pos
+        val want = Affine.rotateAbout(Pt(100.0, 50.0), Math.PI / 2).apply(Pt(20.0, 50.0))
+        assertEquals(0.0, first.distanceTo(want), 1e-3)
+    }
+
+    @Test fun aPointEditCarriesNothingAndNeitherDoesASelectedItem() {
+        val f = frame()
+        val note = line(20.0, 50.0)
+        val doc = docOf(f, note)
+        val sel = CanvasSelection(doc).apply { select(listOf(f)) }
+        sel.beginTransform()
+        assertTrue(sel.carry.isEmpty)
+        sel.select(listOf(f, note))
+        sel.beginTransform(carrying = true)
+        assertTrue("already moving with the selection", sel.carry.isEmpty)
+    }
 }
