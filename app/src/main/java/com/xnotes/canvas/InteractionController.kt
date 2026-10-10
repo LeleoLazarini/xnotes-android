@@ -1584,10 +1584,10 @@ class InteractionController(
         )
     }
 
-    /** Strokes, shapes and images rotate; text doesn't. A mixed selection rotates only when every
-     *  member is rotatable. */
+    /** Strokes, shapes, connectors and images rotate; text doesn't. A mixed selection rotates only
+     *  when every member is rotatable. */
     private fun selectionIsRotatable(): Boolean =
-        selection.isNotEmpty() && selection.all { it.item is Stroke || it.item is ShapeItem || it.item is ImageItem }
+        selection.isNotEmpty() && selection.all { it.item is Stroke || it.item is ShapeItem || it.item is ConnectorItem || it.item is ImageItem }
 
     /** Rotate-grip centre (content space, no move offset), out past the oriented box's top edge, or
      *  null when the selection can't rotate or is a single line/arrow (reoriented by an endpoint). */
