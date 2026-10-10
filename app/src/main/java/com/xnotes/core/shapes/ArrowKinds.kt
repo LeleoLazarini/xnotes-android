@@ -138,11 +138,12 @@ private const val LEAST_SPAN = 2.0
 
 /**
  * The knob of an arrow whose head spans its box, which makes the shaft half the box's height: on
- * the shaft's top edge at [x], it deepens or flattens the box about the centre line, the head
- * included, up to [deepest] for a box that long.
+ * the middle of the head's top edge, level with the shaft's, it deepens or flattens the box about
+ * the centre line, the head included, up to [deepest] for a box that long. [head] is the head's
+ * length in a box.
  */
-private fun spanKnob(x: (w: Double, h: Double) -> Double, deepest: (w: Double) -> Double) = KnobDef(
-    position = { b, _, _ -> Pt(x(b.w, b.h), b.h / 4.0) },
+private fun spanKnob(head: (w: Double, h: Double) -> Double, deepest: (w: Double) -> Double) = KnobDef(
+    position = { b, _, _ -> Pt(b.w - head(b.w, b.h) / 2.0, b.h / 4.0) },
     drag = { _, _, adj, _ -> adj },
     reframe = { to, b ->
         val h = (4.0 * abs(to.y - b.centerY)).coerceIn(LEAST_SPAN, max(LEAST_SPAN, deepest(b.w)))
@@ -174,10 +175,12 @@ private fun thicknessKnob(
 /** One head on the right of a straight shaft. Notched: a V cut into the tail. */
 internal class SingleArrow(private val notched: Boolean = false) : Canonical {
     override val defaultAdj = DoubleArray(0)
-    override val knobs = listOf(spanKnob({ w, h -> min(w / 4.0, (w - min(h / 2.0, w)) / 2.0) }, { w -> 2.0 * w }))
+    override val knobs = listOf(spanKnob({ w, h -> head(w, h) }, { w -> 2.0 * w }))
+
+    private fun head(w: Double, h: Double) = min(h / 2.0, w)
 
     override fun build(w: Double, h: Double, adj: (Int) -> Double): ShapeGeometry {
-        val l = min(h / 2.0, w)
+        val l = head(w, h)
         val half = h / 4.0
         val cy = h / 2.0
         val notch = if (notched) min(half, w - l) else 0.0
@@ -200,10 +203,13 @@ internal class SingleArrow(private val notched: Boolean = false) : Canonical {
 internal class DoubleArrow : Canonical {
     override val defaultAdj = DoubleArray(0)
     override val iconAspect get() = 2.0
-    override val knobs = listOf(spanKnob({ w, _ -> w / 2.0 }, { w -> w }))
+    // On the head at the right end.
+    override val knobs = listOf(spanKnob({ w, h -> head(w, h) }, { w -> w }))
+
+    private fun head(w: Double, h: Double) = min(h / 2.0, w / 2.0)
 
     override fun build(w: Double, h: Double, adj: (Int) -> Double): ShapeGeometry {
-        val l = min(h / 2.0, w / 2.0)
+        val l = head(w, h)
         val half = h / 4.0
         val cy = h / 2.0
         val corners = listOf(
@@ -225,8 +231,8 @@ internal class QuadArrow : Canonical {
     override val defaultAdj = doubleArrayOf(0.22)
     override val iconAspect get() = 1.0
     override val knobs = listOf(
-        // In the crossing, on the right edge of the upright shaft.
-        thicknessKnob(0.22, RANGE, at = { w, h, t -> Pt(w / 2.0 + t / 2.0, h / 2.0) }) { to, w, _ -> 2.0 * abs(to.x - w / 2.0) },
+        // Halfway along the right head's top edge.
+        thicknessKnob(0.22, RANGE, at = { w, h, t -> Pt(w - t / 2.0, h / 2.0 - t / 2.0) }) { to, _, h -> 2.0 * abs(to.y - h / 2.0) },
     )
 
     override fun build(w: Double, h: Double, adj: (Int) -> Double): ShapeGeometry {
@@ -279,18 +285,18 @@ internal class BentArrow(private val up: Boolean) : Canonical {
     override val iconAspect get() = 1.2
     override val knobs = listOf(
         if (!up) {
-            // On the tail, at the inner foot of the upright.
-            thicknessKnob(0.25, RANGE, at = { _, h, t -> Pt(t, h) }) { to, _, _ -> to.x }
+            // Halfway along the head's lower edge, which sits a thickness and a half down.
+            thicknessKnob(0.25, RANGE, at = { w, h, t -> Pt(w - head(w, h, t) / 2.0, 1.5 * t) }) { to, _, _ -> to.y / 1.5 }
         } else {
-            // On the tail, at the top of the bar's left end.
-            thicknessKnob(0.25, RANGE, at = { _, h, t -> Pt(0.0, h - t) }) { to, _, h -> h - to.y }
+            // Halfway along the head's left edge, a thickness and a half in from the right.
+            thicknessKnob(0.25, RANGE, at = { w, h, t -> Pt(w - 1.5 * t, head(w, h, t) / 2.0) }) { to, w, _ -> (w - to.x) / 1.5 }
         },
     )
 
     override fun build(w: Double, h: Double, adj: (Int) -> Double): ShapeGeometry {
         val t = thickness(adj(0), w, h, RANGE)
         val b = t
-        val l = t.coerceIn(0.0, max(0.0, (if (up) h else w) - t))
+        val l = head(w, h, t)
         val c = if (!up) {
             listOf(
                 Pt(0.0, h), Pt(0.0, b - t / 2.0), Pt(w - l, b - t / 2.0), Pt(w - l, 0.0), Pt(w, b),
@@ -307,6 +313,8 @@ internal class BentArrow(private val up: Boolean) : Canonical {
         return ShapeGeometry(listOf(ShapePath.polygon(c)), c, ShapeKind.polygonConnections(c).filterIndexed { i, _ -> i < c.size }, ShapeKind.inset(text))
     }
 
+    private fun head(w: Double, h: Double, t: Double) = t.coerceIn(0.0, max(0.0, (if (up) h else w) - t))
+
     private companion object {
         val RANGE = 0.05..0.45
     }
@@ -317,15 +325,14 @@ internal class LeftUpArrow : Canonical {
     override val defaultAdj = doubleArrayOf(0.2)
     override val iconAspect get() = 1.0
     override val knobs = listOf(
-        // On the bend's inner corner, a thickness and a half in from the right and from the bottom.
-        thicknessKnob(0.2, RANGE, at = { w, h, t -> Pt(w - 1.5 * t, h - 1.5 * t) }) { to, w, h -> (w - to.x + h - to.y) / 3.0 },
+        // Halfway along the upper head's left edge, a thickness and a half in from the right.
+        thicknessKnob(0.2, RANGE, at = { w, h, t -> Pt(w - 1.5 * t, head(w, h, t) / 2.0) }) { to, w, _ -> (w - to.x) / 1.5 },
     )
 
     override fun build(w: Double, h: Double, adj: (Int) -> Double): ShapeGeometry {
-        val side = min(w, h)
         val t = thickness(adj(0), w, h, RANGE)
         val b = t
-        val l = t.coerceIn(0.0, side / 2.0)
+        val l = head(w, h, t)
         val x = w - b
         val y = h - b
         val c = listOf(
@@ -336,6 +343,8 @@ internal class LeftUpArrow : Canonical {
         return ShapeGeometry(listOf(ShapePath.polygon(c)), c, ShapeKind.polygonConnections(c).take(c.size), ShapeKind.inset(Rect(0.0, 0.0, x - t / 2.0, y - t / 2.0)))
     }
 
+    private fun head(w: Double, h: Double, t: Double) = t.coerceIn(0.0, min(w, h) / 2.0)
+
     private companion object {
         val RANGE = 0.05..0.3
     }
@@ -345,13 +354,15 @@ internal class LeftUpArrow : Canonical {
 internal class UTurnArrow : Canonical {
     override val defaultAdj = doubleArrayOf(0.25)
     override val iconAspect get() = 1.0
-    // On the tail, at the inner foot of the left leg.
-    override val knobs = listOf(thicknessKnob(0.25, RANGE, at = { _, h, t -> Pt(t, h) }) { to, _, _ -> to.x })
+    // Halfway along the head's left edge, a thickness and a half in from the right.
+    override val knobs = listOf(thicknessKnob(0.25, RANGE, at = { w, h, t -> Pt(w - 1.5 * t, h - head(h, t) / 2.0) }) { to, w, _ -> (w - to.x) / 1.5 })
+
+    private fun head(h: Double, t: Double) = t.coerceIn(0.0, h / 2.0)
 
     override fun build(w: Double, h: Double, adj: (Int) -> Double): ShapeGeometry {
         val t = thickness(adj(0), w, h, RANGE)
         val b = t
-        val l = t.coerceIn(0.0, h / 2.0)
+        val l = head(h, t)
         val leftX = t / 2.0
         val rightX = w - b
         val rc = (rightX - leftX) / 2.0
@@ -386,13 +397,15 @@ internal class UTurnArrow : Canonical {
 internal class CurvedArrow : Canonical {
     override val defaultAdj = doubleArrayOf(0.25)
     override val iconAspect get() = 1.0
-    // On the tail, at the band's inner edge along the bottom.
-    override val knobs = listOf(thicknessKnob(0.25, RANGE, at = { _, h, t -> Pt(t, h) }) { to, _, _ -> to.x })
+    // Halfway along the head's lower edge, which sits a thickness and a half down.
+    override val knobs = listOf(thicknessKnob(0.25, RANGE, at = { w, _, t -> Pt(w - head(w, t) / 2.0, 1.5 * t) }) { to, _, _ -> to.y / 1.5 })
+
+    private fun head(w: Double, t: Double) = t.coerceIn(0.0, w / 2.0)
 
     override fun build(w: Double, h: Double, adj: (Int) -> Double): ShapeGeometry {
         val t = thickness(adj(0), w, h, RANGE)
         val b = t
-        val l = t.coerceIn(0.0, w / 2.0)
+        val l = head(w, t)
         val centre = Pt(w - l, h)
         val rx = (w - l - t / 2.0).coerceAtLeast(t)
         val ry = (h - b).coerceAtLeast(t)
@@ -422,11 +435,11 @@ internal class CircularArrow : Canonical {
     override val iconAspect get() = 1.0
     override val knobs = listOf(
         KnobDef(
-            // On the tail, at the ring's inner edge, a thickness and a half in from the rim.
-            position = { b, adj, _ -> onUnit(b, START, 1.0 - 1.5 * thick(adj.getOrNull(0)?.takeIf { it.isFinite() } ?: 0.25)) },
+            // On the head's inner corner, two thicknesses in from the rim.
+            position = { b, adj, _ -> onUnit(b, START + SWEEP, 1.0 - 2.0 * thick(adj.getOrNull(0)?.takeIf { it.isFinite() } ?: 0.25)) },
             drag = { to, b, _, _ ->
                 val u = Pt((to.x - b.w / 2.0) / (b.w / 2.0).coerceAtLeast(1e-9), (to.y - b.h / 2.0) / (b.h / 2.0).coerceAtLeast(1e-9))
-                doubleArrayOf(thick((1.0 - u.length()) / 1.5))
+                doubleArrayOf(thick((1.0 - u.length()) / 2.0))
             },
         ),
     )
@@ -462,10 +475,12 @@ internal class CircularArrow : Canonical {
 /** A right arrow whose tail is broken into two stripes. */
 internal class StripedArrow : Canonical {
     override val defaultAdj = DoubleArray(0)
-    override val knobs = listOf(spanKnob({ w, h -> min(w / 4.0, (w - min(h / 2.0, w * 0.7)) / 2.0) }, { w -> 1.4 * w }))
+    override val knobs = listOf(spanKnob({ w, h -> head(w, h) }, { w -> 1.4 * w }))
+
+    private fun head(w: Double, h: Double) = min(h / 2.0, w * 0.7)
 
     override fun build(w: Double, h: Double, adj: (Int) -> Double): ShapeGeometry {
-        val l = min(h / 2.0, w * 0.7)
+        val l = head(w, h)
         val half = h / 4.0
         val cy = h / 2.0
         val s = w * 0.05

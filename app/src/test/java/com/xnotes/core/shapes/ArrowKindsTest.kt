@@ -52,8 +52,8 @@ class ArrowKindsTest {
     @Test fun halvingAStraightArrowHalvesItsHead() {
         val s = shape(ArrowKinds.RIGHT)
         val knob = s.knobDots().single()
-        assertEquals("on the shaft's top edge, a quarter down the box", box.top + 20.0, knob.y, 1e-9)
-        // The shaft is 40 thick: half that puts its top edge 10 above the centre line.
+        assertEquals("halfway along the head's top edge", 0.0, knob.distanceTo(Pt(box.right - 20.0, box.top + 20.0)), 1e-9)
+        // The shaft is 40 thick and the knob level with its top edge: half that puts it 10 above the centre line.
         s.dragKnob(0, Pt(knob.x + 7.0, box.centerY - 10.0))
         assertEquals("the box keeps its length", box.w, s.box.w, 1e-9)
         assertEquals("and its centre line", box.centerY, s.box.centerY, 1e-9)
@@ -68,7 +68,7 @@ class ArrowKindsTest {
         val tall = Rect(10.0, 20.0, 80.0, 160.0)
         val up = shape(ArrowKinds.UP, tall)
         val knob = up.knobDots().single()
-        assertEquals("on the shaft's left edge, a quarter in", tall.left + 20.0, knob.x, 1e-9)
+        assertEquals("halfway along the head's left edge", 0.0, knob.distanceTo(Pt(tall.left + 20.0, tall.top + 20.0)), 1e-9)
         up.dragKnob(0, Pt(tall.centerX - 10.0, knob.y))
         assertEquals("narrower about the centre line", 40.0, up.box.w, 1e-9)
         assertEquals(tall.centerX, up.box.centerX, 1e-9)
@@ -105,8 +105,8 @@ class ArrowKindsTest {
         val b = Rect(0.0, 0.0, 120.0, 100.0)
         val s = shape(ArrowKinds.BENT, b)
         val knob = s.knobDots().single()
-        assertEquals("on the tail's inner corner", Pt(25.0, 100.0).distanceTo(knob), 0.0, 1e-9)
-        s.dragKnob(0, Pt(12.5, 90.0))
+        assertEquals("halfway along the head's lower edge", 0.0, knob.distanceTo(Pt(107.5, 37.5)), 1e-9)
+        s.dragKnob(0, Pt(100.0, 18.75))
         val c = s.localGeometry().corners
         assertEquals("the upright is half as thick", 12.5, c[8].x, 1e-9)
         assertEquals("the head is half as long", 12.5, b.right - c[2].x, 1e-9)
@@ -117,7 +117,8 @@ class ArrowKindsTest {
     @Test fun aQuadArrowsHeadsFollowItsShafts() {
         val b = Rect(0.0, 0.0, 100.0, 100.0)
         val s = shape(ArrowKinds.QUAD, b)
-        s.dragKnob(0, Pt(55.0, 50.0))
+        assertEquals("halfway along the right head's top edge", 0.0, s.knobDots().single().distanceTo(Pt(89.0, 39.0)), 1e-9)
+        s.dragKnob(0, Pt(95.0, 45.0))
         val c = s.localGeometry().corners
         assertEquals("shafts 10 thick", 10.0, c[2].x - c[22].x, 1e-9)
         assertEquals("heads twice as wide", 20.0, c[1].x - c[23].x, 1e-9)
@@ -135,10 +136,10 @@ class ArrowKindsTest {
         val before = headAcross(s)
         assertEquals("twice the ring's 25", 50.0, before, 1e-9)
         val knob = s.knobDots().single()
-        // The knob sits a thickness and a half in from the rim: halving the ring moves it out by a quarter thickness each way.
         val centre = b.center
+        assertEquals("on the head's inner corner, two thicknesses in from the rim", 50.0, knob.distanceTo(centre), 1e-9)
         val out = (knob - centre).normalized()
-        s.dragKnob(0, centre + out * (100.0 * (1.0 - 1.5 * 0.125)))
+        s.dragKnob(0, centre + out * (100.0 * (1.0 - 2.0 * 0.125)))
         assertEquals(0.125, s.adj[0], 1e-9)
         assertEquals("half as wide", before / 2.0, headAcross(s), 1e-9)
     }
