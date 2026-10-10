@@ -247,6 +247,9 @@ class InfiniteInteraction(
     // A finger press while a label is open became a pan; a tap there ends the edit.
     private var panMayCommit = false
 
+    // This stroke began by dismissing a live selection; a bare tap then leaves no dot.
+    private var strokeDismissedSelection = false
+
     // A finger held still grabs the item under it, or opens the paste menu on empty canvas.
     private var longPressRunnable: Runnable? = null
     private var longPressAt = Pt.ZERO
@@ -460,8 +463,14 @@ class InfiniteInteraction(
         // A press that lands off the selection with anything but the selection tools dismisses it,
         // which is what makes an empty tap put the chrome away.
         panMayDismiss = false
+        strokeDismissedSelection = false
         if (!onSelection && effective != Tool.SELECT && effective != Tool.LASSO) {
-            if (effective == Tool.PAN) panMayDismiss = hasSelection() else clearSelection()
+            if (effective == Tool.PAN) {
+                panMayDismiss = hasSelection()
+            } else {
+                strokeDismissedSelection = effective.isStroke && hasSelection()
+                clearSelection()
+            }
         }
 
         armLongPress(Pt(vx, vy), onSelection, toolType == MotionEvent.TOOL_TYPE_FINGER)
@@ -784,7 +793,10 @@ class InfiniteInteraction(
         )
         val stroke = liveStroke
         liveStroke = null
-        if (stroke == null || stroke.isEmpty) {
+        // A bare tap whose only job was to dismiss the selection drops the dot it would leave.
+        val dismissTap = strokeDismissedSelection && tapCandidate
+        strokeDismissedSelection = false
+        if (stroke == null || stroke.isEmpty || dismissTap) {
             onWetStroke(null)
             return
         }
