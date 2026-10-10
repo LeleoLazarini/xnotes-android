@@ -8,17 +8,23 @@ import com.xnotes.core.geometry.Rect
 import com.xnotes.core.infinite.CanvasBackground
 import com.xnotes.core.infinite.InfiniteDocument
 import com.xnotes.core.infinite.Waypoint
+import com.xnotes.core.model.ConnectorEnd
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.ImageData
 import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.PagePattern
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.Routing
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.pal.FontFace
 import com.xnotes.core.model.TextStyle
 import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.stroke.Sample
+import com.xnotes.core.shapes.Axis
+import com.xnotes.core.shapes.Elbow
 import com.xnotes.core.shapes.FreePath
+import com.xnotes.core.shapes.Head
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
@@ -28,6 +34,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -781,4 +788,141 @@ class CanvasCodecTest {
             assertTrue("an older reader would see ${item.shape} with ${item.vertices()?.size} points", ok)
         }
     }
+
+    // --- connectors ---
+
+    private fun gluedPair(): Triple<ShapeItem, ShapeItem, ConnectorItem> {
+        val a = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(100.0, 60.0), ink, 2.0)
+        val b = ShapeItem(ShapeKind.ELLIPSE, Pt(300.0, 200.0), Pt(400.0, 260.0), ink, 2.0)
+        val c = ConnectorItem(Routing.ELBOW, ConnectorEnd(Pt(100.0, 30.0), a, 5), ConnectorEnd(Pt(300.0, 230.0), b, 2), ink, 2.0, headEnd = Head.FILLED)
+        c.elbow = Elbow(Axis.H, doubleArrayOf(200.0))
+        return Triple(a, b, c)
+    }
+
+    /** [manifest] without its connector objects, as a reader that predates them sees it. */
+    private fun withoutConnectors(manifest: String): String {
+        var s = manifest
+        while (true) {
+            val at = s.indexOf(",\"connector\":{")
+            if (at < 0) return s
+            var depth = 0
+            var i = s.indexOf('{', at)
+            while (true) {
+                if (s[i] == '{') depth++
+                if (s[i] == '}' && --depth == 0) break
+                i++
+            }
+            s = s.removeRange(at, i + 1)
+        }
+    }
+
+    @Test fun aConnectorRoundTripsGluedToWhatItJoins() {
+        val (a, b, c) = gluedPair()
+        c.label = ShapeLabel("yes", TextStyle(ink, 12.0, FontFace.SANS), FakeTextMeasurer())
+        c.labelAt = 0.3
+        c.dashed = true
+        val doc = InfiniteDocument()
+        doc.add(a)
+        doc.add(c)
+        doc.add(b)
+        val back = roundTrip(doc).items
+        val bc = back[1] as ConnectorItem
+        assertEquals(Routing.ELBOW, bc.routing)
+        assertSame(back[0], bc.start.target)
+        assertEquals(5, bc.start.point)
+        assertSame(back[2], bc.end.target)
+        assertEquals(2, bc.end.point)
+        assertEquals(c.elbow, bc.elbow)
+        assertEquals(c.start.at, bc.start.at)
+        assertEquals(c.end.at, bc.end.at)
+        assertEquals(Head.FILLED, bc.headEnd)
+        assertEquals(Head.NONE, bc.headStart)
+        assertTrue(bc.dashed)
+        assertEquals("yes", bc.label!!.text)
+        assertEquals(0.3, bc.labelAt, 0.0)
+    }
+
+    @Test fun onlyWhatAConnectorGluesToGetsAnId() {
+        val (a, b, c) = gluedPair()
+        val doc = InfiniteDocument()
+        doc.add(ShapeItem(ShapeKind.RECTANGLE, Pt(500.0, 0.0), Pt(600.0, 50.0), ink))
+        doc.add(a)
+        doc.add(b)
+        doc.add(c)
+        val text = manifestText(doc)
+        assertEquals(2, Regex("\"id\":").findAll(text).count())
+        assertTrue(text.contains("\"item\":1") && text.contains("\"item\":2"))
+        assertArrayEquals(bytesOf(doc), bytesOf(doc))
+    }
+
+    @Test fun aReaderThatPredatesConnectorsDrawsTheLineTheyRunAlong() {
+        val (a, b, c) = gluedPair()
+        val doc = InfiniteDocument()
+        doc.add(a)
+        doc.add(b)
+        doc.add(c)
+        val old = readManifest(withoutConnectors(manifestText(doc))).items[2] as ShapeItem
+        assertEquals(ShapeKind.POLYLINE, old.shape)
+        assertEquals(c.route(), old.vertices())
+        assertEquals(Head.FILLED, old.headEnd)
+    }
+
+    @Test fun anEndGluedToSomethingNoLongerThereIsWrittenLoose() {
+        val (a, _, c) = gluedPair()
+        val doc = InfiniteDocument()
+        doc.add(a)
+        doc.add(c)
+        assertEquals(1, Regex("\"item\":").findAll(manifestText(doc)).count())
+        val back = roundTrip(doc).items
+        val bc = back[1] as ConnectorItem
+        assertSame(back[0], bc.start.target)
+        assertNull(bc.end.target)
+        assertEquals(c.end.at, bc.end.at)
+    }
+
+    @Test fun aStraightConnectorKeepsEvenASingleWaypoint() {
+        val c = ConnectorItem(Routing.STRAIGHT, ConnectorEnd(Pt(0.0, 0.0)), ConnectorEnd(Pt(100.0, 0.0)), ink)
+        c.waypoints = listOf(Pt(50.0, 40.0))
+        val doc = InfiniteDocument()
+        doc.add(c)
+        val back = roundTrip(doc).items.single() as ConnectorItem
+        assertEquals(Routing.STRAIGHT, back.routing)
+        assertEquals(listOf(Pt(50.0, 40.0)), back.waypoints)
+    }
+
+    @Test fun aRoutingFromANewerVersionDrawsAsItsStandIn() {
+        val (_, _, c) = gluedPair()
+        c.start = c.start.loose()
+        c.end = c.end.loose()
+        val doc = InfiniteDocument()
+        doc.add(c)
+        val text = manifestText(doc).replace("\"routing\":\"elbow\"", "\"routing\":\"zigzag\"")
+        val back = readManifest(text).items.single() as ConnectorItem
+        assertEquals(Routing.STRAIGHT, back.routing)
+        assertEquals(c.route(), back.route())
+    }
+
+    @Test fun anIdThatNamesNothingLeavesTheEndLoose() {
+        val (a, b, c) = gluedPair()
+        val doc = InfiniteDocument()
+        doc.add(a)
+        doc.add(b)
+        doc.add(c)
+        val text = manifestText(doc).replace("\"item\":2", "\"item\":9")
+        val bc = readManifest(text).items[2] as ConnectorItem
+        assertNotNull(bc.start.target)
+        assertNull(bc.end.target)
+    }
+
+    @Test fun aConnectorFindsAnImageItGluesToOnceTheImageLoads() {
+        val image = ImageItem(ImageData(imageFile(), 4, 4), Rect(0.0, 0.0, 40.0, 40.0))
+        val c = ConnectorItem(Routing.STRAIGHT, ConnectorEnd(Pt(40.0, 20.0), image, 5), ConnectorEnd(Pt(200.0, 20.0)), ink)
+        val doc = InfiniteDocument()
+        doc.add(c)
+        doc.add(image)
+        val back = roundTrip(doc).items
+        assertTrue(back[1] is ImageItem)
+        assertSame(back[1], (back[0] as ConnectorItem).start.target)
+    }
 }
+

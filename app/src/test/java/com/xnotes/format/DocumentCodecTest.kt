@@ -7,7 +7,10 @@ import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.Bookmark
+import com.xnotes.core.model.ConnectorEnd
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Document
+import com.xnotes.core.model.Glue
 import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.Orientation
 import com.xnotes.core.model.Page
@@ -16,6 +19,7 @@ import com.xnotes.core.model.PagePattern
 import com.xnotes.core.model.PageSize
 import com.xnotes.core.model.PageStyle
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.Routing
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.pal.FontFace
 import com.xnotes.core.model.TextStyle
@@ -24,6 +28,8 @@ import com.xnotes.core.model.Stroke
 import com.xnotes.core.model.TextItem
 import com.xnotes.core.stroke.Sample
 import com.xnotes.core.stroke.StrokeSimplify
+import com.xnotes.core.shapes.Axis
+import com.xnotes.core.shapes.Elbow
 import com.xnotes.core.shapes.FreePath
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
@@ -34,6 +40,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -876,4 +883,30 @@ class DocumentCodecTest {
         assertEquals(oval.box.centerX, back[1].box.centerX, 1e-9)
         assertEquals(Rgba(1, 2, 3, 64), back[1].fillRgba)
     }
+
+    @Test fun aConnectorGluesToATextBoxAndAShapeOnItsOwnPage() {
+        val ink = Rgba(1, 2, 3, 255)
+        val doc = Document(dpi = 150)
+        val page = Page(1240.0, 1754.0)
+        val text = TextItem(Pt(10.0, 10.0), width = 100.0, text = "box", measurer = FakeTextMeasurer())
+        val shape = ShapeItem(ShapeKind.RECTANGLE, Pt(300.0, 300.0), Pt(400.0, 360.0), ink, 2.0)
+        val c = ConnectorItem(Routing.ROUNDED, ConnectorEnd(Glue.point(text, 6)!!.at, text, 6), ConnectorEnd(Glue.point(shape, 4)!!.at, shape, 4), ink, 2.0)
+        c.elbow = Elbow(Axis.V, doubleArrayOf(200.0))
+        page.items += listOf(text, c, shape)
+        val other = Page(1240.0, 1754.0)
+        other.items += ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(50.0, 50.0), ink)
+        doc.pages += listOf(page, other)
+        val out = ByteArrayOutputStream()
+        codec.write(doc, out)
+        assertEquals(2, Regex("\"id\":").findAll(manifestOf(out.toByteArray())).count())
+        val back = roundTrip(doc).pages
+        val bc = back[0].items[1] as ConnectorItem
+        assertSame(back[0].items[0], bc.start.target)
+        assertEquals(6, bc.start.point)
+        assertSame(back[0].items[2], bc.end.target)
+        assertEquals(Routing.ROUNDED, bc.routing)
+        assertEquals(c.elbow, bc.elbow)
+        assertEquals(1, back[1].items.size)
+    }
 }
+
