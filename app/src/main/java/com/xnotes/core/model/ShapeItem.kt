@@ -18,6 +18,9 @@ import com.xnotes.core.shapes.ShapePainter
 import com.xnotes.core.shapes.ShapeParams
 import com.xnotes.core.shapes.ShapePath
 import com.xnotes.core.shapes.VertexEdit
+import com.xnotes.core.stroke.Sample
+import com.xnotes.core.tools.Tool
+import com.xnotes.core.tools.ToolDefaults
 import com.xnotes.core.vector.PathFlattener
 import com.xnotes.core.vector.VectorContour
 import com.xnotes.core.vector.VectorSeg
@@ -384,36 +387,66 @@ class ShapeItem(
     }
 
     /**
-     * AREA-erase: the outline parts that survive an eraser circle (page-local [cx], [cy],
-     * [radius]), cut cleanly at the circle boundary — the same contract as [Stroke.erasedBy]:
-     *  - `null`      — untouched (keep the original)
-     *  - empty list  — remove the whole shape
-     *  - fragments   — the surviving outline runs, as polyline shapes keeping this style
-     * A filled shape erases whole on any hit: a cut outline cannot hold its fill. An arrow is cut
-     * by its shaft alone, so a cut arrow loses its head.
+     * AREA-erase: what survives an eraser circle (page-local [cx], [cy], [radius]), with the same
+     * contract as [Stroke.erasedBy]: `null` when untouched, an empty list to remove the whole
+     * shape, else the stroked lines left outside the circle, cut cleanly at its edge, as ordinary ink.
+     * A cut shape stops being a shape: its pieces are pen strokes in its colour and width, dashed
+     * where it was dashed (a solid's hidden edges too) and neon where it glowed. A fill cannot
+     * survive a cut, so it goes, even when the eraser only crossed the fill; a filled head keeps
+     * its outline.
      */
-    fun erasedBy(cx: Double, cy: Double, radius: Double): List<ShapeItem>? {
+    fun erasedBy(cx: Double, cy: Double, radius: Double): List<CanvasItem>? {
         val c = Pt(cx, cy)
         if (bounds().distanceTo(c) > radius) return null
-        if (fillRgba != null) return if (intersectsCircle(cx, cy, radius)) emptyList() else null
-        val outlines = paths().filter { it.role == PathRole.OUTLINE || it.role == PathRole.STROKE_ONLY }
-            .flatMap { p -> p.contours.map { PathFlattener.flatten(it, ERASE_FLATTEN) to it.closed } }
+        val fillHit = fillRgba != null && intersectsCircle(cx, cy, radius)
+        val pen = pen()
+        val outlines = paths()
+            .filter { it.role.strokes }
+            .flatMap { p ->
+                val dashes = ShapePainter.strokePen(p.role, pen)?.takeIf { it.dashed }
+                p.contours.map { Triple(PathFlattener.flatten(it, ERASE_FLATTEN), it.closed, dashes) }
+            }
             .filter { it.first.size >= 2 }
         if (outlines.isEmpty()) return if (intersectsCircle(cx, cy, radius)) emptyList() else null
-        var touched = false
-        val runs = ArrayList<List<Pt>>()
-        for ((pts, closed) in outlines) {
+        var touched = fillHit
+        val ink = ArrayList<CanvasItem>()
+        for ((pts, closed, dashes) in outlines) {
             val (hit, survivors) = cut(pts, closed, c, radius)
             touched = touched || hit
-            runs.addAll(survivors)
+            for (run in survivors) ink.add(inkOf(run, dashes))
         }
-        if (!touched) return null
-        return runs.map {
-            poly(
-                ShapeKind.POLYLINE, it, strokeRgba, strokeWidth, null, neon, neonStrength,
-                dashed, dashLength, dashGap,
-            )
+        return if (touched) ink else null
+    }
+
+    /** A run of this shape's outline as a pen stroke: its colour and width, held constant, never smoothed. */
+    private fun inkOf(run: List<Pt>, dashes: Pen?): Stroke {
+        val tool = if (dashes != null) Tool.DASHED else Tool.PEN
+        val config = ToolDefaults.configFor(tool).copy(
+            baseWidth = strokeWidth,
+            rgba = strokeRgba,
+            pressureEnabled = false,
+            taperEnabled = false,
+            neon = neon,
+            neonStrength = neonStrength,
+            dashLength = dashes?.dashOn ?: dashLength,
+            dashGap = dashes?.dashGap ?: dashGap,
+        )
+        // Close-spaced samples, so the eraser can go on cutting the ink anywhere along it.
+        val samples = ArrayList<Sample>()
+        for (i in run.indices) {
+            val a = run[i]
+            if (i == 0) {
+                samples.add(Sample(a.x, a.y, 1.0))
+                continue
+            }
+            val from = run[i - 1]
+            val steps = kotlin.math.ceil(from.distanceTo(a) / INK_SPACING).toInt().coerceAtLeast(1)
+            for (k in 1..steps) {
+                val t = k.toDouble() / steps
+                samples.add(Sample(from.x + (a.x - from.x) * t, from.y + (a.y - from.y) * t, 1.0))
+            }
         }
+        return Stroke(tool, config, samples, smoothScale = 0.0)
     }
 
     /** One outline cut by the eraser circle: whether it was touched, and the runs left outside it. */
@@ -738,6 +771,9 @@ class ShapeItem(
         private const val HIT_FLATTEN = 0.5
         private const val BOUNDS_FLATTEN = 0.05
         private const val ERASE_FLATTEN = 0.25
+
+        /** How far apart a cut shape's ink is sampled, in content px: a pen's own density. */
+        private const val INK_SPACING = 1.5
         private const val LEGACY_FLATTEN = 0.25
 
         /** [a] folded into (-PI, PI]. */

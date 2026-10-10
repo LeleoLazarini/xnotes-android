@@ -61,10 +61,10 @@ class FreeShapeTest {
     @Test fun anAreaCutOfACurveLeavesTwoRuns() {
         val s = curve()
         val mid = onPage(s)[8]
-        val frags = s.erasedBy(mid.x, mid.y, 6.0)!!
+        val frags = s.erasedBy(mid.x, mid.y, 6.0)!!.map { it as Stroke }
         assertEquals(2, frags.size)
-        assertEquals(0.0, frags[0].vertices()!!.first().distanceTo(controls[0]), 1e-6)
-        assertEquals(0.0, frags[1].vertices()!!.last().distanceTo(controls[3]), 1e-6)
+        assertEquals(0.0, frags[0].samples.first().pos.distanceTo(controls[0]), 1e-4)
+        assertEquals(0.0, frags[1].samples.last().pos.distanceTo(controls[3]), 1e-4)
     }
 
     @Test fun aCurvesStandInIsItsFlattenedOutline() {

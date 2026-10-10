@@ -158,10 +158,9 @@ class ShapeRotationTest {
         val corner = s.toPage(Pt(100.0, 0.0))
         val frags = s.erasedBy(corner.x, corner.y, 10.0)
         assertNotNull(frags)
-        val pts = frags!!.single().vertices()!!
+        val pts = (frags!!.single() as Stroke).samples.map { it.pos }
         val far = s.toPage(Pt(0.0, 50.0))
-        assertTrue("the far corner survives", pts.any { it.distanceTo(far) < 1e-6 })
-        assertEquals(0.0, frags.single().rotation, 0.0)
+        assertTrue("the far corner survives as ink", pts.any { it.distanceTo(far) < 1e-4 })
     }
 
     @Test fun aSnapshotCarriesTheTurn() {
