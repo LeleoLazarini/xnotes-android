@@ -319,10 +319,20 @@ class ShapeItem(
             vertexDots().any { it.at.distanceTo(p) <= reach } ||
             edgeDots().any { it.at.distanceTo(p) <= reach }
 
-    /** Drag knob [index] to page point [to]: the kind turns that into new knob values. */
+    /** Drag knob [index] to page point [to]: the kind turns that into new knob values, or a new box. */
     fun dragKnob(index: Int, to: Pt) {
         val knob = shape.knobs.getOrNull(index) ?: return
-        adj = knob.drag(toLocal(to), box, adj, n)
+        val reframe = knob.reframe
+        if (reframe == null) {
+            adj = knob.drag(toLocal(to), box, adj, n)
+            return
+        }
+        // The new box shares the old one's centre, so the turn about it carries on unchanged.
+        val b = reframe(toLocal(to), box)
+        val ltr = start.x <= end.x
+        val down = start.y <= end.y
+        start = Pt(if (ltr) b.left else b.right, if (down) b.top else b.bottom)
+        end = Pt(if (ltr) b.right else b.left, if (down) b.bottom else b.top)
     }
 
     // --- point editing ---

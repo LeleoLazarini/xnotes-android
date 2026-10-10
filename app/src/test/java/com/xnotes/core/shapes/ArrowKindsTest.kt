@@ -24,16 +24,123 @@ class ArrowKindsTest {
         assertTrue(both.any { it.distanceTo(Pt(box.left, box.centerY)) < 1e-9 } && both.any { it.distanceTo(Pt(box.right, box.centerY)) < 1e-9 })
     }
 
-    @Test fun aTurnedArrowsKnobsTurnWithIt() {
-        val up = ShapeItem(ArrowKinds.UP, box.topLeft, Pt(box.right, box.bottom), ink, 2.0)
-        val head = up.knobDots()[1]
-        // Turned up, the head's base runs across the box: the knob sits on its left end.
-        assertEquals(box.left, head.x, 1e-9)
-        assertEquals("half the shorter side below the tip", box.top + 40.0, head.y, 1e-9)
-        up.dragKnob(1, Pt(head.x, head.y + 20.0))
-        val longer = up.adj[1]
-        assertTrue("dragging it away from the tip lengthens the head: $longer", longer > ArrowKinds.UP.defaultAdj[1])
-        assertEquals("the thickness is untouched", ArrowKinds.UP.defaultAdj[0], up.adj[0], 1e-12)
+    private val arrows = listOf(
+        ArrowKinds.RIGHT, ArrowKinds.LEFT, ArrowKinds.UP, ArrowKinds.DOWN, ArrowKinds.LEFT_RIGHT, ArrowKinds.UP_DOWN,
+        ArrowKinds.QUAD, ArrowKinds.BENT, ArrowKinds.U_TURN, ArrowKinds.CHEVRON, ArrowKinds.PENTAGON, ArrowKinds.NOTCHED,
+        ArrowKinds.CURVED_RIGHT, ArrowKinds.CURVED_LEFT, ArrowKinds.CIRCULAR, ArrowKinds.STRIPED, ArrowKinds.BENT_UP, ArrowKinds.LEFT_UP,
+    )
+
+    private fun shape(k: ShapeKind, b: Rect = box) = ShapeItem(k, b.topLeft, Pt(b.right, b.bottom), ink, 2.0)
+
+    @Test fun everyArrowHasOneKnob() {
+        assertEquals(18, arrows.size)
+        for (k in arrows) assertEquals("$k", 1, k.knobs.size)
+    }
+
+    @Test fun aKnobDroppedWhereItIsChangesNothing() {
+        // Square, so no arrow is deeper than its knob can make it.
+        val sq = Rect(10.0, 20.0, 100.0, 100.0)
+        for (k in arrows) {
+            val s = shape(k, sq)
+            val adj = s.adj.copyOf()
+            s.dragKnob(0, s.knobDots().single())
+            assertEquals("$k box", 0.0, s.box.topLeft.distanceTo(sq.topLeft) + Pt(s.box.right, s.box.bottom).distanceTo(Pt(sq.right, sq.bottom)), 1e-9)
+            for (i in adj.indices) assertEquals("$k knob", adj[i], s.adj[i], 1e-9)
+        }
+    }
+
+    @Test fun halvingAStraightArrowHalvesItsHead() {
+        val s = shape(ArrowKinds.RIGHT)
+        val knob = s.knobDots().single()
+        assertEquals("on the shaft's top edge, a quarter down the box", box.top + 20.0, knob.y, 1e-9)
+        // The shaft is 40 thick: half that puts its top edge 10 above the centre line.
+        s.dragKnob(0, Pt(knob.x + 7.0, box.centerY - 10.0))
+        assertEquals("the box keeps its length", box.w, s.box.w, 1e-9)
+        assertEquals("and its centre line", box.centerY, s.box.centerY, 1e-9)
+        assertEquals("the head spans the box, half as high", 40.0, s.box.h, 1e-9)
+        val c = s.localGeometry().corners
+        assertEquals("the head's base is half as far from the tip", box.right - 20.0, c[1].x, 1e-9)
+        assertEquals("the shaft is half as thick", 20.0, c[5].y - c[0].y, 1e-9)
+        assertEquals("the knob stays under the pen", box.centerY - 10.0, s.knobDots().single().y, 1e-9)
+    }
+
+    @Test fun aTurnedStraightArrowThinsAcrossItsOwnShaft() {
+        val tall = Rect(10.0, 20.0, 80.0, 160.0)
+        val up = shape(ArrowKinds.UP, tall)
+        val knob = up.knobDots().single()
+        assertEquals("on the shaft's left edge, a quarter in", tall.left + 20.0, knob.x, 1e-9)
+        up.dragKnob(0, Pt(tall.centerX - 10.0, knob.y))
+        assertEquals("narrower about the centre line", 40.0, up.box.w, 1e-9)
+        assertEquals(tall.centerX, up.box.centerX, 1e-9)
+        assertEquals("as long as it was", tall.top, up.box.top, 1e-9)
+        assertEquals(tall.bottom, up.box.bottom, 1e-9)
+    }
+
+    @Test fun aRotatedArrowThinsAboutItsOwnCentre() {
+        val s = shape(ArrowKinds.LEFT_RIGHT)
+        s.rotation = 0.6
+        val centre = s.box.center
+        val knob = s.toLocal(s.knobDots().single())
+        s.dragKnob(0, s.toPage(Pt(knob.x, box.centerY - 5.0)))
+        assertEquals(0.0, s.box.center.distanceTo(centre), 1e-9)
+        assertEquals(20.0, s.box.h, 1e-9)
+        assertEquals(0.6, s.rotation, 0.0)
+    }
+
+    @Test fun aKnobKeepsWhichCornerTheShapeStartedFrom() {
+        val s = ShapeItem(ArrowKinds.RIGHT, Pt(box.right, box.bottom), box.topLeft, ink, 2.0)
+        s.dragKnob(0, Pt(s.knobDots().single().x, box.centerY - 10.0))
+        assertTrue(s.start.x > s.end.x && s.start.y > s.end.y)
+    }
+
+    @Test fun aStraightArrowNeverOutgrowsItsHead() {
+        val s = shape(ArrowKinds.RIGHT)
+        s.dragKnob(0, Pt(box.centerX, box.centerY - 1000.0))
+        assertEquals("deep enough for the head to take the whole length", 2.0 * box.w, s.box.h, 1e-9)
+        s.dragKnob(0, Pt(box.centerX, box.centerY))
+        assertTrue("never flat", s.box.h > 0.0)
+    }
+
+    @Test fun halvingABentArrowHalvesItsHead() {
+        val b = Rect(0.0, 0.0, 120.0, 100.0)
+        val s = shape(ArrowKinds.BENT, b)
+        val knob = s.knobDots().single()
+        assertEquals("on the tail's inner corner", Pt(25.0, 100.0).distanceTo(knob), 0.0, 1e-9)
+        s.dragKnob(0, Pt(12.5, 90.0))
+        val c = s.localGeometry().corners
+        assertEquals("the upright is half as thick", 12.5, c[8].x, 1e-9)
+        assertEquals("the head is half as long", 12.5, b.right - c[2].x, 1e-9)
+        assertEquals("and half as wide", 25.0, c[5].y - c[3].y, 1e-9)
+        assertEquals("the box stays", b.w, s.box.w, 0.0)
+    }
+
+    @Test fun aQuadArrowsHeadsFollowItsShafts() {
+        val b = Rect(0.0, 0.0, 100.0, 100.0)
+        val s = shape(ArrowKinds.QUAD, b)
+        s.dragKnob(0, Pt(55.0, 50.0))
+        val c = s.localGeometry().corners
+        assertEquals("shafts 10 thick", 10.0, c[2].x - c[22].x, 1e-9)
+        assertEquals("heads twice as wide", 20.0, c[1].x - c[23].x, 1e-9)
+        assertEquals("and as long as the shaft is thick", 10.0, c[1].y, 1e-9)
+    }
+
+    @Test fun aCircularArrowsHeadFollowsItsRing() {
+        val b = Rect(0.0, 0.0, 200.0, 200.0)
+        fun headAcross(s: ShapeItem): Double {
+            // The straight runs after the outer arc: the head's outer corner, its tip, its inner corner.
+            val lines = s.localGeometry().paths.single().contours.single().segments.filterIsInstance<com.xnotes.core.vector.VectorSeg.Line>()
+            return lines[0].end.distanceTo(lines[2].end)
+        }
+        val s = shape(ArrowKinds.CIRCULAR, b)
+        val before = headAcross(s)
+        assertEquals("twice the ring's 25", 50.0, before, 1e-9)
+        val knob = s.knobDots().single()
+        // The knob sits a thickness and a half in from the rim: halving the ring moves it out by a quarter thickness each way.
+        val centre = b.center
+        val out = (knob - centre).normalized()
+        s.dragKnob(0, centre + out * (100.0 * (1.0 - 1.5 * 0.125)))
+        assertEquals(0.125, s.adj[0], 1e-9)
+        assertEquals("half as wide", before / 2.0, headAcross(s), 1e-9)
     }
 
     @Test fun aCalloutsTailReachesItsKnob() {
@@ -56,13 +163,6 @@ class ArrowKindsTest {
     @Test fun aLineCalloutsLeaderIsAStrokeOnly() {
         val g = ArrowKinds.LINE_CALLOUT.build(box, ShapeParams(ArrowKinds.LINE_CALLOUT.defaultAdj))
         assertEquals(listOf(PathRole.OUTLINE, PathRole.STROKE_ONLY), g.paths.map { it.role })
-    }
-
-    @Test fun aMissingSecondValueKeepsItsDefault() {
-        val k = ArrowKinds.RIGHT.knobs[0]
-        val adj = k.drag(Pt(box.right - 40.0, box.centerY - 30.0), box, DoubleArray(0), 0)
-        assertEquals(2, adj.size)
-        assertEquals(ArrowKinds.RIGHT.defaultAdj[1], adj[1], 0.0)
     }
 
     @Test fun theArrowsPageHasTwentyFourChips() {

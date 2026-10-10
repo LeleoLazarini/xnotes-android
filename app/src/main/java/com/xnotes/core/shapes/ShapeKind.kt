@@ -28,11 +28,13 @@ class ShapeGeometry(
 /**
  * One of a kind's knobs (PowerPoint's yellow adjust handles): where it sits for the given box and
  * parameters, and the knob values a drag of it to a point makes. Both work in the unturned frame;
- * [drag] clamps to what the kind can draw.
+ * [drag] clamps to what the kind can draw. A knob with [reframe] sizes the shape itself instead:
+ * a drag gives the new box, about the same centre, and leaves the knob values alone.
  */
 class KnobDef(
     val position: (box: Rect, adj: DoubleArray, n: Int) -> Pt,
     val drag: (to: Pt, box: Rect, adj: DoubleArray, n: Int) -> DoubleArray,
+    val reframe: ((to: Pt, box: Rect) -> Rect)? = null,
 )
 
 /** What a kind builds from beside its box: knob values, a count, a free outline and the line width. */
