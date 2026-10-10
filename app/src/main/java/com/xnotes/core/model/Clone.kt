@@ -16,7 +16,10 @@ fun CanvasItem.deepCopy(measurer: TextMeasurer): CanvasItem = when (this) {
         ShapeItem(
             shape, start, end, strokeRgba, strokeWidth, fillRgba, neon, neonStrength, path,
             dashed, dashLength, dashGap, rotation, adj.copyOf(), n, headStart, headEnd,
-        ).also { it.label = label }
+        ).also {
+            it.label = label
+            it.labelAt = labelAt
+        }
     is ConnectorItem ->
         ConnectorItem(routing, start, end, strokeRgba, strokeWidth, headStart, headEnd, dashed, dashLength, dashGap, neon, neonStrength).also {
             it.waypoints = waypoints

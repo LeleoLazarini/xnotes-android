@@ -8,6 +8,7 @@ import com.xnotes.core.history.EditLabel
 import com.xnotes.core.pal.FontFace
 import com.xnotes.core.shapes.ShapeKind
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -131,10 +132,10 @@ class ShapeLabelTest {
         assertTrue(ring.encloses(Pt(5.0, 100.0)))
     }
 
-    @Test fun closedKindsTakeLabelsAndLinesWaitForConnectors() {
+    @Test fun closedKindsAndLinesBothTakeLabels() {
         assertTrue(labelled().takesLabel)
-        assertFalse(ShapeItem(ShapeKind.LINE, Pt(0.0, 0.0), Pt(9.0, 9.0), ink).takesLabel)
-        assertFalse(ShapeItem(ShapeKind.ARROW, Pt(0.0, 0.0), Pt(9.0, 9.0), ink).takesLabel)
+        assertTrue(ShapeItem(ShapeKind.LINE, Pt(0.0, 0.0), Pt(9.0, 9.0), ink).takesLabel)
+        assertTrue(ShapeItem(ShapeKind.ARROW, Pt(0.0, 0.0), Pt(9.0, 9.0), ink).takesLabel)
     }
 
     @Test fun aNewLabelTakesTheOutlinesColourUnlessASolidFillWouldHideIt() {
@@ -199,4 +200,43 @@ class ShapeLabelTest {
         assertTrue(before.sameAs(before.withText("Hello")))
         assertFalse(before.sameAs(after))
     }
+
+    // --- labels on lines ---
+
+    private fun labelledLine(text: String = "Hi") = ShapeItem(ShapeKind.LINE, Pt(0.0, 0.0), Pt(200.0, 0.0), ink, 2.0).apply {
+        label = ShapeLabel(text, style, measurer)
+    }
+
+    @Test fun aLinesLabelSitsUprightOnItsMiddleAndTheLineBreaksForIt() {
+        val line = labelledLine()
+        assertTrue(line.takesLabel)
+        val r = line.labelRect()!!
+        assertEquals(100.0, r.centerX, 1e-9)
+        assertEquals(0.0, r.centerY, 1e-9)
+        assertEquals(2, line.paths().single { it.role == com.xnotes.core.shapes.PathRole.STROKE_ONLY }.contours.size)
+        assertTrue(line.contains(r.center))
+    }
+
+    @Test fun aLinesLabelSlidesAlongItAndASnapshotTakesItsPlace() {
+        val line = labelledLine()
+        val before = line.snapshotGeometry()
+        line.slideLabel(Pt(50.0, 30.0))
+        assertEquals(0.25, line.labelAt, 1e-9)
+        assertEquals(50.0, line.labelRect()!!.centerX, 1e-9)
+        assertNotEquals(before, line.snapshotGeometry())
+        line.restoreGeometry(before)
+        assertEquals(0.5, line.labelAt, 0.0)
+    }
+
+    @Test fun aLinesMiddleDotMovesOutFromUnderItsLabel() {
+        val line = labelledLine()
+        val dot = line.edgeDots().single().at
+        assertFalse(line.labelContains(dot))
+        assertEquals(0.0, dot.y, 1e-9)
+    }
+
+    @Test fun drawnTextStillTakesNoLabel() {
+        assertFalse(ShapeKind.GLYPHS.takesLabel)
+    }
 }
+

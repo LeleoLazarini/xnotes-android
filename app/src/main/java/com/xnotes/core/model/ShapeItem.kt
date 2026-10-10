@@ -8,6 +8,7 @@ import com.xnotes.core.pal.Mark
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.Renderer
 import com.xnotes.core.shapes.ConnectionPoint
+import com.xnotes.core.shapes.ConnectorPaths
 import com.xnotes.core.shapes.EditDot
 import com.xnotes.core.shapes.FreePath
 import com.xnotes.core.shapes.Head
@@ -25,6 +26,7 @@ import com.xnotes.core.vector.VectorSeg
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
@@ -66,18 +68,21 @@ class ShapeItem(
     /** What an open shape's two ends carry; an arrow starts with a chevron at its end. */
     var headStart: Head = shape.defaultHeadStart,
     var headEnd: Head = shape.defaultHeadEnd,
-) : CanvasItem, Resizable {
+) : CanvasItem, Resizable, Labelled {
 
     override val kind = KIND
     override val resizable = true
     override var locked = false
 
-    /** The typed label, centred in the kind's text rect and turning with the shape; null for none. */
-    var label: ShapeLabel? = null
+    /** The typed label: centred in a closed kind's text rect and turning with it, or upright on an open kind's line; null for none. */
+    override var label: ShapeLabel? = null
 
     /** True while the label is being typed: the editor shows it, so the shape draws without. Never saved. */
     @Volatile
-    var labelHidden = false
+    override var labelHidden = false
+
+    /** Where along an open shape's line its label sits, as a share of the line's length. */
+    var labelAt: Double = 0.5
 
     /** Normalized AABB of the two drag points: the shape's frame before [rotation] turns it. */
     val box: Rect get() = Rect.fromPoints(start, end)
@@ -153,9 +158,26 @@ class ShapeItem(
      * solid on a dashed arrow.
      */
     fun paths(): List<ShapePath> {
-        val local = localGeometry().paths
+        val local = localPaths()
         return if (rotation == 0.0) local else local.map { it.mapped(::toPage) }
     }
+
+    /** The kind's paths in the unturned frame, an open shape's line broken round its label. */
+    private fun localPaths(): List<ShapePath> {
+        val paths = localGeometry().paths
+        if (shape.isClosed) return paths
+        val l = label ?: return paths
+        val r = (if (labelHidden) labelFrame() else labelRect()) ?: return paths
+        val gap = r.outset(l.lineHeight * LABEL_GAP_LINES)
+        return paths.map { p ->
+            if (p.role != PathRole.STROKE_ONLY) p
+            else ShapePath(p.contours.flatMap { if (it.closed) listOf(it) else ConnectorPaths.clipOut(it, gap) }, p.role, p.fillRule)
+        }
+    }
+
+    /** The line an open shape's label rides: its first stroked run, in the unturned frame. */
+    private fun labelLine(): VectorContour? =
+        localGeometry().paths.firstOrNull { it.role == PathRole.STROKE_ONLY }?.contours?.firstOrNull { it.segments.isNotEmpty() }
 
     override fun paint(r: Renderer) {
         paintBody(r)
@@ -187,12 +209,21 @@ class ShapeItem(
      * under [ShapeLabel.MIN_WIDTH_LINES] lines' height), as tall as they wrap, centred on the rect
      * and spilling past it evenly when long. Null without a label.
      */
-    fun labelRect(): Rect? = label?.takeIf { it.text.isNotEmpty() }?.let(::frameOf)
+    override fun labelRect(): Rect? = label?.takeIf { it.text.isNotEmpty() }?.let(::frameOf)
 
     /** [labelRect] even while the label is empty, one line tall: where the editor types it. */
-    fun labelFrame(): Rect? = label?.let(::frameOf)
+    override fun labelFrame(): Rect? = label?.let(::frameOf)
 
     private fun frameOf(l: ShapeLabel): Rect {
+        // An open shape's label sits on its line, as wide as its longest line, as a connector's does.
+        if (shape.isOpen) {
+            labelLine()?.let { line ->
+                val w = (ceil(l.naturalWidth) + LABEL_SLACK).coerceIn(l.lineHeight * ShapeLabel.MIN_WIDTH_LINES, l.lineHeight * ConnectorItem.MAX_WIDTH_LINES)
+                val h = l.height(w)
+                val c = ConnectorPaths.pointAt(line, labelAt)
+                return Rect(c.x - w / 2.0, c.y - h / 2.0, w, h)
+            }
+        }
         val t = localGeometry().textRect
         val w = max(t.w, l.lineHeight * ShapeLabel.MIN_WIDTH_LINES)
         val h = l.height(w)
@@ -209,8 +240,22 @@ class ShapeItem(
         return local.map { cp -> ConnectionPoint(toPage(cp.at), cp.normals.map { n -> Pt(n.x * cs - n.y * sn, n.x * sn + n.y * cs) }) }
     }
 
-    /** Closed kinds take a typed label; lines and arrows get theirs with connectors. */
-    val takesLabel: Boolean get() = shape.takesLabel
+    override val takesLabel: Boolean get() = shape.takesLabel
+
+    override fun labelToPage(p: Pt): Pt = toPage(p)
+
+    override val labelTurn: Double get() = rotation
+
+    override val labelSlides: Boolean get() = shape.isOpen
+
+    override fun slideLabel(p: Pt) {
+        val line = labelLine() ?: return
+        labelAt = ConnectorPaths.shareNear(line, toLocal(p))
+    }
+
+    override val labelInk: Rgba get() = strokeRgba
+
+    override val labelBackdrop: Rgba? get() = fillRgba
 
     /**
      * What a note keeps of the label when the area eraser cuts the shape: a text box centred where
@@ -256,7 +301,7 @@ class ShapeItem(
     }
 
     /** True when page point [p] lands on the label's lines. */
-    fun labelContains(p: Pt): Boolean = labelRect()?.contains(toLocal(p)) == true
+    override fun labelContains(p: Pt): Boolean = labelRect()?.contains(toLocal(p)) == true
 
     override fun paintBounds(): Rect =
         if (neon) bounds().outset(Outline.glowRadius(strokeWidth, neonStrength) * 2.0 + 4.0)
@@ -338,11 +383,16 @@ class ShapeItem(
      */
     fun edgeDots(minLength: Double = 0.0): List<EditDot> {
         if (!editable()) return emptyList()
+        // An open shape's label sits on its line; a dot it covers moves to where the line shows.
+        val gap = if (shape.isOpen) label?.let { l -> labelRect()?.outset(l.lineHeight * LABEL_GAP_LINES) } else null
         return editOutline().flatMapIndexed { ci, c ->
             c.segments.indices.mapNotNull { si ->
                 val from = VertexEdit.vertexAt(c, si)
-                if (from.distanceTo(c.segments[si].end) < minLength) null
-                else EditDot(toPage(VertexEdit.midpoint(c, si)), PathSpot(ci, si))
+                val seg = c.segments[si]
+                if (from.distanceTo(seg.end) < minLength) return@mapNotNull null
+                val mid = VertexEdit.midpoint(c, si)
+                val at = if (gap != null && seg is VectorSeg.Line) ConnectorPaths.clearOf(from, seg.end, mid, gap) else mid
+                EditDot(toPage(at), PathSpot(ci, si))
             }
         }
     }
@@ -435,7 +485,7 @@ class ShapeItem(
     }
 
     /** Does [p] (unturned frame) land within [tol] of a stroked edge, or inside the fill? */
-    private fun hits(p: Pt, tol: Double): Boolean = Outline.hits(localGeometry().paths, p, tol, fillRgba != null)
+    private fun hits(p: Pt, tol: Double): Boolean = Outline.hits(localPaths(), p, tol, fillRgba != null)
 
     /**
      * AREA-erase: what survives an eraser circle (page-local [cx], [cy], [radius]), with the same
@@ -464,7 +514,7 @@ class ShapeItem(
         }
     }
 
-    override fun snapshotGeometry(): GeometrySnapshot = ShapeSnapshot(shape, start, end, path, rotation, adj.copyOf(), n)
+    override fun snapshotGeometry(): GeometrySnapshot = ShapeSnapshot(shape, start, end, path, rotation, adj.copyOf(), n, labelAt)
 
     override fun restoreGeometry(snap: GeometrySnapshot) {
         if (snap !is ShapeSnapshot) return
@@ -475,6 +525,7 @@ class ShapeItem(
         rotation = snap.rotation
         adj = snap.adj.copyOf()
         n = snap.n
+        labelAt = snap.labelAt
     }
 
     /**
@@ -697,6 +748,12 @@ class ShapeItem(
         /** Content px a curve may stray when flattened for bounds and stand-ins. */
         private const val BOUNDS_FLATTEN = 0.05
 
+        /** The gap an open shape's line leaves round its label, in lines of the label's height. */
+        private const val LABEL_GAP_LINES = 0.2
+
+        /** Room past a label's longest line, so rounding never wraps it, in content px. */
+        private const val LABEL_SLACK = 2.0
+
         /** Drawn text is never stroked; its width only pads its bounds. */
         private const val GLYPH_PEN = 0.5
 
@@ -754,11 +811,12 @@ private class ShapeSnapshot(
     val rotation: Double,
     val adj: DoubleArray,
     val n: Int,
+    val labelAt: Double,
 ) : GeometrySnapshot {
     // Value equality, so a drag that changed nothing records nothing.
     override fun equals(other: Any?): Boolean = other is ShapeSnapshot && shape == other.shape &&
         start == other.start && end == other.end && path === other.path && rotation == other.rotation &&
-        adj.contentEquals(other.adj) && n == other.n
+        adj.contentEquals(other.adj) && n == other.n && labelAt == other.labelAt
 
     override fun hashCode(): Int = start.hashCode() * 31 + end.hashCode()
 }

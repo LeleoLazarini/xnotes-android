@@ -1,6 +1,6 @@
 package com.xnotes.core.search
 
-import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.model.Labelled
 import com.xnotes.core.model.TextItem
 
 /** What a match lies in. */
@@ -15,7 +15,7 @@ sealed interface SearchTarget {
     data class Box(val item: TextItem) : SearchTarget
 
     /** A shape's typed label. */
-    data class Label(val item: ShapeItem) : SearchTarget
+    data class Label(val item: Labelled) : SearchTarget
 }
 
 /** One match: chars [start, end) of [text], which lies in [target] on note page [page]. */

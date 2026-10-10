@@ -95,6 +95,19 @@ object ConnectorPaths {
         return out
     }
 
+    /**
+     * Where a handle for the segment [a]-[b] goes when [at], its usual place, sits under the label in
+     * [gap]: halfway along the longer stretch of the segment left showing, or [at] when none is.
+     */
+    fun clearOf(a: Pt, b: Pt, at: Pt, gap: Rect): Pt {
+        if (!gap.contains(at)) return at
+        val (t0, t1) = lineInside(a, b, gap) ?: return at
+        val before = t0
+        val after = 1.0 - t1
+        if (maxOf(before, after) <= SPAN_EPS) return at
+        return if (before >= after) lerp(a, b, t0 / 2.0) else lerp(a, b, (t1 + 1.0) / 2.0)
+    }
+
     /** The point [share] of the way along [c], by length. */
     fun pointAt(c: VectorContour, share: Double): Pt {
         val pts = PathFlattener.flatten(c, MEASURE_FLATTEN)

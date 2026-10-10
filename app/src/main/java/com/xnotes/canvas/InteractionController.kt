@@ -46,6 +46,7 @@ import com.xnotes.core.model.ShapeHandle
 import com.xnotes.core.model.GeometrySnapshot
 import com.xnotes.core.model.Glue
 import com.xnotes.core.model.GlueFollow
+import com.xnotes.core.model.Labelled
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
@@ -82,7 +83,7 @@ import kotlin.math.sin
 /** The pointer state machine modes (spec 06 §1). */
 enum class PointerMode {
     IDLE, DRAW, ERASE, BAND, LASSO_DRAW, SHOT, SHAPE, MOVE, RESIZE, TRANSFORM, PAN, PINCH, FLOW_TEXT,
-    TEXT_DRAG, RULER_MOVE, RULER_TRANSFORM, RULER_ROTATE, PDF_TEXT, VERTEX, POLYGON, CONNECT, JOINT,
+    TEXT_DRAG, RULER_MOVE, RULER_TRANSFORM, RULER_ROTATE, PDF_TEXT, VERTEX, POLYGON, CONNECT, JOINT, SLIDE,
 }
 
 /**
@@ -404,6 +405,10 @@ class InteractionController(
 
     // A lone connector dragged by its line lets go of what it joined; how it was, for undo.
     private var looseBefore: GeometrySnapshot? = null
+
+    // A label being slid along its line, on its page, and the item as the slide found it.
+    private var slideSel: Selected? = null
+    private var slideBefore: GeometrySnapshot? = null
     private var pendingShape: ShapeItem? = null
     private var shapePageIndex: Int? = null
 
@@ -472,7 +477,7 @@ class InteractionController(
     val editingPage: Int get() = editingPageIndex
 
     // LABEL EDITING (a shape's label, typed in the same overlay a text box uses)
-    private var editingLabel: ShapeItem? = null
+    private var editingLabel: Labelled? = null
     private var labelPageIndex = -1
     private var labelBefore: ShapeLabel? = null
 
@@ -900,6 +905,7 @@ class InteractionController(
             PointerMode.SHAPE -> extendShape(content)
             PointerMode.CONNECT -> extendConnector(content)
             PointerMode.JOINT -> extendJoint(content)
+            PointerMode.SLIDE -> extendSlide(content)
             PointerMode.FLOW_TEXT ->
                 // A plain drag with the text tool scrolls the document; only a long-pressed
                 // drag extends the selection (dragTo returns true to request the pan handoff).
@@ -978,6 +984,7 @@ class InteractionController(
             PointerMode.SHAPE -> endShape()
             PointerMode.CONNECT -> endConnector()
             PointerMode.JOINT -> endJoint(e.eventTime)
+            PointerMode.SLIDE -> endSlide()
             PointerMode.FLOW_TEXT -> {
                 mode = PointerMode.IDLE
                 flowText?.release(content, Pt(e.getX(idx).toDouble(), e.getY(idx).toDouble()), e.eventTime)
@@ -1656,6 +1663,7 @@ class InteractionController(
 
     private fun beginSelect(content: Pt) {
         if (tryGrabSelectionHandle(content)) return
+        if (trySlideLabel(content)) return
         // Inside the settled selection the press moves it, whatever it landed on. Hit-testing
         // first would re-pick the stroke under the finger, and you meant to drag what is
         // selected, not to select what happens to sit inside it.
@@ -1705,6 +1713,7 @@ class InteractionController(
         // A tap on the settled selection grabs it (a resize/rotate handle, or a move when inside the
         // oriented box) instead of starting a fresh lasso.
         if (tryGrabSelectionHandle(content)) return
+        if (trySlideLabel(content)) return
         if (selectionChromeBox()?.contains(content) == true) {
             beginMove(content)
             return
@@ -2790,6 +2799,47 @@ class InteractionController(
         }
     }
 
+    // --- sliding a line's label ---
+
+    /** A press on the label of a lone line or connector slides it along; true when it did. */
+    private fun trySlideLabel(content: Pt): Boolean {
+        val sel = selection.singleOrNull() ?: return false
+        val item = sel.item as? Labelled ?: return false
+        if (!item.labelSlides || state.pageRects.getOrNull(sel.pageIndex) == null) return false
+        if (!item.labelContains(state.toPageSpace(sel.pageIndex, content))) return false
+        slideSel = sel
+        slideBefore = item.snapshotGeometry()
+        mode = PointerMode.SLIDE
+        onSelectionMenu(null)
+        return true
+    }
+
+    private fun extendSlide(content: Pt) {
+        val sel = slideSel ?: return
+        val item = sel.item as? Labelled ?: return
+        if (state.pageRects.getOrNull(sel.pageIndex) == null) return
+        slideBefore?.let { item.restoreGeometry(it) }
+        item.slideLabel(state.toPageSpace(sel.pageIndex, content))
+        selObb = selectionBox()
+        requestRender()
+    }
+
+    private fun endSlide() {
+        val item = slideSel?.item
+        val before = slideBefore
+        slideSel = null
+        slideBefore = null
+        if (item != null && before != null && item.snapshotGeometry() != before) {
+            history.push(TransformItems(listOf(item), listOf(before), listOf(item.snapshotGeometry())))
+            state.document.dirty = true
+            onContentChanged()
+        }
+        selObb = selectionBox()
+        mode = PointerMode.IDLE
+        refreshSelectionMenu()
+        requestRender()
+    }
+
     // --- a lone connector's own handles ---
 
     private fun beginJoint(sel: Selected, edit: ConnectorEdit, content: Pt) {
@@ -2905,12 +2955,12 @@ class InteractionController(
     // --- shape labels ---
 
     /** True when the lone selection is a shape that can take a label. */
-    fun canLabelSelection(): Boolean = (selection.singleOrNull()?.item as? ShapeItem)?.let { it.takesLabel && !it.locked } == true
+    fun canLabelSelection(): Boolean = (selection.singleOrNull()?.item as? Labelled)?.let { it.takesLabel && !it.locked } == true
 
     /** Type the lone selected shape's label. */
     fun labelSelection() {
         val sel = selection.singleOrNull() ?: return
-        val shape = sel.item as? ShapeItem ?: return
+        val shape = sel.item as? Labelled ?: return
         if (shape.takesLabel && !shape.locked) startLabelEdit(shape, sel.pageIndex)
     }
 
@@ -2918,7 +2968,7 @@ class InteractionController(
      * Open the overlay on [shape]'s label, giving it one in the text box defaults if it has none.
      * The shape is lifted out of the cache and drawn live without its words while the field shows them.
      */
-    private fun startLabelEdit(shape: ShapeItem, pi: Int) {
+    private fun startLabelEdit(shape: Labelled, pi: Int) {
         commitTextEdit()
         flowText?.endSession()
         clearSelection()
@@ -2961,11 +3011,11 @@ class InteractionController(
     }
 
     /** The overlay over [shape]'s label: its top-left corner on screen, turned with the shape and the view. */
-    private fun labelField(shape: ShapeItem): EditingField? {
+    private fun labelField(shape: Labelled): EditingField? {
         if (state.pageRects.getOrNull(labelPageIndex) == null) return null
         val l = shape.label ?: return null
         val r = shape.labelFrame() ?: return null
-        val topLeft = state.contentToViewport(state.fromPageSpace(labelPageIndex, shape.toPage(r.topLeft)))
+        val topLeft = state.contentToViewport(state.fromPageSpace(labelPageIndex, shape.labelToPage(r.topLeft)))
         return EditingField(
             x = topLeft.x,
             y = topLeft.y,
@@ -2976,7 +3026,7 @@ class InteractionController(
             face = l.style.face,
             rgba = l.style.rgba,
             text = l.text,
-            rotation = state.rotationDeg + Math.toDegrees(shape.rotation),
+            rotation = state.rotationDeg + Math.toDegrees(shape.labelTurn),
             centred = true,
         )
     }
@@ -3018,6 +3068,13 @@ class InteractionController(
      * a double tap is a vertex's, so it never labels one, whatever its kind. [selectedBefore] is that
      * selection; the first tap may well have selected the shape itself.
      */
+    /** Whether page point [local] lands on [item] for a label: a shape's outline, fill, label or inside; a line's line. */
+    private fun labelTargetHit(item: CanvasItem, local: Pt, reach: Double): Boolean = when (item) {
+        is ShapeItem -> item.takesLabel && (item.touches(local, reach) || (item.shape.isClosed && item.encloses(local)))
+        is ConnectorItem -> item.touches(local, reach)
+        else -> false
+    }
+
     private fun onDoubleTap(viewport: Pt, toolType: Int, selectedBefore: Set<CanvasItem>) {
         val fingerPans = toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff
         if (tool != Tool.SHAPE && tool != Tool.SELECT && !fingerPans) return
@@ -3028,9 +3085,7 @@ class InteractionController(
         val pi = state.pageIndexAtContent(content) ?: return
         val local = state.toPageSpace(pi, content)
         val reach = OUTLINE_GRAB / state.zoom
-        val shape = state.document.pages[pi].items.lastOrNull {
-            it is ShapeItem && !it.locked && it.takesLabel && (it.touches(local, reach) || it.encloses(local))
-        } as? ShapeItem ?: return
+        val shape = state.document.pages[pi].items.lastOrNull { !it.locked && labelTargetHit(it, local, reach) } as? Labelled ?: return
         if (shape in selectedBefore) return
         startLabelEdit(shape, pi)
     }
@@ -3974,6 +4029,9 @@ class InteractionController(
         if (mode == PointerMode.VERTEX) abandonVertex()
         if (mode == PointerMode.JOINT) jointEdit?.restore()
         jointEdit = null
+        if (mode == PointerMode.SLIDE) slideBefore?.let { slideSel?.item?.restoreGeometry(it) }
+        slideSel = null
+        slideBefore = null
         if (mode == PointerMode.POLYGON) showPolygonDraft(null)
         if (mode == PointerMode.MOVE) moveOffset = Pt.ZERO
         if (mode == PointerMode.MOVE || mode == PointerMode.TRANSFORM || mode == PointerMode.VERTEX || mode == PointerMode.JOINT) {

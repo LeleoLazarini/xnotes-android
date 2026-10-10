@@ -82,7 +82,7 @@ class ConnectorItem(
     var dashGap: Double = 8.0,
     var neon: Boolean = false,
     var neonStrength: Double = 0.6,
-) : CanvasItem {
+) : CanvasItem, Labelled {
 
     override val kind = KIND
     override val resizable = true
@@ -95,11 +95,11 @@ class ConnectorItem(
     var elbow: Elbow = Elbow.PLAIN
 
     /** The typed label, upright on the line; null for none. */
-    var label: ShapeLabel? = null
+    override var label: ShapeLabel? = null
 
     /** True while the label is being typed: the editor shows it, so the connector draws without. Never saved. */
     @Volatile
-    var labelHidden = false
+    override var labelHidden = false
 
     /** Where along the line the label sits, as a share of its length from the start. */
     var labelAt: Double = 0.5
@@ -175,10 +175,26 @@ class ConnectorItem(
      * its longest line (between [ShapeLabel.MIN_WIDTH_LINES] and [MAX_WIDTH_LINES] lines' height, past
      * which it wraps) and as tall as it wraps. Null without a label.
      */
-    fun labelRect(): Rect? = label?.takeIf { it.text.isNotEmpty() }?.let(::frameOf)
+    override fun labelRect(): Rect? = label?.takeIf { it.text.isNotEmpty() }?.let(::frameOf)
 
     /** [labelRect] even while the label is empty: where the editor types it. */
-    fun labelFrame(): Rect? = label?.let(::frameOf)
+    override fun labelFrame(): Rect? = label?.let(::frameOf)
+
+    override val takesLabel: Boolean get() = true
+
+    override fun labelToPage(p: Pt): Pt = p
+
+    override val labelTurn: Double get() = 0.0
+
+    override val labelSlides: Boolean get() = true
+
+    override fun slideLabel(p: Pt) {
+        labelAt = ConnectorPaths.shareNear(body(), p)
+    }
+
+    override val labelInk: Rgba get() = strokeRgba
+
+    override val labelBackdrop: Rgba? get() = null
 
     private fun frameOf(l: ShapeLabel): Rect {
         val w = (ceil(l.naturalWidth) + LABEL_SLACK).coerceIn(l.lineHeight * ShapeLabel.MIN_WIDTH_LINES, l.lineHeight * MAX_WIDTH_LINES)
@@ -195,7 +211,7 @@ class ConnectorItem(
     }
 
     /** True when page point [p] lands on the label's lines. */
-    fun labelContains(p: Pt): Boolean = labelRect()?.contains(p) == true
+    override fun labelContains(p: Pt): Boolean = labelRect()?.contains(p) == true
 
     override fun bounds(): Rect {
         val pts = drawn().flatMap { p -> p.contours.flatMap { PathFlattener.flatten(it, BOUNDS_FLATTEN) } }
@@ -270,7 +286,12 @@ class ConnectorItem(
     fun segmentHandles(): List<Pt> {
         if (!routing.orthogonal) return emptyList()
         val pts = elbow.points(start.at, end.at)
-        return (1..elbow.coords.size).map { i -> (pts[i] + pts[i + 1]) * 0.5 }
+        val gap = labelGap()
+        return (1..elbow.coords.size).map { i ->
+            val mid = (pts[i] + pts[i + 1]) * 0.5
+            // A handle the label covers moves to where the segment shows, so both stay in reach.
+            if (gap == null) mid else ConnectorPaths.clearOf(pts[i], pts[i + 1], mid, gap)
+        }
     }
 
     /** Slide middle segment [segment] (1 to the coordinate count) across to where [to] is. */
@@ -282,7 +303,11 @@ class ConnectorItem(
     fun midpointDots(): List<Pt> {
         if (routing.orthogonal) return emptyList()
         val pts = listOf(start.at) + waypoints + end.at
-        return (0 until pts.size - 1).map { (pts[it] + pts[it + 1]) * 0.5 }
+        val gap = labelGap()
+        return (0 until pts.size - 1).map {
+            val mid = (pts[it] + pts[it + 1]) * 0.5
+            if (gap == null) mid else ConnectorPaths.clearOf(pts[it], pts[it + 1], mid, gap)
+        }
     }
 
     /** Add a waypoint at [to], [index]th among them. */

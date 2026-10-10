@@ -56,12 +56,12 @@ class ShapeLabel(val text: String, val style: TextStyle, val measurer: TextMeasu
 
     companion object {
         /**
-         * A new label's style for [shape]: the given type, in the outline's colour, unless a solid
-         * fill of that colour would swallow it, when black or white reads better on the fill.
+         * A new label's style for [item]: the given type, in its line's colour, unless a solid fill
+         * of that colour would swallow it, when black or white reads better on the fill.
          */
-        fun styleFor(shape: ShapeItem, pointSize: Double, face: FontFace): TextStyle {
-            val outline = shape.strokeRgba.withAlpha(255)
-            val fill = shape.fillRgba
+        fun styleFor(item: Labelled, pointSize: Double, face: FontFace): TextStyle {
+            val outline = item.labelInk.withAlpha(255)
+            val fill = item.labelBackdrop
             val swallowed = fill != null && fill.a >= SOLID_FILL_ALPHA && fill.r == outline.r && fill.g == outline.g && fill.b == outline.b
             val color = if (!swallowed) outline else if (outline.luminance() > 0.55) Rgba(0, 0, 0) else Rgba(255, 255, 255)
             return TextStyle(color, pointSize, face)

@@ -452,6 +452,7 @@ class DocumentCodec(
             writeRgba(j, l.style.rgba)
             j.name("point_size").value(l.style.pointSize)
             if (l.style.face != TextItem.DEFAULT_FACE) j.name("font_face").value(l.style.face.id)
+            if (s.labelAt != 0.5) j.name("at").value(s.labelAt)
             j.endObject()
         }
         if (s.locked) j.name("locked").value(true)
@@ -1095,6 +1096,7 @@ class DocumentCodec(
         s.headEnd?.let { shape.headEnd = Head.fromId(it) }
         s.label?.takeIf { it.text.isNotEmpty() }?.let { l ->
             shape.label = ShapeLabel(l.text, TextStyle(l.rgba ?: shape.strokeRgba, l.pointSize, FontFace.fromId(l.fontFace)), textMeasurer)
+            l.at?.takeIf { it.isFinite() }?.let { shape.labelAt = it.coerceIn(0.0, 1.0) }
         }
         return shape
     }

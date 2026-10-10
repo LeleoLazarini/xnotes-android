@@ -69,8 +69,8 @@ abstract class ShapeKind internal constructor(val id: String) {
     /** Whether a selected shape of this kind shows dots its points can be dragged by. */
     open val pointEditable: Boolean get() = true
 
-    /** Whether a shape of this kind takes a typed label: closed ones, for now. */
-    open val takesLabel: Boolean get() = isClosed
+    /** Whether a shape of this kind takes a typed label: a closed one in its text area, an open one on its line. */
+    open val takesLabel: Boolean get() = true
 
     /** Square and circle: a corner drag keeps them as wide as they are tall. */
     open val keepsAspect: Boolean get() = false

@@ -37,6 +37,7 @@ import com.xnotes.core.model.ImageData
 import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.deepCopyAll
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.Labelled
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
@@ -649,7 +650,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     override fun selectionCount(): ShapeCount? = ShapeCount.of(selection.items.singleOrNull() as? ShapeItem)
 
-    override fun canLabelSelection(): Boolean = (selection.items.singleOrNull() as? ShapeItem)?.let { it.takesLabel && !it.locked } == true
+    override fun canLabelSelection(): Boolean = (selection.items.singleOrNull() as? Labelled)?.let { it.takesLabel && !it.locked } == true
 
     override fun canRerouteSelection(): Boolean =
         selection.loneConnector?.let { !it.locked && (it.routing.orthogonal || it.waypoints.isNotEmpty()) } == true
@@ -671,14 +672,14 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     }
 
     override fun labelSelection() {
-        val shape = selection.items.singleOrNull() as? ShapeItem ?: return
+        val shape = selection.items.singleOrNull() as? Labelled ?: return
         if (shape.takesLabel && !shape.locked) startLabelEdit(shape)
     }
 
     // --- shape labels, typed in the overlay a note's text boxes use ---
 
-    /** The shape whose label is open in the overlay, and that label as it was before. */
-    private var editingLabel: ShapeItem? = null
+    /** The shape or connector whose label is open in the overlay, and that label as it was before. */
+    private var editingLabel: Labelled? = null
     private var labelBefore: ShapeLabel? = null
 
     /** Where the overlay sits while a label is open, or null. */
@@ -702,7 +703,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
      * Open the overlay on [shape]'s label, giving it one in the text box defaults if it has none.
      * The shape is meshed without its words while the field shows them.
      */
-    private fun startLabelEdit(shape: ShapeItem) {
+    private fun startLabelEdit(shape: Labelled) {
         commitText()
         interaction.clearSelection()
         editingLabel = shape
@@ -782,7 +783,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
             textBar = null
             return
         }
-        val topLeft = viewport.contentToViewport(shape.toPage(r.topLeft))
+        val topLeft = viewport.contentToViewport(shape.labelToPage(r.topLeft))
         val f = com.xnotes.canvas.EditingField(
             x = topLeft.x,
             y = topLeft.y,
@@ -793,7 +794,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
             face = l.style.face,
             rgba = l.style.rgba,
             text = l.text,
-            rotation = Math.toDegrees(shape.rotation),
+            rotation = Math.toDegrees(shape.labelTurn),
             centred = true,
         )
         editingField = f

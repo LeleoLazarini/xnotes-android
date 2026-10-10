@@ -924,5 +924,16 @@ class CanvasCodecTest {
         assertTrue(back[1] is ImageItem)
         assertSame(back[1], (back[0] as ConnectorItem).start.target)
     }
+
+    @Test fun whereALinesLabelSitsRoundTrips() {
+        val line = ShapeItem(ShapeKind.LINE, Pt(0.0, 0.0), Pt(200.0, 0.0), ink, 2.0)
+        line.label = ShapeLabel("mid", TextStyle(ink, 12.0, FontFace.SANS), FakeTextMeasurer())
+        line.labelAt = 0.2
+        val doc = InfiniteDocument()
+        doc.add(line)
+        val back = roundTrip(doc).items.single() as ShapeItem
+        assertEquals("mid", back.label!!.text)
+        assertEquals(0.2, back.labelAt, 0.0)
+    }
 }
 

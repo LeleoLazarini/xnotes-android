@@ -1,7 +1,7 @@
 package com.xnotes.core.search
 
+import com.xnotes.core.model.Labelled
 import com.xnotes.core.model.Page
-import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.TextItem
 import com.xnotes.core.text.FlowFrame
 import com.xnotes.core.text.FlowPos
@@ -21,7 +21,7 @@ object TypedTexts {
         for ((p, page) in pages.withIndex()) {
             for (item in page.items) {
                 if (item is TextItem && item.text.isNotBlank()) out += TypedText(SearchTarget.Box(item), item.text) { p }
-                val label = (item as? ShapeItem)?.label
+                val label = (item as? Labelled)?.label
                 if (label != null && label.text.isNotBlank()) out += TypedText(SearchTarget.Label(item), label.text) { p }
             }
         }

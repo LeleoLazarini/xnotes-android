@@ -5,6 +5,7 @@ import com.xnotes.core.model.Document
 import com.xnotes.core.model.DrawStyle
 import com.xnotes.core.model.GeoHandle
 import com.xnotes.core.model.GeometrySnapshot
+import com.xnotes.core.model.Labelled
 import com.xnotes.core.model.Page
 import com.xnotes.core.model.Resizable
 import com.xnotes.core.model.Rgba
@@ -216,21 +217,21 @@ class RestyleText(
     override fun touched(locate: (CanvasItem) -> Page?) = pagedItems(listOf(item), locate)
 }
 
-/** Type, retype, restyle or clear a shape's label: labels are immutable, so the two sides are kept whole. */
+/** Type, retype, restyle or clear a label: labels are immutable, so the two sides are kept whole. */
 class EditLabel(
-    private val shape: ShapeItem,
+    private val item: Labelled,
     private val oldLabel: ShapeLabel?,
     private val newLabel: ShapeLabel?,
 ) : Command {
     override fun redo() {
-        shape.label = newLabel
+        item.label = newLabel
     }
 
     override fun undo() {
-        shape.label = oldLabel
+        item.label = oldLabel
     }
 
-    override fun touched(locate: (CanvasItem) -> Page?) = pagedItems(listOf(shape), locate)
+    override fun touched(locate: (CanvasItem) -> Page?) = pagedItems(listOf(item), locate)
 }
 
 /**

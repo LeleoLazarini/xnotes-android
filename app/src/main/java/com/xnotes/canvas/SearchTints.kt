@@ -3,8 +3,8 @@ package com.xnotes.canvas
 import android.text.StaticLayout
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
+import com.xnotes.core.model.Labelled
 import com.xnotes.core.model.Rgba
-import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.TextItem
 import com.xnotes.core.pal.Pen
@@ -225,7 +225,7 @@ class SearchTints(
     }
 
     /** The match's line pieces in the label's own centred layout, from the top-left of its frame. */
-    private fun labelBoxes(hit: SearchHit, item: ShapeItem): Boxes? {
+    private fun labelBoxes(hit: SearchHit, item: Labelled): Boxes? {
         val label = item.label ?: return null
         val frame = item.labelFrame() ?: return null
         val text = label.text
@@ -248,12 +248,12 @@ class SearchTints(
     }
 
     /** [rel], a piece of a label match from its frame's corner, as the turned quad it covers in content space. */
-    private fun labelQuad(hit: SearchHit, item: ShapeItem, rel: Rect): List<Pt>? {
+    private fun labelQuad(hit: SearchHit, item: Labelled, rel: Rect): List<Pt>? {
         if (state.pageRects.getOrNull(hit.page) == null) return null
         val frame = item.labelFrame() ?: return null
         val r = Rect(frame.left + rel.left, frame.top + rel.top, rel.w, rel.h)
         return listOf(r.topLeft, Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom))
-            .map { state.fromPageSpace(hit.page, item.toPage(it)) }
+            .map { state.fromPageSpace(hit.page, item.labelToPage(it)) }
     }
 
     private fun layoutFor(item: TextItem): StaticLayout {

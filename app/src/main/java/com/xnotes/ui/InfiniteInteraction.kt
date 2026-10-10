@@ -25,6 +25,7 @@ import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Glue
 import com.xnotes.core.model.GlueFollow
 import com.xnotes.core.model.ImageItem
+import com.xnotes.core.model.Labelled
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
@@ -43,7 +44,7 @@ import kotlin.math.exp
 import kotlin.math.max
 
 /** What the current gesture is doing. */
-enum class CanvasPointerMode { IDLE, PAN, PINCH, DRAW, ERASE, SHAPE, BAND, LASSO, MOVE, RESIZE, ROTATE, VERTEX, POLYGON, CONNECT, JOINT }
+enum class CanvasPointerMode { IDLE, PAN, PINCH, DRAW, ERASE, SHAPE, BAND, LASSO, MOVE, RESIZE, ROTATE, VERTEX, POLYGON, CONNECT, JOINT, SLIDE }
 
 /**
  * Gestures on the infinite canvas.
@@ -175,6 +176,10 @@ class InfiniteInteraction(
     private var jointFollow: GlueFollow = GlueFollow.NONE
     private var jointDownAt = Pt.ZERO
     private var jointMoved = false
+
+    // A label being slid along its line, and the item as the slide found it.
+    private var slideItem: Labelled? = null
+    private var slideBefore: com.xnotes.core.model.GeometrySnapshot? = null
 
     // The last tap on a straight connector's waypoint, for the double tap that removes it.
     private var lastWaypointTap = -1
@@ -353,17 +358,21 @@ class InfiniteInteraction(
      * None when that shape was in [selectedBefore], the selection as the first tap went down: on a
      * selected shape a double tap is a vertex's, whatever its kind.
      */
-    fun labelTargetAt(vp: Pt, toolType: Int, selectedBefore: Set<CanvasItem>): ShapeItem? {
+    fun labelTargetAt(vp: Pt, toolType: Int, selectedBefore: Set<CanvasItem>): Labelled? {
         val fingerPans = toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff
         if (tool != Tool.SHAPE && tool != Tool.SELECT && !fingerPans) return null
         if (tool == Tool.SHAPE && shapeConfig().placesCorners) return null
         val at = viewport.viewportToContent(vp)
         val reach = InteractionController.OUTLINE_GRAB / viewport.zoom
         val near = Rect(at.x - reach, at.y - reach, 2 * reach, 2 * reach)
-        val shape = itemsIn(near).lastOrNull {
-            it is ShapeItem && !it.locked && it.takesLabel && (it.touches(at, reach) || it.encloses(at))
-        } as? ShapeItem
-        return shape?.takeUnless { it in selectedBefore }
+        val target = itemsIn(near).lastOrNull { item ->
+            !item.locked && when (item) {
+                is ShapeItem -> item.takesLabel && (item.touches(at, reach) || (item.shape.isClosed && item.encloses(at)))
+                is ConnectorItem -> item.touches(at, reach)
+                else -> false
+            }
+        } as? Labelled
+        return target?.takeUnless { it in selectedBefore }
     }
 
     /**
@@ -579,6 +588,7 @@ class InfiniteInteraction(
             CanvasPointerMode.SHAPE -> extendShape(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.CONNECT -> extendConnector(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.JOINT -> extendJoint(e.getX(0).toDouble(), e.getY(0).toDouble())
+            CanvasPointerMode.SLIDE -> extendSlide(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.BAND -> extendBand(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.LASSO -> extendLasso(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.MOVE -> extendMove(e.getX(0).toDouble(), e.getY(0).toDouble())
@@ -630,6 +640,7 @@ class InfiniteInteraction(
             CanvasPointerMode.RESIZE, CanvasPointerMode.ROTATE -> endTransform()
             CanvasPointerMode.VERTEX -> endVertex(e.eventTime)
             CanvasPointerMode.JOINT -> endJoint(e.eventTime)
+            CanvasPointerMode.SLIDE -> endSlide()
             CanvasPointerMode.POLYGON -> endPolygonTap(viewport.viewportToContent(Pt(e.getX(0).toDouble(), e.getY(0).toDouble())), e.eventTime)
             else -> Unit
         }
@@ -659,6 +670,7 @@ class InfiniteInteraction(
         }
         if (mode == CanvasPointerMode.VERTEX) abandonVertex()
         if (mode == CanvasPointerMode.JOINT) abandonJoint()
+        if (mode == CanvasPointerMode.SLIDE) abandonSlide()
         if (mode == CanvasPointerMode.POLYGON) showPolygonDraft(null)
         if ((mode == CanvasPointerMode.ROTATE || mode == CanvasPointerMode.RESIZE) && liftedTransform) {
             selection()?.previewBack()
@@ -866,6 +878,10 @@ class InfiniteInteraction(
                 beginJoint(edit, at)
                 return true
             }
+            if (c.labelContains(at)) {
+                beginSlide(c)
+                return true
+            }
             if (!c.touches(at, InteractionController.OUTLINE_GRAB / viewport.zoom)) return false
             beginMoveAt(sel, at)
             return true
@@ -889,11 +905,50 @@ class InfiniteInteraction(
             mode = CanvasPointerMode.RESIZE
             return true
         }
+        // A line's label slides along it, from the label itself.
+        (sel.items.singleOrNull() as? Labelled)?.takeIf { it.labelSlides && it.labelContains(at) }?.let {
+            beginSlide(it)
+            return true
+        }
         if (sel.contains(at, margin)) {
             beginMoveAt(sel, at)
             return true
         }
         return false
+    }
+
+    private fun beginSlide(item: Labelled) {
+        slideItem = item
+        slideBefore = item.snapshotGeometry()
+        mode = CanvasPointerMode.SLIDE
+        setInteractive(false, false)
+        onSelectionChanged()
+    }
+
+    private fun extendSlide(vx: Double, vy: Double) {
+        val item = slideItem ?: return
+        slideBefore?.let { item.restoreGeometry(it) }
+        item.slideLabel(viewport.viewportToContent(Pt(vx, vy)))
+        selection()?.itemChanged(item)
+        onSelectionChanged()
+        requestRender()
+    }
+
+    private fun endSlide() {
+        val item = slideItem ?: return
+        val before = slideBefore
+        slideItem = null
+        slideBefore = null
+        if (before != null && item.snapshotGeometry() != before) onCommitSelection(selection()?.commandFor(listOf(item), listOf(before)))
+        selection()?.itemChanged(item)
+    }
+
+    private fun abandonSlide() {
+        val item = slideItem ?: return
+        slideBefore?.let { item.restoreGeometry(it) }
+        selection()?.itemChanged(item)
+        slideItem = null
+        slideBefore = null
     }
 
     private fun beginSelect(vx: Double, vy: Double) {

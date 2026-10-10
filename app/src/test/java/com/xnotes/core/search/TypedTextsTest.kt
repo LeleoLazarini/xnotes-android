@@ -2,8 +2,11 @@ package com.xnotes.core.search
 
 import com.xnotes.core.FakeTextMeasurer
 import com.xnotes.core.geometry.Pt
+import com.xnotes.core.model.ConnectorEnd
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Page
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.Routing
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.TextItem
@@ -71,4 +74,15 @@ class TypedTextsTest {
         assertEquals(listOf("Start", "box", "End"), typed.map { it.source })
         assertEquals(1, typed[0].pageOf(0))
     }
+
+    @Test fun aConnectorsLabelIsSearchedToo() {
+        val pages = pages(1)
+        val ink = Rgba(1, 2, 3, 255)
+        val c = ConnectorItem(Routing.STRAIGHT, ConnectorEnd(Pt(0.0, 0.0)), ConnectorEnd(Pt(100.0, 0.0)), ink)
+        c.label = ShapeLabel("yes", TextStyle(ink, 12.0, FontFace.SANS), measurer)
+        pages[0].items += c
+        val typed = TypedTexts.of(pages, flowOf(), null)
+        assertEquals(listOf(SearchTarget.Label(c)), typed.map { it.target })
+    }
 }
+

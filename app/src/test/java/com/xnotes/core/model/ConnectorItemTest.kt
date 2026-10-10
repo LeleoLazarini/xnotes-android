@@ -159,4 +159,26 @@ class ConnectorItemTest {
         assertEquals(5.0, c.strokeWidth, 0.0)
         assertEquals(Rgba(200, 0, 0, 255), c.label!!.style.rgba)
     }
+
+    @Test fun aHandleTheLabelCoversMovesToWhereItsSegmentShows() {
+        val c = elbow(Pt(0.0, 0.0), Pt(200.0, 100.0), 100.0)
+        val bare = c.segmentHandles().single()
+        assertEquals(Pt(100.0, 50.0), bare)
+        c.label = ShapeLabel("label", TextStyle(ink, 10.0, FontFace.SANS), measurer)
+        val r = c.labelRect()!!
+        assertTrue("the label sits on the middle segment", r.contains(Pt(100.0, 50.0)))
+        val moved = c.segmentHandles().single()
+        assertFalse(r.contains(moved))
+        assertEquals(100.0, moved.x, 1e-9)
+        assertEquals(ConnectorEdit.Grab.SEGMENT, ConnectorEdit.grab(c, moved, 3.0)!!.grab)
+    }
+
+    @Test fun aConnectorsLabelSlidesAlongItsLine() {
+        val c = elbow(Pt(0.0, 0.0), Pt(200.0, 0.0))
+        c.routing = Routing.STRAIGHT
+        c.label = ShapeLabel("a", TextStyle(ink, 10.0, FontFace.SANS), measurer)
+        c.slideLabel(Pt(150.0, -40.0))
+        assertEquals(0.75, c.labelAt, 1e-9)
+    }
 }
+
