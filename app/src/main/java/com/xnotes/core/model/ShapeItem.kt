@@ -204,7 +204,44 @@ class ShapeItem(
     }
 
     /** Closed kinds take a typed label; lines and arrows get theirs with connectors. */
-    val takesLabel: Boolean get() = shape.isClosed
+    val takesLabel: Boolean get() = shape.takesLabel
+
+    /**
+     * What a note keeps of the label when the area eraser cuts the shape: a text box centred where
+     * the words were, upright since boxes never turn. Null without a label.
+     */
+    fun labelAsTextBox(): TextItem? {
+        val l = label?.takeIf { it.text.isNotBlank() } ?: return null
+        val frame = labelRect() ?: return null
+        val c = toPage(frame.center)
+        return TextItem(Pt(c.x - frame.w / 2.0, c.y - frame.h / 2.0), frame.w, 0.0, l.text, l.style.rgba, l.style.pointSize, l.style.face, l.measurer)
+    }
+
+    /**
+     * What a canvas keeps of the label when the area eraser cuts the shape: its letters as a
+     * filled [ShapeKind.GLYPHS] shape exactly where they were, turned with it. Null without a label,
+     * or when the host cannot outline text.
+     */
+    fun labelAsGlyphs(): ShapeItem? {
+        val l = label ?: return null
+        val frame = labelRect() ?: return null
+        val glyphs = l.outline(frame.w)
+        if (glyphs.isEmpty()) return null
+        val local = FreePath.map(glyphs) { Pt(frame.left + it.x, frame.top + it.y) }
+        val lb = FreePath.bounds(local) ?: return null
+        if (lb.w <= 0.0 || lb.h <= 0.0) return null
+        val c = toPage(lb.center)
+        return ShapeItem(
+            ShapeKind.GLYPHS,
+            Pt(c.x - lb.w / 2.0, c.y - lb.h / 2.0),
+            Pt(c.x + lb.w / 2.0, c.y + lb.h / 2.0),
+            strokeRgba = l.style.rgba,
+            strokeWidth = GLYPH_PEN,
+            fillRgba = l.style.rgba,
+            path = FreePath.normalize(local, lb),
+            rotation = rotation,
+        )
+    }
 
     /** The label's four corners on the page, turned with the shape; empty without a label. */
     fun labelCorners(): List<Pt> {
@@ -309,7 +346,7 @@ class ShapeItem(
 
     /** True when the shape shows point dots: a line or arrow (its middle), a free outline, a kind with corners. */
     private fun editable(): Boolean =
-        shape.isEndpointShape || isFree || localGeometry().corners.isNotEmpty()
+        shape.pointEditable && (shape.isEndpointShape || isFree || localGeometry().corners.isNotEmpty())
 
     /**
      * The dots on the vertices a drag can move, on the page; none for a smooth kind, and none for a
@@ -839,6 +876,12 @@ class ShapeItem(
         private const val HIT_FLATTEN = 0.5
         private const val BOUNDS_FLATTEN = 0.05
         private const val ERASE_FLATTEN = 0.25
+
+        /** Drawn text is never stroked; its width only pads its bounds. */
+        private const val GLYPH_PEN = 0.5
+
+        /** The kind a file gives drawn text, which readers that predate it skip rather than misdraw. */
+        const val GLYPHS_KIND = "glyphs"
 
         /** How far apart a cut shape's ink is sampled, in content px: a pen's own density. */
         private const val INK_SPACING = 1.5

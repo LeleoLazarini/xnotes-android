@@ -1,10 +1,18 @@
 package com.xnotes.core.infinite
 
+import com.xnotes.core.FakeTextMeasurer
+import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.ImageData
 import com.xnotes.core.model.ImageItem
+import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
+import com.xnotes.core.model.TextStyle
+import com.xnotes.core.pal.FontFace
+import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.stroke.Sample
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolDefaults
@@ -228,5 +236,18 @@ class EraseSessionTest {
         val wide = doc.contentBounds()!!.w
         EraseSession(doc).erase(95.0, 0.0, 20.0, area = true)
         assertTrue("trimming the end must shrink the extent", doc.contentBounds()!!.w < wide)
+    }
+
+    @Test fun aCutLabelledShapeLeavesItsWordsAsDrawnText() {
+        val ink = Rgba(5, 6, 7, 255)
+        val box = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(200.0, 100.0), ink, 2.0)
+        box.label = ShapeLabel("Go", TextStyle(ink, 10.0, FontFace.SANS), FakeTextMeasurer())
+        val doc = docOf(box)
+        val session = EraseSession(doc)
+        assertNotNull(session.erase(100.0, 0.0, 10.0, area = true))
+        val shapes = doc.items.filterIsInstance<ShapeItem>()
+        assertEquals("the outline is ink, the label drawn text", 1, shapes.size)
+        assertSame(ShapeKind.GLYPHS, shapes.single().shape)
+        assertTrue(doc.items.any { it is Stroke })
     }
 }

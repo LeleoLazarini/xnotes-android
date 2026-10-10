@@ -1375,7 +1375,8 @@ class InteractionController(
             } else {
                 when (item) {
                     is Stroke -> item.erasedBy(cx, cy, radius)
-                    is ShapeItem -> item.erasedBy(cx, cy, radius)
+                    // A cut shape's label stays behind as a text box.
+                    is ShapeItem -> item.erasedBy(cx, cy, radius)?.let { it + listOfNotNull(item.labelAsTextBox()) }
                     else -> null
                 }
             }
@@ -1385,7 +1386,7 @@ class InteractionController(
             }
             // Snapshot the page's items on first contact this gesture, before mutating it.
             if (!eraseSnapshots.containsKey(page)) eraseSnapshots[page] = page.items.toList()
-            val b = item.paintBounds()
+            val b = frags.fold(item.paintBounds()) { acc, f -> acc.union(f.paintBounds()) }
             dirty = dirty?.union(b) ?: b
             page.items.removeAt(i)
             page.items.addAll(i, frags)

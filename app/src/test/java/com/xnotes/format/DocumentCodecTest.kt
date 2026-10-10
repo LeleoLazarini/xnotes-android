@@ -24,6 +24,7 @@ import com.xnotes.core.model.Stroke
 import com.xnotes.core.model.TextItem
 import com.xnotes.core.stroke.Sample
 import com.xnotes.core.stroke.StrokeSimplify
+import com.xnotes.core.shapes.FreePath
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
@@ -840,6 +841,21 @@ class DocumentCodecTest {
         assertEquals(TextStyle(Rgba(9, 8, 7, 255), 18.0, FontFace.SERIF), back[0].label!!.style)
         assertEquals(TextItem.DEFAULT_FACE, back[1].label!!.style.face)
         assertNull(back[2].label)
+    }
+
+    @Test fun drawnTextRoundTripsInANote() {
+        val doc = Document(dpi = 150)
+        val page = Page(1240.0, 1754.0)
+        val box = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(200.0, 100.0), Rgba(4, 5, 6, 255), 2.0)
+        box.label = ShapeLabel("ab", TextStyle(Rgba(4, 5, 6, 255), 10.0, FontFace.SANS), FakeTextMeasurer())
+        page.items.add(box.labelAsGlyphs()!!)
+        doc.pages.add(page)
+        val out = ByteArrayOutputStream()
+        codec.write(doc, out)
+        assertTrue(manifestOf(out.toByteArray()).contains("\"kind\":\"glyphs\""))
+        val back = roundTrip(doc).pages[0].items.single() as ShapeItem
+        assertEquals(ShapeKind.GLYPHS, back.shape)
+        assertEquals(Rgba(4, 5, 6, 255), back.fillRgba)
     }
 
     @Test fun turnedShapesRoundTripInANote() {

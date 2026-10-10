@@ -2,6 +2,7 @@ package com.xnotes.core.shapes
 
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
+import com.xnotes.core.pal.FillRule
 import com.xnotes.core.vector.VectorContour
 import kotlin.math.PI
 import kotlin.math.cos
@@ -64,6 +65,12 @@ abstract class ShapeKind internal constructor(val id: String) {
 
     /** Polygon, polyline and curve: the outline is stored with the shape rather than built. */
     open val isFree: Boolean get() = false
+
+    /** Whether a selected shape of this kind shows dots its points can be dragged by. */
+    open val pointEditable: Boolean get() = true
+
+    /** Whether a shape of this kind takes a typed label: closed ones, for now. */
+    open val takesLabel: Boolean get() = isClosed
 
     /** Square and circle: a corner drag keeps them as wide as they are tall. */
     open val keepsAspect: Boolean get() = false
@@ -136,6 +143,9 @@ abstract class ShapeKind internal constructor(val id: String) {
         val PIE: ShapeKind = SliceKind("pie", pie = true)
         val ARC: ShapeKind = SliceKind("arc", pie = false)
 
+        /** A label an eraser left behind as drawn text: its letters as filled outlines. */
+        val GLYPHS: ShapeKind = GlyphsKind("glyphs")
+
         /**
          * Every kind, in a stable order. Lazy, because the page families are objects whose own
          * kinds initialize this class: whichever loads first, the list is only read once both have.
@@ -144,7 +154,7 @@ abstract class ShapeKind internal constructor(val id: String) {
             listOf(
                 LINE, ARROW, RECTANGLE, ELLIPSE, CIRCLE, TRIANGLE, POLYGON, POLYLINE, CURVE,
                 ROUNDED_RECT, SQUARE, CAPSULE, RIGHT_TRIANGLE, DIAMOND, PARALLELOGRAM, TRAPEZOID,
-                REGULAR_POLYGON, STAR, CROSS, HEART, CLOUD, RING, PIE, ARC,
+                REGULAR_POLYGON, STAR, CROSS, HEART, CLOUD, RING, PIE, ARC, GLYPHS,
             ) + FlowchartKinds.all + ArrowKinds.all + SolidMathKinds.all
         }
 
@@ -255,6 +265,16 @@ private class TriangleKind(id: String) : ShapeKind(id) {
         val text = Rect(box.x + box.w / 4.0, box.y + box.h / 2.0, box.w / 2.0, box.h / 2.0)
         return ShapeGeometry(listOf(ShapePath.polygon(corners)), corners, polygonConnections(corners), text)
     }
+}
+
+/** Letter outlines stored like a free outline, filled and never stroked; too many points to drag one by one. */
+private class GlyphsKind(id: String) : ShapeKind(id) {
+    override val isClosed get() = true
+    override val isFree get() = true
+    override val pointEditable get() = false
+    override val takesLabel get() = false
+    override fun build(box: Rect, p: ShapeParams): ShapeGeometry =
+        ShapeGeometry(listOf(ShapePath(FreePath.place(p.path.orEmpty(), box), PathRole.FILL_ONLY, FillRule.NONZERO)), textRect = box)
 }
 
 /** Polygon, polyline, curve: the shape's own stored outline, placed in its box. */

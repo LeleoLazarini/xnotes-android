@@ -149,6 +149,41 @@ class ShapeLabelTest {
         assertEquals(TextStyle(Rgba(20, 20, 90, 255), 14.0, FontFace.SERIF), ShapeLabel.styleFor(otherFill, 14.0, FontFace.SERIF))
     }
 
+    @Test fun aNoteKeepsACutShapesLabelAsATextBoxWhereTheWordsWere() {
+        val s = labelled("Hi there")
+        s.applyTransform(Affine.rotateAbout(Pt(100.0, 50.0), 0.4))
+        val box = s.labelAsTextBox()!!
+        assertEquals("Hi there", box.text)
+        assertEquals(TextStyle(ink, 10.0, FontFace.SANS), TextStyle.of(box))
+        val centre = s.toPage(s.labelRect()!!.center)
+        assertEquals(centre.x, box.bounds().centerX, 1e-9)
+        assertEquals(centre.y, box.bounds().centerY, 1e-9)
+        assertNull(ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(9.0, 9.0), ink).labelAsTextBox())
+    }
+
+    @Test fun aCanvasKeepsACutShapesLabelAsDrawnTextExactlyWhereItWas() {
+        val s = labelled("ab")
+        s.applyTransform(Affine.rotateAbout(Pt(0.0, 0.0), 0.7))
+        val drawn = s.labelAsGlyphs()!!
+        assertSame(ShapeKind.GLYPHS, drawn.shape)
+        assertEquals(s.rotation, drawn.rotation, 1e-12)
+        assertEquals(ink, drawn.fillRgba)
+        // Every corner of the drawn letters lies on the label's own letters, turned the same way.
+        val frame = s.labelRect()!!
+        val want = s.label!!.outline(frame.w).flatMap { c -> com.xnotes.core.shapes.FreePath.vertices(c) }
+            .map { s.toPage(Pt(frame.left + it.x, frame.top + it.y)) }
+        val got = drawn.paths().flatMap { p -> p.contours.flatMap { com.xnotes.core.shapes.FreePath.vertices(it) } }
+        assertEquals(want.size, got.size)
+        for ((w, g) in want.zip(got)) assertEquals(0.0, w.distanceTo(g), 1e-6)
+        assertTrue("no point dots on drawn text", drawn.vertexDots().isEmpty() && drawn.edgeDots().isEmpty())
+        assertFalse(drawn.takesLabel)
+        val r = FakeRenderer()
+        drawn.paint(r)
+        assertEquals("filled, never stroked", listOf(ink), r.pathFills)
+        assertTrue(r.pathPens.isEmpty())
+        assertEquals("an eraser takes drawn text whole", 0, drawn.erasedBy(got[0].x, got[0].y, 1.0)!!.size)
+    }
+
     @Test fun editingALabelUndoes() {
         val s = labelled()
         val before = s.label

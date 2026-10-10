@@ -56,7 +56,8 @@ class EraseSession(private val doc: InfiniteDocument) {
             val fragments: List<CanvasItem> = if (area) {
                 when (item) {
                     is Stroke -> item.erasedBy(cx, cy, radius) ?: continue
-                    is ShapeItem -> item.erasedBy(cx, cy, radius) ?: continue
+                    // A cut shape's label stays behind as drawn text.
+                    is ShapeItem -> item.erasedBy(cx, cy, radius)?.let { it + listOfNotNull(item.labelAsGlyphs()) } ?: continue
                     else -> continue
                 }
             } else {

@@ -18,6 +18,7 @@ import com.xnotes.core.model.TextStyle
 import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.stroke.Sample
+import com.xnotes.core.shapes.FreePath
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
@@ -205,6 +206,24 @@ class CanvasCodecTest {
         assertEquals(TextStyle(Rgba(4, 5, 6, 200), 22.0, FontFace.HAND), back[0].label!!.style)
         assertEquals(null, back[1].label)
         assertEquals(1, Regex("\"label\"").findAll(manifestText(doc)).count())
+    }
+
+    @Test fun drawnTextRoundTripsUnderAKindOlderReadersSkip() {
+        val doc = InfiniteDocument()
+        val box = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(200.0, 100.0), Rgba(4, 5, 6, 255), 2.0, rotation = 0.3)
+        box.label = ShapeLabel("ab", TextStyle(Rgba(4, 5, 6, 255), 10.0, FontFace.SANS), FakeTextMeasurer())
+        val drawn = box.labelAsGlyphs()!!
+        doc.add(drawn)
+        val manifest = manifestText(doc)
+        assertTrue(manifest.contains("\"kind\":\"glyphs\""))
+        assertFalse("no point list for an older reader", manifest.contains("\"points\""))
+        val back = roundTrip(doc).items.single() as ShapeItem
+        assertEquals(ShapeKind.GLYPHS, back.shape)
+        assertEquals(drawn.rotation, back.rotation, 1e-12)
+        val want = drawn.paths().flatMap { it.contours }.flatMap { FreePath.vertices(it) }
+        val got = back.paths().flatMap { it.contours }.flatMap { FreePath.vertices(it) }
+        assertEquals(want.size, got.size)
+        for ((w, g) in want.zip(got)) assertEquals(0.0, w.distanceTo(g), 1e-3)
     }
 
     @Test fun loadedItemsAreIndexedAndOrdered() {
@@ -739,7 +758,8 @@ class CanvasCodecTest {
     }
 
     @Test fun everyBasicKindRoundTripsBehindAStandIn() {
-        val kinds = ShapeKind.all.filter { !it.isLegacy }
+        // Drawn text goes under a kind of its own, which older readers skip (its own test).
+        val kinds = ShapeKind.all.filter { !it.isLegacy && it != ShapeKind.GLYPHS }
         val doc = InfiniteDocument()
         for (k in kinds) {
             val s = ShapeItem(k, Pt(0.0, 0.0), Pt(120.0, 80.0), ink, 2.0, n = if (k.nRange != null) 7 else k.defaultN)

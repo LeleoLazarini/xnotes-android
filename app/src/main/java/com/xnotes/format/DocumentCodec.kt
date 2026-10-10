@@ -387,8 +387,10 @@ class DocumentCodec(
         // A shape older readers cannot draw goes down as the polygon they can, its real geometry after.
         val standIn = s.legacyOutline()
         val drawn = standIn?.let { Rect.bounding(it) }
+        // Drawn text has no shape an older reader could stand in, so it goes under a kind they skip.
+        val glyphs = s.shape == ShapeKind.GLYPHS
         j.beginObject()
-        j.name("kind").value(ShapeItem.KIND)
+        j.name("kind").value(if (glyphs) ShapeItem.GLYPHS_KIND else ShapeItem.KIND)
         j.name("shape").value(s.legacyId())
         j.name("start").beginArray().value(drawn?.left ?: s.start.x).value(drawn?.top ?: s.start.y).endArray()
         j.name("end").beginArray().value(drawn?.right ?: s.end.x).value(drawn?.bottom ?: s.end.y).endArray()
@@ -398,17 +400,17 @@ class DocumentCodec(
         j.name("fill_rgba")
         s.fillRgba?.let { writeRgba(j, it) } ?: j.nullValue()
         // Polygon/polyline carry their vertices (absolute content px); other kinds omit them.
-        (standIn ?: s.vertices())?.let { verts ->
+        (standIn ?: s.vertices()?.takeUnless { glyphs })?.let { verts ->
             j.name("points").beginArray()
             for (p in verts) j.beginArray().value(p.x).value(p.y).endArray()
             j.endArray()
         }
-        if (standIn != null) {
+        if (standIn != null || glyphs) {
             if (!s.isFree) j.name("geom").value(s.shape.id)
             val f = s.box
             j.name("rect").beginArray().value(f.x).value(f.y).value(f.w).value(f.h).endArray()
             if (s.rotation != 0.0) j.name("angle").value(s.rotation)
-            s.path?.takeIf { s.isFree && !FreePath.isVertexList(it) }?.let { j.name("path").value(FreePath.toSvg(it)) }
+            s.path?.takeIf { s.isFree && (glyphs || !FreePath.isVertexList(it)) }?.let { j.name("path").value(FreePath.toSvg(it)) }
         }
         if (s.n != s.shape.defaultN) j.name("n").value(s.n)
         if (s.headStart != s.shape.defaultHeadStart) j.name("head_start").value(s.headStart.id)
@@ -938,7 +940,7 @@ class DocumentCodec(
                     measurer = textMeasurer,
                 ),
             )
-            ShapeItem.KIND -> items.add(buildShape(s))
+            ShapeItem.KIND, ShapeItem.GLYPHS_KIND -> items.add(buildShape(s))
             else -> {} // unrecognized kind: skipped (forgiving)
         }
         // Absent on every note written before locking existed, which reads back as unlocked.

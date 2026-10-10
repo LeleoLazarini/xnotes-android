@@ -208,7 +208,9 @@ object ItemMesher {
     private fun meshShape(shape: ShapeItem, tolerance: Double): MeshedItem? {
         val parts = ShapeTessellator.tessellate(shape, tolerance) + listOfNotNull(ShapeTessellator.labelPart(shape))
         if (parts.isEmpty()) return null
-        return MeshedItem(parts, shape.paintBounds(), shape.strokeWidth / 2.0)
+        // Drawn text has no line to fade when it thins out on screen.
+        val half = if (shape.shape == com.xnotes.core.shapes.ShapeKind.GLYPHS) 0.0 else shape.strokeWidth / 2.0
+        return MeshedItem(parts, shape.paintBounds(), half)
     }
 
     /** The pass a stroke has to take, from its tool and its resolved ink alpha. */
