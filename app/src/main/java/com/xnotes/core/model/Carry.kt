@@ -8,15 +8,15 @@ import com.xnotes.core.vector.PathFlattener
 
 /**
  * What closed shapes take along when they move, turn or resize: everything entirely inside their
- * outline, so a frame, a swimlane or a nested box keeps its contents. A move or a turn carries the
- * contents rigidly (a text box stays upright and only its place turns); a resize keeps each item
- * its own size and puts its centre back at the same place in its holder's frame, so writing stays
- * centred in a widened box. Holds each item's gesture-start geometry, so every frame is one move
- * of the original.
+ * outline, so a frame, a swimlane or a nested box keeps its contents. The contents take the very
+ * transform the shapes do, as if selected with them: writing inside a box scales with it, line
+ * widths included, while the shapes' own labels keep their type size. A text box only moves its
+ * place through a turn and stays upright. Holds each item's gesture-start geometry, so every
+ * frame is one move of the original.
  */
 class Carry private constructor(private val entries: List<Entry>) {
 
-    private class Entry(val item: CanvasItem, val holder: ShapeItem, val u: Double, val v: Double, val start: GeometrySnapshot)
+    private class Entry(val item: CanvasItem, val holder: ShapeItem, val start: GeometrySnapshot)
 
     val items: List<CanvasItem> = entries.map { it.item }
 
@@ -34,26 +34,20 @@ class Carry private constructor(private val entries: List<Entry>) {
     }
 
     /**
-     * Follow holders that this frame restored and then moved by [t]: rigidly, or for a [resize]
-     * keeping each item's size and its centre's place in its holder's new frame.
+     * Follow holders that this frame restored and then moved by [t], a [resize] or a turn: each item
+     * from where the gesture began, by the same transform. Only the items in [only], when given.
      */
-    fun follow(t: Affine, resize: Boolean) {
+    fun follow(t: Affine, resize: Boolean, only: Set<CanvasItem>? = null) {
         for (e in entries) {
             val item = e.item
+            if (only != null && item !in only) continue
             item.restoreGeometry(e.start)
-            when {
-                resize -> {
-                    val b = e.holder.box
-                    val to = e.holder.toPage(Pt(b.left + e.u * b.w, b.top + e.v * b.h))
-                    val c = item.bounds().center
-                    item.translate(to.x - c.x, to.y - c.y)
-                }
-                item is TextItem -> {
-                    val c = item.bounds().center
-                    val to = t.apply(c)
-                    item.translate(to.x - c.x, to.y - c.y)
-                }
-                else -> item.applyTransform(t)
+            if (item is TextItem && !resize) {
+                val c = item.bounds().center
+                val to = t.apply(c)
+                item.translate(to.x - c.x, to.y - c.y)
+            } else {
+                item.applyTransform(t)
             }
         }
     }
@@ -84,11 +78,7 @@ class Carry private constructor(private val entries: List<Entry>) {
             for (item in candidates) {
                 if (item.locked || item in skipped) continue
                 val region = regions.firstOrNull { it.holds(item) } ?: continue
-                val b = region.shape.box
-                val local = region.shape.toLocal(item.bounds().center)
-                val u = if (b.w > 0.0) (local.x - b.left) / b.w else 0.5
-                val v = if (b.h > 0.0) (local.y - b.top) / b.h else 0.5
-                out += Entry(item, region.shape, u, v, item.snapshotGeometry())
+                out += Entry(item, region.shape, item.snapshotGeometry())
             }
             return if (out.isEmpty()) NONE else Carry(out)
         }

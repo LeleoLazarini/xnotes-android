@@ -959,12 +959,11 @@ class InfiniteInteraction(
      */
     private fun beginLiftedTransform(sel: CanvasSelection, at: Pt, resize: Boolean) {
         transformPointer = at
-        // A turn carries the shapes' contents rigidly, so the shader can too; a resize moves them
-        // without scaling them, so they are baked along with the shapes that hold them.
-        val moving = if (resize) sel.items else sel.items + sel.carry.items
+        // What the shapes hold takes the same map as they do, so the shader carries it too.
+        val moving = sel.items + sel.carry.items
         liftedTransform = moving.all { it is Stroke || it is ShapeItem || isVectorImage(it) }
         if (!liftedTransform) return
-        bakedInLift = if (resize) sel.items.filterTo(HashSet()) { it is ShapeItem } else emptySet()
+        bakedInLift = if (resize) moving.filterTo(HashSet()) { it is ShapeItem } else emptySet()
         liftItems = if (bakedInLift.isEmpty()) moving else moving.filter { it !in bakedInLift }
         onLiftSelection(liftItems, LiftTransform.NONE)
     }

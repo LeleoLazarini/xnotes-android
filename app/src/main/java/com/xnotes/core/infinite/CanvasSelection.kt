@@ -152,10 +152,10 @@ class CanvasSelection(private val doc: InfiniteDocument) {
             item.applyTransform(transform)
             changed.add(item)
         }
-        // Only a resize bakes some items alone, and what the shapes hold keeps its size through one.
-        carry.follow(transform, resize = true)
+        // Only a resize bakes some items alone: the shapes, the selected ones and the ones carried.
+        carry.follow(transform, resize = true, only = only)
         doc.itemsChanged(changed)
-        doc.itemsChanged(carry.items)
+        doc.itemsChanged(carry.items.filter { it in only })
     }
 
     /**

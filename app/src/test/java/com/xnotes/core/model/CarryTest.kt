@@ -46,11 +46,11 @@ class CarryTest {
         val note = ink(Pt(140.0, 140.0), Pt(160.0, 160.0))
         val carry = Carry.of(listOf(outer, inner), listOf(outer, inner, note), skip = listOf(outer, inner))
         assertEquals(listOf<CanvasItem>(note), carry.items)
-        // Resizing only the outer leaves the inner's writing where the inner keeps it.
-        val was = note.bounds().center
-        outer.applyTransform(Affine.scaleAbout(Pt(0.0, 0.0), 2.0, 2.0))
-        carry.follow(Affine.scaleAbout(Pt(0.0, 0.0), 2.0, 2.0), resize = true)
-        assertEquals(0.0, note.bounds().center.distanceTo(was), 1e-6)
+        assertSame(inner, carry.holderOf(note))
+        // A shape inside an unselected-but-carried box goes along too, and its writing with it.
+        val nested = Carry.of(listOf(outer), listOf(outer, inner, note), skip = listOf(outer))
+        assertEquals(listOf<CanvasItem>(inner, note), nested.items)
+        assertSame(outer, nested.holderOf(note))
     }
 
     @Test fun aMoveOrTurnCarriesRigidlyAndATextBoxStaysUpright() {
@@ -70,37 +70,49 @@ class CarryTest {
         assertEquals("upright, its own width", 40.0, text.width, 0.0)
     }
 
-    @Test fun aResizeKeepsContentsTheirSizeAndTheirPlaceInTheFrame() {
+    @Test fun aResizeScalesWritingWithTheShapeLineWidthsIncluded() {
         val frame = box(0.0, 0.0, 200.0, 100.0)
         val word = ink(Pt(90.0, 45.0), Pt(110.0, 55.0))
+        val width0 = word.config.baseWidth
         val carry = Carry.of(listOf(frame), listOf(word), skip = listOf(frame))
-        val w0 = word.bounds().w
-        val c0 = word.bounds().center
-        val widen = Affine.scaleAbout(Pt(0.0, 0.0), 2.0, 1.0)
-        frame.applyTransform(widen)
-        carry.follow(widen, resize = true)
-        val b = word.bounds()
-        assertEquals("as far across the widened box", c0.x * 2.0, b.centerX, 1e-3)
-        assertEquals(c0.y, b.centerY, 1e-3)
-        assertEquals("its own size", w0, b.w, 1e-3)
+        val grow = Affine.scaleAbout(Pt(0.0, 0.0), 2.0, 2.0)
+        frame.applyTransform(grow)
+        carry.follow(grow, resize = true)
+        val s = word.samples
+        assertEquals(180.0, s.first().pos.x, 1e-3)
+        assertEquals(90.0, s.first().pos.y, 1e-3)
+        assertEquals(220.0, s.last().pos.x, 1e-3)
+        assertEquals("the line grows with it", width0 * 2.0, word.config.baseWidth, 1e-9)
         carry.restore()
-        assertEquals(c0.x, word.bounds().centerX, 1e-9)
+        assertEquals(90.0, word.samples.first().pos.x, 1e-3)
+        assertEquals(width0, word.config.baseWidth, 1e-9)
     }
 
-    @Test fun aTurnedHolderKeepsItsContentsInItsOwnFrameThroughAResize() {
+    @Test fun aTextBoxInsideScalesAsALassoedOneDoes() {
+        val frame = box(0.0, 0.0, 200.0, 100.0)
+        val text = TextItem(Pt(40.0, 40.0), width = 60.0, text = "x", pointSize = 10.0, measurer = FakeTextMeasurer())
+        val carry = Carry.of(listOf(frame), listOf(text), skip = listOf(frame))
+        carry.follow(Affine.scaleAbout(Pt(0.0, 0.0), 2.0, 2.0), resize = true)
+        assertEquals(Pt(80.0, 80.0), text.pos)
+        assertEquals(120.0, text.width, 1e-9)
+        assertEquals("a corner drag grows its type", 20.0, text.pointSize, 1e-9)
+    }
+
+    @Test fun aTurnedHoldersWritingScalesAlongTheHoldersOwnAxes() {
         val frame = box(0.0, 0.0, 200.0, 100.0)
         frame.applyTransform(Affine.rotateAbout(frame.box.center, 0.5))
         val at = frame.toPage(Pt(150.0, 50.0))
         val dot = ink(at, Pt(at.x + 1.0, at.y))
         val carry = Carry.of(listOf(frame), listOf(dot), skip = listOf(frame))
         assertSame(dot, carry.items.single())
-        val start = frame.toLocal(dot.bounds().center).let { Pt((it.x - frame.box.left) / frame.box.w, (it.y - frame.box.top) / frame.box.h) }
-        val grow = Affine.scaleAbout(frame.box.center, 1.5, 1.5)
-        frame.applyTransform(grow)
-        carry.follow(grow, resize = true)
-        val local = frame.toLocal(dot.bounds().center)
+        val c = frame.box.center
+        val stretch = Affine.rotateAbout(c, 0.5).compose(Affine.scaleAbout(c, 2.0, 1.0).compose(Affine.rotateAbout(c, -0.5)))
+        val was = dot.samples.map { it.pos }
+        frame.applyTransform(stretch)
+        carry.follow(stretch, resize = true)
+        for ((w, now) in was.zip(dot.samples.map { it.pos })) assertEquals(0.0, stretch.apply(w).distanceTo(now), 1e-3)
+        val local = frame.toLocal(dot.samples.first().pos)
         val b = frame.box
-        assertEquals(start.x, (local.x - b.left) / b.w, 1e-9)
-        assertEquals(start.y, (local.y - b.top) / b.h, 1e-9)
+        assertEquals("still three quarters across the stretched frame", 0.75, (local.x - b.left) / b.w, 1e-3)
     }
 }

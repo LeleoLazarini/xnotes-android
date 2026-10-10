@@ -463,22 +463,24 @@ class CanvasSelectionTest {
         assertEquals(was.left + 30.0, note.bounds().left, 1e-6)
     }
 
-    @Test fun aResizedFrameKeepsItsContentsTheirSize() {
+    @Test fun aResizedFrameScalesItsContentsWithIt() {
         val f = frame()
         val note = line(80.0, 50.0)
         val doc = docOf(f, note)
         val sel = CanvasSelection(doc).apply { select(listOf(f)) }
-        val w0 = note.bounds().w
-        val c0 = note.bounds().center
+        val before = note.samples.map { it.pos }
         sel.beginTransform(carrying = true)
         val right = sel.handles().first { it.id == HandleId.R }.content
         sel.resizeLive(HandleId.R, Pt(right.x + 200.0, right.y))
-        assertEquals(w0, note.bounds().w, 1e-6)
-        val b = f.box
-        assertEquals("at the same place across the frame", c0.x / 200.0, (note.bounds().centerX - b.left) / b.w, 1e-6)
+        val k = f.box.w / 200.0
+        assertTrue("the frame widened", k > 1.5)
+        for ((was, now) in before.zip(note.samples.map { it.pos })) {
+            assertEquals("stretched with the frame", f.box.left + (was.x - 0.0) * k, now.x, 1e-3)
+            assertEquals(was.y, now.y, 1e-3)
+        }
         val cmd = sel.buildCommand(movedOnly = false)!!
         cmd.undo()
-        assertEquals(c0.x, note.bounds().centerX, 1e-6)
+        assertEquals(before.first().x, note.samples.first().pos.x, 1e-3)
     }
 
     @Test fun aTurnedFrameTurnsItsContentsWithIt() {
