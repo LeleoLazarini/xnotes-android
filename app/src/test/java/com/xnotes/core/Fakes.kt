@@ -19,6 +19,7 @@ import com.xnotes.core.pal.SurfaceFactory
 import com.xnotes.core.pal.TextFlags
 import com.xnotes.core.pal.TextMeasurer
 import com.xnotes.core.vector.VectorContour
+import com.xnotes.core.vector.VectorSeg
 
 /** A Renderer that records the primitive calls it receives (for assertions). */
 class FakeRenderer : Renderer {
@@ -161,6 +162,25 @@ class FakeTextMeasurer(private val perPointLineHeight: Double = 1.3) : TextMeasu
 
     override fun advances(text: String, font: FontSpec): DoubleArray =
         DoubleArray(text.length) { font.pointSize * ADVANCE_PER_POINT }
+
+    /** Each visible character a square one advance wide, in rows of [lineHeight], from the block's corner. */
+    override fun outline(text: String, font: FontSpec, wrapWidth: Double, flags: TextFlags): List<VectorContour> {
+        val adv = font.pointSize * ADVANCE_PER_POINT
+        val out = ArrayList<VectorContour>()
+        for ((row, line) in text.split('\n').withIndex()) {
+            val top = row * lineHeight(font)
+            for ((col, ch) in line.withIndex()) {
+                if (ch.isWhitespace()) continue
+                val x = col * adv
+                out += VectorContour(
+                    Pt(x, top),
+                    listOf(VectorSeg.Line(Pt(x + adv, top)), VectorSeg.Line(Pt(x + adv, top + adv)), VectorSeg.Line(Pt(x, top + adv))),
+                    closed = true,
+                )
+            }
+        }
+        return out
+    }
 
     companion object {
         const val ADVANCE_PER_POINT = 0.6

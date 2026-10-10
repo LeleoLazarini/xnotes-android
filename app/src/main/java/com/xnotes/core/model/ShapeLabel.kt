@@ -4,6 +4,7 @@ import com.xnotes.core.pal.FontFace
 import com.xnotes.core.pal.FontSpec
 import com.xnotes.core.pal.TextFlags
 import com.xnotes.core.pal.TextMeasurer
+import com.xnotes.core.vector.VectorContour
 
 /**
  * A shape's typed label: plain text in a text box's [style], wrapped to the kind's text rect and
@@ -28,6 +29,19 @@ class ShapeLabel(val text: String, val style: TextStyle, val measurer: TextMeasu
         val h = measurer.measure(text.ifEmpty { " " }, font, width, FLAGS).h
         measured = Measured(width, h)
         return h
+    }
+
+    @Volatile
+    private var outlined: Outlined? = null
+
+    private class Outlined(val width: Double, val contours: List<VectorContour>)
+
+    /** The text as glyph outlines wrapped at [width], from its block's top-left; the last answer is kept. */
+    fun outline(width: Double): List<VectorContour> {
+        outlined?.let { if (it.width == width) return it.contours }
+        val c = measurer.outline(text, font, width, FLAGS)
+        outlined = Outlined(width, c)
+        return c
     }
 
     fun withText(text: String) = ShapeLabel(text, style, measurer)

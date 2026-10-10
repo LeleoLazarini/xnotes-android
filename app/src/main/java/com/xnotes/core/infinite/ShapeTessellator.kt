@@ -43,6 +43,28 @@ object ShapeTessellator {
         return parts
     }
 
+    /**
+     * The label as filled glyphs in its own colour, set where the note sets it and turned with the
+     * shape; null without one, or while it is being typed and the editor shows it instead.
+     */
+    fun labelPart(shape: ShapeItem): MeshPart? {
+        if (shape.labelHidden) return null
+        val l = shape.label ?: return null
+        val frame = shape.labelRect() ?: return null
+        val glyphs = l.outline(frame.w)
+        if (glyphs.isEmpty()) return null
+        val rings = glyphs.map { c ->
+            PathFlattener.flatten(c, GLYPH_FLATTEN).map { shape.toPage(Pt(frame.left + it.x, frame.top + it.y)) }
+        }.filter { it.size >= 3 }
+        if (rings.isEmpty()) return null
+        Triangulator.triangulate(rings, FillRule.NONZERO)?.let { mesh ->
+            val b = MeshBuilder(mesh.points.size, mesh.indices.size)
+            into(b, mesh)
+            if (!b.isEmpty) return MeshPart(b.build(), l.style.rgba, InkPass.OPAQUE)
+        }
+        return stencilPart(rings, l.style.rgba)
+    }
+
     /** The triangles of every fill the shape's own fill colour paints; empty for open kinds. */
     fun fillMesh(shape: ShapeItem, tolerance: Double): MeshData {
         val b = MeshBuilder()
@@ -105,7 +127,11 @@ object ShapeTessellator {
                 if (!b.isEmpty) return MeshPart(b.build(), color, InkPass.OPAQUE)
             }
         }
-        // A fan from one point over every edge covers by parity, which is exact for any outline.
+        return stencilPart(rings, color)
+    }
+
+    /** A fan from one point over every edge covers by parity, which is exact for any outline. */
+    private fun stencilPart(rings: List<List<Pt>>, color: Rgba): MeshPart? {
         val b = MeshBuilder(64, 96)
         val pivot = b.vertex(rings[0][0].x, rings[0][0].y)
         for (ring in rings) {
@@ -163,4 +189,7 @@ object ShapeTessellator {
 
     /** Past this many vertices a curved fill takes the stencil rather than a quadratic ear clip. */
     private const val MAX_CLIPPED_VERTICES = 512
+
+    /** Glyph outlines arrive as polylines already; this only guards a host that hands back curves. */
+    private const val GLYPH_FLATTEN = 0.05
 }

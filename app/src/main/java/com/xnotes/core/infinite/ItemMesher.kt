@@ -206,7 +206,7 @@ object ItemMesher {
     }
 
     private fun meshShape(shape: ShapeItem, tolerance: Double): MeshedItem? {
-        val parts = ShapeTessellator.tessellate(shape, tolerance)
+        val parts = ShapeTessellator.tessellate(shape, tolerance) + listOfNotNull(ShapeTessellator.labelPart(shape))
         if (parts.isEmpty()) return null
         return MeshedItem(parts, shape.paintBounds(), shape.strokeWidth / 2.0)
     }

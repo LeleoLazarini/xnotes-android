@@ -1,10 +1,14 @@
 package com.xnotes.core.infinite
 
+import com.xnotes.core.FakeTextMeasurer
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.model.ShapeLabel
+import com.xnotes.core.model.TextStyle
 import com.xnotes.core.pal.FillRule
+import com.xnotes.core.pal.FontFace
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.shapes.PathRole
 import com.xnotes.core.shapes.ShapePath
@@ -306,5 +310,25 @@ class ShapeTessellatorTest {
         val path = listOf(Pt(0.0, 0.0), Pt(50.0, 0.0))
         assertEquals(1, MeshBuilder.dashRuns(path, 0.0, 10.0, closed = false).size)
         assertEquals(1, MeshBuilder.dashRuns(path, 10.0, 0.0, closed = false).size)
+    }
+
+    @Test fun aLabelMeshesAsGlyphsInItsColourTurnedWithTheShape() {
+        val red = Rgba(220, 20, 20, 255)
+        val s = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(200.0, 100.0), Rgba(0, 0, 0, 255), 2.0)
+        s.label = ShapeLabel("ab c", TextStyle(red, 10.0, FontFace.SANS), FakeTextMeasurer())
+        s.applyTransform(com.xnotes.core.geometry.Affine.rotateAbout(s.box.center, 0.3))
+        val part = ShapeTessellator.labelPart(s)!!
+        assertEquals(red, part.color)
+        assertEquals("a glyph square per visible character, two triangles each", 6, part.mesh.triangleCount)
+        val frame = s.labelRect()!!.outset(1e-6)
+        for (i in 0 until part.mesh.vertexCount) {
+            val local = s.toLocal(Pt(part.mesh.positions[2 * i], part.mesh.positions[2 * i + 1]))
+            assertTrue("glyph vertex $local outside the label", frame.contains(local))
+        }
+        val meshed = ItemMesher.mesh(s)!!
+        assertEquals("outline, then the words over it", red, meshed.parts.last().color)
+        s.labelHidden = true
+        assertEquals(null, ShapeTessellator.labelPart(s))
+        assertEquals(1, ItemMesher.mesh(s)!!.parts.size)
     }
 }
