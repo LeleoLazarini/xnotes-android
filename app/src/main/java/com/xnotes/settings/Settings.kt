@@ -391,6 +391,7 @@ data class Settings(
             .put("neon", c.neon).put("neon_strength", c.neonStrength)
             .put("dashed", c.dashed).put("dash_length", c.dashLength).put("dash_gap", c.dashGap)
             .put("n", c.n).put("head_start", c.headStart.id).put("head_end", c.headEnd.id)
+            .put("perfect", c.perfect)
             .put("shape_page", c.shapePage)
             .put("connector_page", c.connectorPage)
 
@@ -412,6 +413,7 @@ data class Settings(
                 dashLength = o.optDouble("dash_length", 10.0),
                 dashGap = o.optDouble("dash_gap", 8.0),
                 n = o.optInt("n", 0),
+                perfect = o.optBoolean("perfect", false),
                 headStart = com.xnotes.core.shapes.Head.fromId(o.optString("head_start", chip.headStart.id)),
                 headEnd = com.xnotes.core.shapes.Head.fromId(o.optString("head_end", chip.headEnd.id)),
                 shapePage = o.optInt("shape_page", com.xnotes.core.shapes.ShapePresets.pageOf(chip)),

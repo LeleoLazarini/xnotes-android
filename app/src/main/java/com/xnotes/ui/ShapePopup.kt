@@ -70,6 +70,9 @@ fun ShapeConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
             ShapePager(config, onPage = { emit(config.copy(shapePage = it)) }, onPick = { emit(config.choose(it)) })
             ConnectorPager(config, onPage = { emit(config.copy(connectorPage = it)) }, onPick = { emit(config.choose(it)) })
             if (!connecting && chip.counted) CountRow(config) { emit(config.copy(n = it)) }
+            if (!connecting && !config.placesCorners) {
+                ToggleRow(stringResource(R.string.caption_perfect), config.perfect) { emit(config.copy(perfect = it)) }
+            }
             SliderRow(stringResource(R.string.caption_width), config.strokeWidth.toFloat(), 1f..20f) {
                 emit(config.copy(strokeWidth = it.toDouble()))
             }

@@ -257,6 +257,7 @@
     <string name="count_fewer">减少</string>
     <string name="count_more">增加</string>
     <string name="caption_fill">填充</string>
+    <string name="caption_perfect">规整</string>
     <string name="caption_opacity">不透明度</string>
     <string name="caption_dashed">虚线笔</string>
     <string name="caption_spacing_px">"间距  %1$d px"</string>

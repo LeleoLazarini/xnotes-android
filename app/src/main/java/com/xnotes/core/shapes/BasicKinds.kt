@@ -23,6 +23,8 @@ import kotlin.math.tan
 internal class RoundedRectKind(id: String, private val capsule: Boolean) : ShapeKind(id) {
     override val isClosed get() = true
     override val iconAspect get() = if (capsule) 2.0 else 1.5
+    // Squared up a capsule is a circle, so its perfect form is its chip's pill.
+    override fun perfectAspect(n: Int) = if (capsule) iconAspect else 1.0
     override val defaultAdj = if (capsule) doubleArrayOf() else doubleArrayOf(1.0 / 6.0)
     override val knobs = if (capsule) emptyList() else listOf(
         KnobDef(
@@ -128,9 +130,10 @@ internal class RegularPolygonKind(id: String) : ShapeKind(id) {
     override val isClosed get() = true
     override val defaultN get() = 5
     override val nRange = 3..24
+    override fun perfectAspect(n: Int) = aspectOf(regularUnit(n.coerceIn(3, 24)))
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry {
         val n = p.n.coerceIn(3, 24)
-        val unit = (0 until n).map { k -> unitPoint(-PI / 2.0 + 2.0 * PI * k / n, 1.0) }
+        val unit = regularUnit(n)
         val corners = fitToBox(unit, box)
         return ShapeGeometry(listOf(ShapePath.polygon(corners)), corners, polygonConnections(corners), ShapeKind.inset(box, 0.18))
     }
@@ -151,8 +154,7 @@ internal class StarKind(id: String) : ShapeKind(id) {
             position = { box, adj, n -> starPoints(box, depth(adj, n), n.coerceIn(3, 24))[1] },
             drag = { to, box, adj, n ->
                 val count = n.coerceIn(3, 24)
-                val outer = (0 until count).map { k -> unitPoint(-PI / 2.0 + 2.0 * PI * k / count, 1.0) }
-                val u = unfit(to, outer, box)
+                val u = unfit(to, regularUnit(count), box)
                 val a = -PI / 2.0 + PI / count
                 doubleArrayOf((u.x * cos(a) + u.y * sin(a)).coerceIn(0.05, 0.95))
             },
@@ -168,11 +170,12 @@ internal class StarKind(id: String) : ShapeKind(id) {
     }
 
     private fun starPoints(box: Rect, k: Double, n: Int): List<Pt> {
-        val outer = (0 until n).map { i -> unitPoint(-PI / 2.0 + 2.0 * PI * i / n, 1.0) }
         val unit = (0 until 2 * n).map { i -> unitPoint(-PI / 2.0 + PI * i / n, if (i % 2 == 0) 1.0 else k) }
         // Fitted by the outer points alone, which is where the star meets its box.
-        return fitToBox(unit, box, outer)
+        return fitToBox(unit, box, regularUnit(n))
     }
+
+    override fun perfectAspect(n: Int) = aspectOf(regularUnit(n.coerceIn(3, 24)))
 
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry {
         val n = p.n.coerceIn(3, 24)
@@ -373,6 +376,12 @@ internal class SliceKind(id: String, private val pie: Boolean) : ShapeKind(id) {
 
 /** A point on the unit circle at angle [a], at radius [r]. */
 private fun unitPoint(a: Double, r: Double) = Pt(r * cos(a), r * sin(a))
+
+/** The corners of a regular [n]-gon on the unit circle, the first straight up. */
+private fun regularUnit(n: Int) = (0 until n).map { k -> unitPoint(-PI / 2.0 + 2.0 * PI * k / n, 1.0) }
+
+/** The width-to-height of [pts]' bounds: a box of it fits them without a stretch. */
+private fun aspectOf(pts: List<Pt>) = Rect.bounding(pts).let { if (it.h > 0.0) it.w / it.h else 1.0 }
 
 /** [unit] points stretched so that [by] (default: the points themselves) exactly fill [box]. */
 private fun fitToBox(unit: List<Pt>, box: Rect, by: List<Pt> = unit): List<Pt> {

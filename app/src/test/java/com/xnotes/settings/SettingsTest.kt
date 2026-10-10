@@ -486,6 +486,13 @@ class SettingsTest {
         assertEquals(shape, back)
     }
 
+    @Test fun thePerfectSwitchRoundTripsAndStartsOff() {
+        val on = com.xnotes.core.tools.ShapeConfig(perfect = true)
+        assertTrue(Settings.fromJson(Settings(shapeConfig = on).toJson()).shapeConfig.perfect)
+        val older = JSONObject().put("tools", JSONObject().put("shape", JSONObject().put("shape", "rectangle")))
+        assertFalse(Settings.fromJson(older).shapeConfig.perfect)
+    }
+
     @Test fun anOldShapeSettingPicksItsChip() {
         val legacy = JSONObject().put("tools", JSONObject().put("shape", JSONObject().put("shape", "arrow").put("fill", true)))
         val c = Settings.fromJson(legacy).shapeConfig

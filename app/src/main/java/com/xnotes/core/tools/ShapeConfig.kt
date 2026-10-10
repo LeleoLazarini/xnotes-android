@@ -30,6 +30,8 @@ data class ShapeConfig(
     val dashed: Boolean = false,
     val dashLength: Double = 10.0,
     val dashGap: Double = 8.0,
+    /** Every shape dragged out takes its kind's perfect proportions; lines and arrows keep to 15 degree steps. */
+    val perfect: Boolean = false,
     /** A counted chip's point or side count; 0 takes the chip's own. */
     val n: Int = 0,
     /** The heads an open chip draws with. */

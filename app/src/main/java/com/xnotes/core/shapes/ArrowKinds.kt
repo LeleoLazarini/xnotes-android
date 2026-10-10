@@ -51,6 +51,7 @@ internal interface Canonical {
     val defaultAdj: DoubleArray
     val knobs: List<KnobDef> get() = emptyList()
     val iconAspect: Double get() = 1.5
+    val perfectAspect: Double get() = 1.0
     fun build(w: Double, h: Double, adj: (Int) -> Double): ShapeGeometry
 }
 
@@ -59,6 +60,7 @@ internal class OrientedKind(id: String, private val orient: Orient, private val 
     override val isClosed get() = drawing.closed
     override val defaultAdj = drawing.defaultAdj
     override val iconAspect get() = if (orient == Orient.UP || orient == Orient.DOWN) 1.0 / drawing.iconAspect else drawing.iconAspect
+    override fun perfectAspect(n: Int) = if (orient == Orient.UP || orient == Orient.DOWN) 1.0 / drawing.perfectAspect else drawing.perfectAspect
 
     // A flip turns one direction into another kind, so the shape goes free instead.
     override fun mirroredAdj(adj: DoubleArray): DoubleArray? = null
@@ -105,6 +107,7 @@ internal class BoxedKind(
     override val isClosed get() = drawing.closed
     override val defaultAdj = drawing.defaultAdj
     override val iconAspect get() = drawing.iconAspect
+    override fun perfectAspect(n: Int) = drawing.perfectAspect
     override fun mirroredAdj(adj: DoubleArray): DoubleArray? = mirror?.invoke(adj)
     override val knobs: List<KnobDef> = drawing.knobs.map { k ->
         KnobDef(
@@ -203,6 +206,8 @@ internal class SingleArrow(private val notched: Boolean = false) : Canonical {
 internal class DoubleArrow : Canonical {
     override val defaultAdj = DoubleArray(0)
     override val iconAspect get() = 2.0
+    // Squared up, the heads would meet with no shaft between them.
+    override val perfectAspect get() = 2.0
     // On the head at the right end.
     override val knobs = listOf(spanKnob({ w, h -> head(w, h) }, { w -> w }))
 

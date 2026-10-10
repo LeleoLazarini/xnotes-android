@@ -38,10 +38,7 @@ import com.xnotes.core.tools.ShapeConfig
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
-import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.exp
-import kotlin.math.max
 
 /** What the current gesture is doing. */
 enum class CanvasPointerMode { IDLE, PAN, PINCH, DRAW, ERASE, SHAPE, BAND, LASSO, MOVE, RESIZE, ROTATE, VERTEX, POLYGON, CONNECT, JOINT, SLIDE }
@@ -1453,14 +1450,7 @@ class InfiniteInteraction(
 
     private fun extendShape(vx: Double, vy: Double) {
         val shape = pendingShape ?: return
-        val raw = viewport.viewportToContent(Pt(vx, vy))
-        shape.end = when {
-            // Line and arrow pin flat when the dragged end lands near an axis.
-            shape.shape.isEndpointShape -> snapAxisEndpoint(shape.start, raw)
-            // Circle keeps its box square, so it stays a circle rather than becoming an ellipse.
-            shape.shape.keepsAspect -> squareCorner(shape.start, raw)
-            else -> raw
-        }
+        shape.end = ResizeMath.drawnEnd(shape, viewport.viewportToContent(Pt(vx, vy)), shapeConfig().perfect)
         onPendingShape(shape)
         requestRender()
     }
@@ -1495,28 +1485,6 @@ class InfiniteInteraction(
     private fun abandonShape() {
         pendingShape = null
         onPendingShape(null)
-    }
-
-    /** Constrain a dragged corner to a square box anchored at [anchor], for the perfect circle. */
-    private fun squareCorner(anchor: Pt, p: Pt): Pt {
-        val side = max(abs(p.x - anchor.x), abs(p.y - anchor.y))
-        val sx = if (p.x >= anchor.x) 1.0 else -1.0
-        val sy = if (p.y >= anchor.y) 1.0 else -1.0
-        return Pt(anchor.x + sx * side, anchor.y + sy * side)
-    }
-
-    /** Snap a line or arrow's dragged end to an exact horizontal or vertical run from [anchor]. */
-    private fun snapAxisEndpoint(anchor: Pt, p: Pt): Pt {
-        val dx = p.x - anchor.x
-        val dy = p.y - anchor.y
-        if (dx == 0.0 && dy == 0.0) return p
-        val snap = Math.toRadians(InteractionController.SHAPE_AXIS_SNAP_DEG)
-        val fromHoriz = atan2(abs(dy), abs(dx)) // 0 is horizontal, PI/2 is vertical
-        return when {
-            fromHoriz <= snap -> Pt(p.x, anchor.y)
-            fromHoriz >= Math.PI / 2.0 - snap -> Pt(anchor.x, p.y)
-            else -> p
-        }
     }
 
     // --- connectors ---

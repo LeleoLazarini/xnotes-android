@@ -1131,7 +1131,7 @@ class InteractionController(
             // endpoint just tracks the pointer (decimation/spacing gates don't apply). Near an axis
             // it snaps flat like a dragged line, unless the ruler is already steering the angle.
             val start = stroke.samples.firstOrNull()
-            val end = if (start != null && !ruler.visible) snapAxisEndpoint(Pt(start.x, start.y), local) else local
+            val end = if (start != null && !ruler.visible) ResizeMath.snapAxis(Pt(start.x, start.y), local) else local
             stroke.setStraightEnd(Sample(end.x, end.y, pressure.coerceIn(0.0, 1.0), (timeMs - strokeStartTimeMs).toDouble()))
             return
         }
@@ -2192,38 +2192,8 @@ class InteractionController(
         val shape = pendingShape ?: return
         val pi = shapePageIndex ?: return
         if (state.pageRects.getOrNull(pi) == null) return
-        val raw = state.toPageSpace(pi, content)
-        shape.end = when {
-            // Line/arrow: pin the dragged end flat when it lands near an axis.
-            shape.shape.isEndpointShape -> snapAxisEndpoint(shape.start, raw)
-            // Circle: keep the box square so it stays a perfect circle.
-            shape.shape.keepsAspect -> squareCorner(shape.start, raw)
-            else -> raw
-        }
+        shape.end = ResizeMath.drawnEnd(shape, state.toPageSpace(pi, content), shapeConfig.perfect)
         requestRender()
-    }
-
-    /** Constrain a dragged corner [p] to a square box anchored at [anchor] (the perfect-circle shape). */
-    private fun squareCorner(anchor: Pt, p: Pt): Pt {
-        val side = max(abs(p.x - anchor.x), abs(p.y - anchor.y))
-        val sx = if (p.x >= anchor.x) 1.0 else -1.0
-        val sy = if (p.y >= anchor.y) 1.0 else -1.0
-        return Pt(anchor.x + sx * side, anchor.y + sy * side)
-    }
-
-    /** Snap a line/arrow's dragged endpoint to an exactly horizontal or vertical run from [anchor]
-     *  when it lands within [SHAPE_AXIS_SNAP_DEG] of one (mirrors the recognizer's axis snap). */
-    private fun snapAxisEndpoint(anchor: Pt, p: Pt): Pt {
-        val dx = p.x - anchor.x
-        val dy = p.y - anchor.y
-        if (dx == 0.0 && dy == 0.0) return p
-        val snap = Math.toRadians(SHAPE_AXIS_SNAP_DEG)
-        val fromHoriz = atan2(abs(dy), abs(dx)) // 0 = horizontal, PI/2 = vertical
-        return when {
-            fromHoriz <= snap -> Pt(p.x, anchor.y)
-            fromHoriz >= Math.PI / 2.0 - snap -> Pt(anchor.x, p.y)
-            else -> p
-        }
     }
 
     private fun endShape() {
@@ -4564,6 +4534,9 @@ class InteractionController(
         /** A line/arrow drawn with the shape tool snaps flat when within this angle (deg) of an axis.
          *  Half the recognizer's hold-to-snap angle: a live drag is steadier, so it needs less help. */
         const val SHAPE_AXIS_SNAP_DEG = 4.0
+
+        /** With the Perfect switch on, a line/arrow keeps its angle to whole steps of this (deg). */
+        const val SHAPE_PERFECT_STEP_DEG = 15.0
 
         // Inertial fling tuning (viewport px/s).
         const val VEL_SMOOTH = 0.4 // EMA weight on the previous velocity estimate

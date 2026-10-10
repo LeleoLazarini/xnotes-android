@@ -80,6 +80,9 @@ abstract class ShapeKind internal constructor(val id: String) {
     /** The width-to-height its picker glyph is drawn at. */
     open val iconAspect: Double get() = 1.0
 
+    /** The width-to-height the shape tool's Perfect switch draws it at: square, or its regular form's. */
+    open fun perfectAspect(n: Int): Double = 1.0
+
     /** True when nothing the kind draws reaches outside its box, so the box bounds it. */
     open val staysInBox: Boolean get() = true
 
@@ -260,6 +263,8 @@ private class TriangleKind(id: String) : ShapeKind(id) {
         ),
     )
     override fun mirroredAdj(adj: DoubleArray) = doubleArrayOf(1.0 - adjOf(adj, 0))
+    // Equilateral.
+    override fun perfectAspect(n: Int) = 2.0 / sqrt(3.0)
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry {
         val apex = Pt(box.left + box.w * adjOf(p.adj, 0), box.top)
         val corners = listOf(apex, Pt(box.right, box.bottom), Pt(box.left, box.bottom))
