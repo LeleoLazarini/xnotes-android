@@ -296,15 +296,17 @@ class InfiniteInteraction(
         // the paged canvas so a pen behaves the same on either surface.
         val toolType = e.getToolType(0)
         val buttonHeld = stylusButtons.heldFor(e)
-        val onSelection = hitsSelection(viewport.viewportToContent(Pt(vx, vy)))
+        val at = viewport.viewportToContent(Pt(vx, vy))
+        val drawing = (tool.isStroke || tool == Tool.SHAPE) && toolType != MotionEvent.TOOL_TYPE_FINGER
+        // A drawing tool grabs a lone shape only by the shape itself; a finger grabs the whole box.
+        val onSelection = if (drawing) drawingGrabsSelection(at) else hitsSelection(at)
         val effective: Tool = when {
             toolType == MotionEvent.TOOL_TYPE_ERASER -> Tool.ERASER
             buttonHeld && penButtonTool != null -> penButtonTool!!
             // While something is selected, a press on it grabs it rather than inking through it,
             // and a finger may grab it even with finger-draw off. Both are the paged canvas's
             // rules; without them a selection could only be handled by a stylus.
-            onSelection && (tool.isStroke || tool == Tool.SHAPE) &&
-                toolType != MotionEvent.TOOL_TYPE_FINGER -> Tool.SELECT
+            onSelection && drawing -> Tool.SELECT
             toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff &&
                 onSelection -> Tool.SELECT
             toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff -> Tool.PAN
@@ -659,6 +661,23 @@ class InfiniteInteraction(
         val reach = OverlayTessellator.DOT_TOUCH_PX / viewport.zoom
         if ((sel.items.singleOrNull() as? ShapeItem)?.dotNear(at, reach) == true) return true
         return sel.contains(at, margin)
+    }
+
+    /**
+     * Whether a drawing tool's press at [at] grabs the selection instead of drawing: a lone shape
+     * by its handles, dots, outline or fill only, so the pen can draw inside an unfilled one; any
+     * other selection anywhere in its box. The paged canvas's rule.
+     */
+    private fun drawingGrabsSelection(at: Pt): Boolean {
+        val sel = selection() ?: return false
+        val shape = sel.items.singleOrNull() as? ShapeItem ?: return hitsSelection(at)
+        val tolerance = HANDLE_TOUCH_PX / viewport.zoom
+        val margin = frameMargin()
+        val grip = sel.rotateGrip(OverlayTessellator.GRIP_ARM_PX / viewport.zoom, margin)
+        if (grip != null && at.distanceTo(grip) <= tolerance) return true
+        if (sel.hitHandle(at, tolerance, margin) != null) return true
+        return shape.dotNear(at, OverlayTessellator.DOT_TOUCH_PX / viewport.zoom) ||
+            shape.touches(at, InteractionController.OUTLINE_GRAB / viewport.zoom)
     }
 
     /** The on-screen gap a lone shape's chrome keeps from its outline, in content pixels. */
@@ -1070,7 +1089,10 @@ class InfiniteInteraction(
         onPendingShape(null)
         if (draft.points.size >= (if (closed) 3 else 2)) {
             val cfg = shapeConfig()
-            onCommitShape(cfg.placedShape(draft.points, closed, inkColor(), cfg.strokeWidth * InteractionController.SHAPE_PEN_PARITY))
+            val shape = cfg.placedShape(draft.points, closed, inkColor(), cfg.strokeWidth * InteractionController.SHAPE_PEN_PARITY)
+            onCommitShape(shape)
+            selection()?.select(listOf(shape))
+            onSelectionChanged()
         }
         requestRender()
     }
@@ -1110,11 +1132,25 @@ class InfiniteInteraction(
         val shape = pendingShape
         pendingShape = null
         onPendingShape(null)
-        // A tap makes no shape; only a real drag commits one.
+        // A tap makes no shape; only a real drag commits one. A new shape stays selected, so it can
+        // be resized, turned or reshaped straight away; a tap picks up the shape under it instead.
         if (shape != null && shape.start.distanceTo(shape.end) > InteractionController.SHAPE_MIN_DRAG) {
             onCommitShape(shape)
+            selection()?.select(listOf(shape))
+            onSelectionChanged()
+        } else if (shape != null) {
+            selectShapeAt(shape.start)
         }
         requestRender()
+    }
+
+    /** Select the topmost shape whose outline or fill is under [at], if any. */
+    private fun selectShapeAt(at: Pt) {
+        val reach = InteractionController.OUTLINE_GRAB / viewport.zoom
+        val near = Rect(at.x - reach, at.y - reach, 2 * reach, 2 * reach)
+        val hit = itemsIn(near).lastOrNull { it is ShapeItem && !it.locked && it.touches(at, reach) } ?: return
+        selection()?.select(listOf(hit))
+        onSelectionChanged()
     }
 
     private fun abandonShape() {

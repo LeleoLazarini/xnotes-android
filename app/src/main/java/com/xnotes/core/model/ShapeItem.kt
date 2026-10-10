@@ -340,6 +340,13 @@ class ShapeItem(
 
     override fun centroid(): Pt = bounds().center
 
+    /**
+     * True when page point [p] lands on the shape itself: within [tolerance] of a stroked edge (or
+     * half the outline's width, if wider), or anywhere in a fill. The empty middle of an unfilled
+     * shape is not the shape, so a press there can start a new one inside it.
+     */
+    fun touches(p: Pt, tolerance: Double): Boolean = hits(toLocal(p), max(strokeWidth / 2.0, tolerance))
+
     /** True if an eraser circle of [radius] at (cx,cy) touches the shape's geometry. */
     override fun intersectsCircle(cx: Double, cy: Double, radius: Double): Boolean {
         if (bounds().distanceTo(Pt(cx, cy)) > radius) return false // cheap AABB reject

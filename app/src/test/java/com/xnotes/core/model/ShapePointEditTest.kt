@@ -108,4 +108,24 @@ class ShapePointEditTest {
         assertEquals("the right edge followed the pointer, the gap kept", 140.0, r.obb.center.x + r.obb.halfW, 1e-9)
         assertEquals(0.0, r.obb.center.x - r.obb.halfW, 1e-9)
     }
+
+    @Test fun anUnfilledShapesMiddleIsNotTheShape() {
+        val empty = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(100.0, 50.0), ink, 3.0)
+        assertTrue("on the outline", empty.touches(Pt(50.0, 2.0), 6.0))
+        assertFalse("in the empty middle, where a new shape can start", empty.touches(Pt(50.0, 25.0), 6.0))
+        assertFalse("off the outline past the tolerance", empty.touches(Pt(50.0, 12.0), 6.0))
+        val filled = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(100.0, 50.0), ink, 3.0, fill)
+        assertTrue("a fill is the shape", filled.touches(Pt(50.0, 25.0), 6.0))
+    }
+
+    @Test fun aTurnedShapeIsTouchedWhereItIsDrawn() {
+        val s = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 40.0), Pt(100.0, 60.0), ink, 2.0, fill)
+        s.applyTransform(Affine.rotateAbout(Pt(50.0, 50.0), PI_HALF_MINUS))
+        assertTrue(s.touches(Pt(50.0, 5.0), 4.0))
+        assertFalse(s.touches(Pt(5.0, 50.0), 4.0))
+    }
+
+    private companion object {
+        const val PI_HALF_MINUS = Math.PI / 2 - 0.01
+    }
 }

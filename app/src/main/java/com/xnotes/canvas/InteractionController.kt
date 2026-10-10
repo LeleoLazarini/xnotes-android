@@ -612,7 +612,7 @@ class InteractionController(
             // move on the body) instead of inking through it, matching the finger. Off the
             // selection it falls through to draw and dismisses the selection (see beginDraw).
             hasSelection && drawingIsStylus && (tool.isStroke || tool == Tool.SHAPE) &&
-                fingerHitsSelection(content) -> Tool.SELECT
+                drawingGrabsSelection(content) -> Tool.SELECT
             // A finger may grab/resize the ACTIVE selection even when finger-draw is off;
             // off the selection it still pans.
             toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff &&
@@ -1481,6 +1481,23 @@ class InteractionController(
         return selectionChromeBox()?.contains(content) == true
     }
 
+    /**
+     * Whether a drawing tool's press at [content] grabs the selection instead of drawing. A lone
+     * shape is grabbed only by its handles, its dots, its outline or its fill: inside an unfilled
+     * one, or anywhere else in its box, the pen draws, so a shape can be drawn inside a shape. Any
+     * other selection is grabbed anywhere in its box, as a finger grabs everything.
+     */
+    private fun drawingGrabsSelection(content: Pt): Boolean {
+        val lone = pointShape() ?: return fingerHitsSelection(content)
+        if (state.pageRects.getOrNull(lone.pageIndex) == null) return false
+        val tol = HANDLE_HIT / state.zoom
+        selectionRotatePoint()?.let { if (it.distanceTo(content) <= tol) return true }
+        if (ResizeMath.hitHandle(selectionResizeHandles(), content, tol) != null) return true
+        val local = state.toPageSpace(lone.pageIndex, content)
+        val shape = lone.item as ShapeItem
+        return shape.dotNear(local, dotReach()) || shape.touches(local, OUTLINE_GRAB / state.zoom)
+    }
+
     /** If [content] grabs a resize or rotate handle of the settled selection, begin that gesture
      *  and return true. Handles only; the caller handles an inside-the-bounds move. Shared by the
      *  select and lasso tools so both grab handles the same way. */
@@ -2010,6 +2027,9 @@ class InteractionController(
     private fun endShape() {
         val shape = pendingShape
         val pi = shapePageIndex
+        pendingShape = null
+        shapePageIndex = null
+        mode = PointerMode.IDLE
         if (shape != null && pi != null && shape.start.distanceTo(shape.end) > SHAPE_MIN_DRAG) {
             val page = state.document.pages[pi]
             page.items.add(shape)
@@ -2017,11 +2037,23 @@ class InteractionController(
             history.push(AddItem(page, shape))
             state.document.dirty = true
             onContentChanged()
+            // A new shape stays selected, so it can be resized, turned or reshaped straight away.
+            setSelection(listOf(Selected(pi, shape)))
+            refreshSelectionMenu()
+        } else if (shape != null && pi != null) {
+            // A tap with the shape tool picks up the shape under it.
+            selectShapeAt(pi, shape.start)
         }
-        pendingShape = null
-        shapePageIndex = null
-        mode = PointerMode.IDLE
         requestRender()
+    }
+
+    /** Select the topmost shape on page [pi] whose outline or fill is under page point [local], if any. */
+    private fun selectShapeAt(pi: Int, local: Pt) {
+        val reach = OUTLINE_GRAB / state.zoom
+        val hit = state.document.pages.getOrNull(pi)?.items
+            ?.lastOrNull { it is ShapeItem && !it.locked && it.touches(local, reach) } ?: return
+        setSelection(listOf(Selected(pi, hit)))
+        refreshSelectionMenu()
     }
 
     // --- FREE POLYGON ---
@@ -2079,6 +2111,8 @@ class InteractionController(
             history.push(AddItem(page, shape))
             state.document.dirty = true
             onContentChanged()
+            setSelection(listOf(Selected(pi, shape)))
+            refreshSelectionMenu()
         }
         requestRender()
     }
@@ -3689,6 +3723,9 @@ class InteractionController(
         const val TEXT_MAX_PT = 96.0
         const val LONG_PRESS_MS = 450L
         const val LONG_PRESS_SLOP = 6.0
+
+        /** How near a lone selected shape's outline (device px) a drawing tool's press grabs it. */
+        const val OUTLINE_GRAB = 14.0
 
         /** Two taps on the same vertex dot within this long (ms) delete the vertex. */
         const val DOUBLE_TAP_MS = 320L
