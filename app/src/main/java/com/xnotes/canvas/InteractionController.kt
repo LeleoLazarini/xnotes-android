@@ -99,7 +99,17 @@ data class EditingField(
     val rotation: Double = 0.0,
     /** Every line centred, as a shape's label sets. */
     val centred: Boolean = false,
-)
+) {
+    /** The field's on-screen bounding box, turned corners and all. */
+    fun screenBounds(): Rect {
+        val a = Math.toRadians(rotation)
+        val cs = kotlin.math.cos(a)
+        val sn = kotlin.math.sin(a)
+        val w = width * zoom
+        val h = height * zoom
+        return Rect.bounding(listOf(Pt(0.0, 0.0), Pt(w, 0.0), Pt(w, h), Pt(0.0, h)).map { Pt(x + it.x * cs - it.y * sn, y + it.x * sn + it.y * cs) })
+    }
+}
 
 /** The floating text style bar's target: the active box's viewport rect + its style. */
 data class TextBar(
@@ -2363,7 +2373,7 @@ class InteractionController(
         editingLabel?.let { shape ->
             val f = editingField() ?: return null
             val l = shape.label ?: return null
-            return TextBar(fieldBounds(f), l.style.face, l.style.pointSize, editing = true)
+            return TextBar(f.screenBounds(), l.style.face, l.style.pointSize, editing = true)
         }
         val editing = editingText
         if (editing != null) {
@@ -2483,16 +2493,6 @@ class InteractionController(
             rotation = state.rotationDeg + Math.toDegrees(shape.rotation),
             centred = true,
         )
-    }
-
-    /** [f]'s on-screen bounding box, turned corners and all. */
-    private fun fieldBounds(f: EditingField): Rect {
-        val a = Math.toRadians(f.rotation)
-        val cs = kotlin.math.cos(a)
-        val sn = kotlin.math.sin(a)
-        val w = f.width * f.zoom
-        val h = f.height * f.zoom
-        return Rect.bounding(listOf(Pt(0.0, 0.0), Pt(w, 0.0), Pt(w, h), Pt(0.0, h)).map { Pt(f.x + it.x * cs - it.y * sn, f.y + it.x * sn + it.y * cs) })
     }
 
     private fun repairRegion(page: Page, rect: Rect) {

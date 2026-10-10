@@ -47,7 +47,7 @@ import kotlin.math.roundToInt
  * this bar stacks one row higher.
  */
 @Composable
-fun TextStyleBar(editor: Editor) {
+fun TextStyleBar(editor: TextEditHost) {
     val bar = editor.textBar ?: return
     val palette = LocalPalette.current
     val density = LocalDensity.current

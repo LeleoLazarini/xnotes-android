@@ -227,7 +227,7 @@ private val sharedRecents = androidx.compose.runtime.mutableStateOf<List<com.xno
 enum class Pane { PRIMARY, SECONDARY }
 
 @Stable
-class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, SelectionMenuHost, LongPressMenuHost {
+class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, SelectionMenuHost, LongPressMenuHost, TextEditHost {
 
     private val appContext = context.applicationContext
 
@@ -584,7 +584,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         private set
 
     /** The floating text style bar's target (active box rect + style), or null when no box is active. */
-    var textBar by mutableStateOf<TextBar?>(null)
+    override var textBar by mutableStateOf<TextBar?>(null)
         private set
 
     /** Viewport rect to anchor the on-selection menu, or null when hidden. */
@@ -2519,27 +2519,27 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     /** Set the active text box's font family (and the family new boxes are created with). */
-    fun setTextFace(face: FontFace) {
+    override fun setTextFace(face: FontFace) {
         controller.setTextFace(face)
         refreshTextBar()
     }
 
     /** Set the active text box's point size (and the size new boxes are created with). */
-    fun setTextPointSize(size: Double) {
+    override fun setTextPointSize(size: Double) {
         controller.setTextPointSize(size)
         refreshTextBar()
     }
 
-    fun updateEditingText(text: String) {
+    override fun updateEditingText(text: String) {
         controller.updateEditingText(text)
     }
 
-    fun commitText(text: String? = null) {
+    override fun commitText(text: String?) {
         controller.commitTextEdit(text, restoreTool = true)
     }
 
     /** A one-finger drag over the editor scrolls the page (edit stays open), not the box's own text. */
-    fun panWhileEditing(dxFinger: Float, dyFinger: Float) {
+    override fun panWhileEditing(dxFinger: Float, dyFinger: Float) {
         controller.panWhileEditing(dxFinger.toDouble(), dyFinger.toDouble())
     }
 
@@ -7193,6 +7193,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         // A canvas has none of the paged note's text sessions, autosave binding or thumbnails yet,
         // so leaving one is just popping the layer.
         if (canvasOpen) {
+            infinite.commitText() // an open label goes down with what was typed
             flushCanvasThen(showOverlay = true) {
                 canvasAutosaveUri = null
                 canvasOpen = false

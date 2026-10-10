@@ -1164,8 +1164,12 @@ private fun EditorPane(
                         modifier = Modifier.fillMaxSize(),
                         update = { canvas.view.publish() },
                     )
+                    canvas.editingField?.let { field ->
+                        com.xnotes.ui.TextEditorOverlay(canvas, field)
+                    }
                     floatingBar()
                     com.xnotes.ui.SelectionMenu(canvas)
+                    com.xnotes.ui.TextStyleBar(canvas)
                     com.xnotes.ui.LongPressMenu(canvas, onInsertImageAt = { c -> actions.onInsertCanvasImage(editor, c) })
                     com.xnotes.ui.CanvasDebugOverlay(canvas)
                 }

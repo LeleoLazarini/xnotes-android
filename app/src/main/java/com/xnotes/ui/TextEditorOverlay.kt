@@ -79,6 +79,25 @@ private class NoBringIntoViewNode : Modifier.Node(), BringIntoViewModifierNode {
     override suspend fun bringIntoView(childCoordinates: LayoutCoordinates, boundsProvider: () -> Rect?) {}
 }
 
+/** What the text overlay and its style bar drive: a note's text boxes and labels, or a canvas's labels. */
+interface TextEditHost {
+    /** Where the style bar sits and what it shows, or null to hide it. */
+    val textBar: com.xnotes.canvas.TextBar?
+
+    /** Mirror the field's text back to the model. */
+    fun updateEditingText(text: String)
+
+    /** A one-finger drag over the field: scroll the view and keep the edit open. */
+    fun panWhileEditing(dxFinger: Float, dyFinger: Float)
+
+    fun setTextFace(face: FontFace)
+
+    fun setTextPointSize(size: Double)
+
+    /** End the edit with the model's text, or [text] when given. */
+    fun commitText(text: String? = null)
+}
+
 /**
  * The in-place text-box editor (PAL §13): a native field overlaid on the canvas at the box's
  * on-screen position and size, with a zoom-scaled font matching the baked text. It does **not**
@@ -94,7 +113,7 @@ private class NoBringIntoViewNode : Modifier.Node(), BringIntoViewModifierNode {
  * (tap to commit, drag to scroll).
  */
 @Composable
-fun TextEditorOverlay(editor: Editor, field: EditingField) {
+fun TextEditorOverlay(editor: TextEditHost, field: EditingField) {
     val density = LocalDensity.current
     val palette = LocalPalette.current
     var value by remember { mutableStateOf(TextFieldValue(field.text, TextRange(field.text.length))) }

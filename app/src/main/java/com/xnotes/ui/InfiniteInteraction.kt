@@ -105,6 +105,12 @@ class InfiniteInteraction(
     private val hasPasteContent: () -> Boolean = { false },
     /** A tool this layer armed by itself, so the chrome can follow: a long-press grab and its end. */
     private val onToolChanged: (Tool) -> Unit = {},
+    /** Two quick taps in one place, at this viewport point, by this pointer type. */
+    private val onDoubleTap: (Pt, Int) -> Unit = { _, _ -> },
+    /** Whether a shape's label is open in the text overlay. */
+    private val isEditingText: () -> Boolean = { false },
+    /** End that edit, keeping what was typed. */
+    private val onCommitText: () -> Unit = {},
 ) {
 
     private val choreographer = Choreographer.getInstance()
@@ -198,6 +204,9 @@ class InfiniteInteraction(
     private var panMayDismiss = false
     private var panDownAt = Pt.ZERO
 
+    // A finger press while a label is open became a pan; a tap there ends the edit.
+    private var panMayCommit = false
+
     // A finger held still grabs the item under it, or opens the paste menu on empty canvas.
     private var longPressRunnable: Runnable? = null
     private var longPressAt = Pt.ZERO
@@ -242,14 +251,75 @@ class InfiniteInteraction(
 
     fun onTouch(e: MotionEvent): Boolean {
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> handleDown(e)
-            MotionEvent.ACTION_POINTER_DOWN -> handlePointerDown(e)
-            MotionEvent.ACTION_MOVE -> handleMove(e)
+            MotionEvent.ACTION_DOWN -> {
+                tapCandidate = true
+                tapDownAt = Pt(e.x.toDouble(), e.y.toDouble())
+                tapDownTime = e.eventTime
+                handleDown(e)
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                tapCandidate = false
+                handlePointerDown(e)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (tapCandidate && Pt(e.x.toDouble(), e.y.toDouble()).distanceTo(tapDownAt) > TAP_SLOP_PX) tapCandidate = false
+                handleMove(e)
+            }
             MotionEvent.ACTION_POINTER_UP -> handlePointerUp(e)
-            MotionEvent.ACTION_UP -> handleUp(e)
-            MotionEvent.ACTION_CANCEL -> abortGesture()
+            MotionEvent.ACTION_UP -> {
+                handleUp(e)
+                tapUp(e)
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                tapCandidate = false
+                abortGesture()
+            }
         }
         return true
+    }
+
+    // Taps, for the double tap that types a shape's label.
+    private var tapCandidate = false
+    private var tapDownAt = Pt.ZERO
+    private var tapDownTime = 0L
+    private var lastTapAt: Pt? = null
+    private var lastTapTime = 0L
+
+    /** A tap that follows another close by and soon after is a double tap. */
+    private fun tapUp(e: MotionEvent) {
+        val at = Pt(e.x.toDouble(), e.y.toDouble())
+        val tap = tapCandidate && e.eventTime - tapDownTime < InteractionController.LONG_PRESS_MS
+        tapCandidate = false
+        if (!tap) {
+            lastTapAt = null
+            return
+        }
+        val prev = lastTapAt
+        if (prev != null && tapDownTime - lastTapTime <= InteractionController.DOUBLE_TAP_MS &&
+            prev.distanceTo(at) <= InteractionController.DOUBLE_TAP_SLOP_DP * devicePxPerDp()
+        ) {
+            lastTapAt = null
+            onDoubleTap(at, e.getToolType(0))
+            return
+        }
+        lastTapAt = at
+        lastTapTime = e.eventTime
+    }
+
+    /**
+     * The topmost unlocked shape at viewport [vp] that takes a label, for a double tap with the
+     * Shape or Select tool or a finger that pans: on its outline, fill or label, or anywhere inside.
+     */
+    fun labelTargetAt(vp: Pt, toolType: Int): ShapeItem? {
+        val fingerPans = toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff
+        if (tool != Tool.SHAPE && tool != Tool.SELECT && !fingerPans) return null
+        if (tool == Tool.SHAPE && shapeConfig().placesCorners) return null
+        val at = viewport.viewportToContent(vp)
+        val reach = InteractionController.OUTLINE_GRAB / viewport.zoom
+        val near = Rect(at.x - reach, at.y - reach, 2 * reach, 2 * reach)
+        return itemsIn(near).lastOrNull {
+            it is ShapeItem && !it.locked && it.takesLabel && (it.touches(at, reach) || it.encloses(at))
+        } as? ShapeItem
     }
 
     /**
@@ -281,10 +351,23 @@ class InfiniteInteraction(
 
     private fun handleDown(e: MotionEvent) {
         stopFling() // a new touch halts any in-progress glide
+        panMayCommit = false
         // The minimap sits over the canvas, so a press on it navigates rather than draws.
         if (onMinimapPress(e.getX(0).toDouble(), e.getY(0).toDouble())) {
             mode = CanvasPointerMode.IDLE
             return
+        }
+        // A press off an open label: a finger's tap ends the edit and its drag scrolls with it kept
+        // open, as on a note; anything else ends it and goes on as usual.
+        if (isEditingText()) {
+            if (e.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER) {
+                drawingPointerId = e.getPointerId(0)
+                drawingIsStylus = false
+                panMayCommit = true
+                beginPan(e.getX(0).toDouble(), e.getY(0).toDouble())
+                return
+            }
+            onCommitText()
         }
         drawingPointerId = e.getPointerId(0)
         drawingIsStylus = e.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS
@@ -474,6 +557,8 @@ class InfiniteInteraction(
             clearSelection()
         }
         panMayDismiss = false
+        if (mode == CanvasPointerMode.PAN && panMayCommit && panWasTap(e.getX(0).toDouble(), e.getY(0).toDouble())) onCommitText()
+        panMayCommit = false
         if (mode == CanvasPointerMode.DRAW) endDraw(e)
         if (mode == CanvasPointerMode.ERASE) {
             endErase()

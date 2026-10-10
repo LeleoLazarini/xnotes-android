@@ -8,6 +8,7 @@ import androidx.compose.runtime.setValue
 import com.xnotes.canvas.InteractionController
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
+import com.xnotes.core.history.EditLabel
 import com.xnotes.core.history.History
 import com.xnotes.core.history.LockItems
 import com.xnotes.core.history.RestyleItems
@@ -37,7 +38,11 @@ import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.deepCopy
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
+import com.xnotes.core.model.TextItem
+import com.xnotes.core.model.TextStyle
+import com.xnotes.core.pal.FontFace
 import com.xnotes.core.tools.InkPalette
 import com.xnotes.core.tools.ShapeConfig
 import com.xnotes.core.tools.Tool
@@ -59,7 +64,7 @@ import com.xnotes.ui.theme.Palette
  * ones, so a second object doing the same would delete the open note's live files.
  */
 @Stable
-class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongPressMenuHost {
+class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongPressMenuHost, TextEditHost {
 
     private val appContext = context.applicationContext
 
@@ -111,6 +116,9 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         onContextMenu = { vp, content, locked -> contextMenu = ContextMenuTarget(vp.x, vp.y, content, locked) },
         hasPasteContent = { hasClipboardItems || clipboardHasImage },
         onToolChanged = { adoptTool(it) },
+        onDoubleTap = { vp, toolType -> onDoubleTap(vp, toolType) },
+        isEditingText = { editingLabel != null },
+        onCommitText = { commitText() },
     )
 
     private val devicePxPerDp = appContext.resources.displayMetrics.density.toDouble()
@@ -377,6 +385,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     private var toolBeforeSelect: Tool? = null
 
     fun armTool(next: Tool) {
+        commitText()
         // Leaving the selection tools drops the selection, so its chrome cannot linger over ink.
         if (tool != next && (tool == Tool.SELECT || tool == Tool.LASSO)) interaction.clearSelection()
         // After the clear, so a long-press grab's borrowed selection tool is never remembered.
@@ -627,9 +636,137 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     override fun selectionCount(): ShapeCount? = ShapeCount.of(selection.items.singleOrNull() as? ShapeItem)
 
-    override fun canLabelSelection(): Boolean = false
+    override fun canLabelSelection(): Boolean = (selection.items.singleOrNull() as? ShapeItem)?.let { it.takesLabel && !it.locked } == true
 
-    override fun labelSelection() {}
+    override fun labelSelection() {
+        val shape = selection.items.singleOrNull() as? ShapeItem ?: return
+        if (shape.takesLabel && !shape.locked) startLabelEdit(shape)
+    }
+
+    // --- shape labels, typed in the overlay a note's text boxes use ---
+
+    /** The shape whose label is open in the overlay, and that label as it was before. */
+    private var editingLabel: ShapeItem? = null
+    private var labelBefore: ShapeLabel? = null
+
+    /** Where the overlay sits while a label is open, or null. */
+    var editingField by mutableStateOf<com.xnotes.canvas.EditingField?>(null)
+        private set
+
+    override var textBar by mutableStateOf<com.xnotes.canvas.TextBar?>(null)
+        private set
+
+    /** The type a new label starts in, following the last one styled. */
+    private var textFace: FontFace = TextItem.DEFAULT_FACE
+    private var textPointSize: Double = TextItem.DEFAULT_POINT_SIZE
+
+    /** A double tap on a shape that takes a label types it, with the tools a note allows. */
+    private fun onDoubleTap(vp: com.xnotes.core.geometry.Pt, toolType: Int) {
+        if (editingLabel != null) return
+        interaction.labelTargetAt(vp, toolType)?.let { startLabelEdit(it) }
+    }
+
+    /**
+     * Open the overlay on [shape]'s label, giving it one in the text box defaults if it has none.
+     * The shape is meshed without its words while the field shows them.
+     */
+    private fun startLabelEdit(shape: ShapeItem) {
+        commitText()
+        interaction.clearSelection()
+        editingLabel = shape
+        labelBefore = shape.label
+        val l = shape.label ?: ShapeLabel("", ShapeLabel.styleFor(shape, textPointSize, textFace), textMeasurer).also { shape.label = it }
+        textFace = l.style.face
+        textPointSize = l.style.pointSize
+        shape.labelHidden = true
+        document.itemChanged(shape)
+        refreshField()
+        view.publish()
+    }
+
+    override fun updateEditingText(text: String) {
+        val shape = editingLabel ?: return
+        shape.label = shape.label?.withText(text)
+        document.itemChanged(shape)
+        refreshField()
+    }
+
+    override fun panWhileEditing(dxFinger: Float, dyFinger: Float) {
+        if (editingLabel == null) return
+        viewport.panByViewport(dxFinger.toDouble(), dyFinger.toDouble())
+        onViewChanged()
+        view.publish()
+    }
+
+    override fun setTextFace(face: FontFace) {
+        textFace = face
+        restyleLabel { it.copy(face = face) }
+    }
+
+    override fun setTextPointSize(size: Double) {
+        val s = size.coerceIn(InteractionController.TEXT_MIN_PT, InteractionController.TEXT_MAX_PT)
+        textPointSize = s
+        restyleLabel { it.copy(pointSize = s) }
+    }
+
+    /** Restyle the open label; the whole edit is one undo step, taken when it ends. */
+    private fun restyleLabel(change: (TextStyle) -> TextStyle) {
+        val shape = editingLabel ?: return
+        val l = shape.label ?: return
+        shape.label = l.withStyle(change(l.style))
+        document.itemChanged(shape)
+        refreshField()
+    }
+
+    /** End the label edit with its current (or [text]) words: blank clears the label; any change is one undo step. */
+    override fun commitText(text: String?) {
+        val shape = editingLabel ?: return
+        text?.let { t -> shape.label = shape.label?.withText(t) }
+        val before = labelBefore
+        val after = shape.label?.takeIf { it.text.isNotBlank() }
+        shape.label = after
+        shape.labelHidden = false
+        editingLabel = null
+        labelBefore = null
+        editingField = null
+        textBar = null
+        document.itemChanged(shape)
+        val changed = if (after == null) before != null else !after.sameAs(before)
+        if (changed) {
+            history.push(OnCanvas(document, EditLabel(shape, before, after), listOf(shape)))
+            markDirty()
+            refresh()
+        }
+        view.publish()
+    }
+
+    /** Put the overlay back over the open label after its text, its style or the view moved. */
+    private fun refreshField() {
+        val shape = editingLabel
+        val l = shape?.label
+        val r = shape?.labelFrame()
+        if (shape == null || l == null || r == null) {
+            editingField = null
+            textBar = null
+            return
+        }
+        val topLeft = viewport.contentToViewport(shape.toPage(r.topLeft))
+        val f = com.xnotes.canvas.EditingField(
+            x = topLeft.x,
+            y = topLeft.y,
+            width = r.w,
+            height = r.h,
+            fontPx = l.style.pointSize * com.xnotes.platform.AndroidText.POINTS_TO_PX,
+            zoom = viewport.zoom,
+            face = l.style.face,
+            rgba = l.style.rgba,
+            text = l.text,
+            rotation = Math.toDegrees(shape.rotation),
+            centred = true,
+        )
+        editingField = f
+        textBar = com.xnotes.canvas.TextBar(f.screenBounds(), l.style.face, l.style.pointSize, editing = true)
+    }
 
     override fun setSelectionCount(n: Int) {
         val shape = (selection.items.singleOrNull() as? ShapeItem) ?: return
@@ -684,13 +821,15 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     fun armInkColor(color: Rgba) {
         inkColor = color
+        restyleLabel { it.copy(rgba = color) }
     }
 
-    /** Arm swatch [index], the same way the paged toolbar picks its ink. */
+    /** Arm swatch [index], the same way the paged toolbar picks its ink; an open label takes it too. */
     fun pickColor(index: Int) {
         if (index !in toolbarColors.indices) return
         activeColorIndex = index
         inkColor = toolbarColors[index]
+        restyleLabel { it.copy(rgba = toolbarColors[index]) }
         onToolStyleChanged?.invoke()
     }
 
@@ -1458,6 +1597,12 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     /** Keyboard shortcuts. Only the ones that mean something without pages. */
     fun handleKeyDown(e: android.view.KeyEvent): Boolean {
+        // An open label's field takes the keys; only Escape ends it.
+        if (editingLabel != null) {
+            if (e.keyCode != android.view.KeyEvent.KEYCODE_ESCAPE) return false
+            commitText()
+            return true
+        }
         val ctrl = e.isCtrlPressed
         val shift = e.isShiftPressed
         when {
@@ -1511,6 +1656,12 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     fun replaceDocument(next: InfiniteDocument) {
         clearFading() // whatever was melting belongs to the outgoing canvas
+        // An open label belongs to the outgoing canvas too; its history goes with it.
+        editingLabel?.labelHidden = false
+        editingLabel = null
+        labelBefore = null
+        editingField = null
+        textBar = null
         document.listener = null
         document = next
         next.listener = modelListener
@@ -1625,6 +1776,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     // upright and leaves the box turned over it. The paged editor drops the selection for the same
     // reason, so both surfaces behave alike.
     fun undo() {
+        commitText() // a label being typed is the first thing undo takes back
         history.undo()
         interaction.clearSelection()
         markDirty()
@@ -1633,6 +1785,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     }
 
     fun redo() {
+        commitText()
         history.redo()
         interaction.clearSelection()
         markDirty()
@@ -1641,6 +1794,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     }
 
     private fun onViewChanged() {
+        if (editingLabel != null) refreshField()
         document.lastView = viewport.toWaypoint()
         zoomPercent = Math.round(viewport.zoom * 100).toInt()
         // The menu is anchored in viewport pixels, so a pan or a zoom moves it.
