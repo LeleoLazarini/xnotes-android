@@ -113,6 +113,42 @@ class ShapeLabelTest {
         assertFalse(copy.labelHidden)
     }
 
+    @Test fun anEmptyLabelStillHasAFrameToTypeIn() {
+        val s = labelled("")
+        assertNull(s.labelRect())
+        val f = s.labelFrame()!!
+        assertEquals("one line", 13.0, f.h, 1e-9)
+        assertEquals(50.0, f.centerY, 1e-9)
+    }
+
+    @Test fun theInsideOfAnEmptyShapeIsWhereItsLabelGoes() {
+        val s = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(200.0, 100.0), ink, 2.0)
+        assertTrue(s.encloses(Pt(100.0, 50.0)))
+        assertFalse("but pressing there is not pressing the shape", s.touches(Pt(100.0, 50.0), 1.0))
+        assertFalse(s.encloses(Pt(250.0, 50.0)))
+        val ring = ShapeItem(ShapeKind.RING, Pt(0.0, 0.0), Pt(200.0, 200.0), ink, 2.0)
+        assertFalse("the hole is outside a ring", ring.encloses(Pt(100.0, 100.0)))
+        assertTrue(ring.encloses(Pt(5.0, 100.0)))
+    }
+
+    @Test fun closedKindsTakeLabelsAndLinesWaitForConnectors() {
+        assertTrue(labelled().takesLabel)
+        assertFalse(ShapeItem(ShapeKind.LINE, Pt(0.0, 0.0), Pt(9.0, 9.0), ink).takesLabel)
+        assertFalse(ShapeItem(ShapeKind.ARROW, Pt(0.0, 0.0), Pt(9.0, 9.0), ink).takesLabel)
+    }
+
+    @Test fun aNewLabelTakesTheOutlinesColourUnlessASolidFillWouldHideIt() {
+        val plain = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(9.0, 9.0), Rgba(200, 30, 30, 128), 2.0, Rgba(200, 30, 30, 64))
+        assertEquals(Rgba(200, 30, 30, 255), ShapeLabel.styleFor(plain, 12.0, FontFace.SANS).rgba)
+        val solidDark = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(9.0, 9.0), Rgba(20, 20, 90, 255), 2.0, Rgba(20, 20, 90, 255))
+        assertEquals(Rgba(255, 255, 255), ShapeLabel.styleFor(solidDark, 12.0, FontFace.SANS).rgba)
+        val solidLight = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(9.0, 9.0), Rgba(250, 240, 120, 255), 2.0, Rgba(250, 240, 120, 200))
+        assertEquals(Rgba(0, 0, 0), ShapeLabel.styleFor(solidLight, 12.0, FontFace.SANS).rgba)
+        val otherFill = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(9.0, 9.0), Rgba(20, 20, 90, 255), 2.0, Rgba(250, 250, 250, 255))
+        assertEquals(Rgba(20, 20, 90, 255), ShapeLabel.styleFor(otherFill, 14.0, FontFace.SERIF).rgba)
+        assertEquals(TextStyle(Rgba(20, 20, 90, 255), 14.0, FontFace.SERIF), ShapeLabel.styleFor(otherFill, 14.0, FontFace.SERIF))
+    }
+
     @Test fun editingALabelUndoes() {
         val s = labelled()
         val before = s.label

@@ -103,6 +103,12 @@ interface SelectionMenuHost {
 
     /** Set that count, as one undo step. */
     fun setSelectionCount(n: Int)
+
+    /** True when the lone selection is a shape that can take a typed label. */
+    fun canLabelSelection(): Boolean
+
+    /** Open the editor on that shape's label. */
+    fun labelSelection()
 }
 
 /**
@@ -161,6 +167,12 @@ fun SelectionMenu(host: SelectionMenuHost) {
                         enabled = styles.isNotEmpty(),
                         onClick = { overflowOpen = false; styleOpen = true },
                     )
+                    if (host.canLabelSelection()) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.shape_label)) },
+                            onClick = { overflowOpen = false; host.labelSelection() },
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.lock)) },
                         onClick = { overflowOpen = false; host.lockSelection() },

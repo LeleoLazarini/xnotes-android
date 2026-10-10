@@ -17,6 +17,7 @@ import com.xnotes.core.history.CompositeCommand
 import com.xnotes.core.history.EraseItems
 import com.xnotes.core.history.History
 import com.xnotes.core.history.LockItems
+import com.xnotes.core.history.EditLabel
 import com.xnotes.core.history.EditText
 import com.xnotes.core.history.MoveItems
 import com.xnotes.core.history.ReorderItems
@@ -40,6 +41,7 @@ import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeHandle
 import com.xnotes.core.model.GeometrySnapshot
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.model.TextHandle
 import com.xnotes.core.model.TextItem
@@ -93,8 +95,10 @@ data class EditingField(
     val face: FontFace,
     val rgba: Rgba,
     val text: String,
-    /** The view's page rotation (deg cw); the overlay spins by this around (x, y). */
-    val rotation: Int = 0,
+    /** The turn (deg cw): the view's page rotation, plus a label's shape; the overlay spins by this around (x, y). */
+    val rotation: Double = 0.0,
+    /** Every line centred, as a shape's label sets. */
+    val centred: Boolean = false,
 )
 
 /** The floating text style bar's target: the active box's viewport rect + its style. */
@@ -407,7 +411,25 @@ class InteractionController(
     private var editingOldText = ""
     private var editingPageIndex = -1
     val editingItem: TextItem? get() = editingText
+
+    /** True while a text box or a shape's label is open in the overlay. */
+    val isEditingText: Boolean get() = editingText != null || editingLabel != null
+
+    /** True while a shape's label is open in the overlay. */
+    val isEditingLabel: Boolean get() = editingLabel != null
     val editingPage: Int get() = editingPageIndex
+
+    // LABEL EDITING (a shape's label, typed in the same overlay a text box uses)
+    private var editingLabel: ShapeItem? = null
+    private var labelPageIndex = -1
+    private var labelBefore: ShapeLabel? = null
+
+    // DOUBLE TAP (a shape's label)
+    private var tapCandidate = false
+    private var tapDownViewport = Pt.ZERO
+    private var tapDownTime = 0L
+    private var lastTapViewport: Pt? = null
+    private var lastTapTime = 0L
 
     /** The style new text boxes are created with; mirrors the active box while one is open. */
     var textFace: FontFace = TextItem.DEFAULT_FACE
@@ -425,7 +447,7 @@ class InteractionController(
 
     init {
         state.isLiftedItem = { item ->
-            item === editingText || frontInk?.holding(item) == true || selection.any { it.item === item }
+            item === editingText || item === editingLabel || frontInk?.holding(item) == true || selection.any { it.item === item }
         }
     }
 
@@ -483,12 +505,25 @@ class InteractionController(
 
     fun onTouch(e: MotionEvent): Boolean {
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> handleDown(e)
-            MotionEvent.ACTION_POINTER_DOWN -> handlePointerDown(e)
-            MotionEvent.ACTION_MOVE -> handleMove(e)
+            MotionEvent.ACTION_DOWN -> {
+                tapDown(e)
+                handleDown(e)
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                tapCandidate = false
+                handlePointerDown(e)
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (tapCandidate && Pt(e.x.toDouble(), e.y.toDouble()).distanceTo(tapDownViewport) > TAP_SLOP) tapCandidate = false
+                handleMove(e)
+            }
             MotionEvent.ACTION_POINTER_UP -> handlePointerUp(e)
-            MotionEvent.ACTION_UP -> handleUp(e)
+            MotionEvent.ACTION_UP -> {
+                handleUp(e)
+                tapUp(e)
+            }
             MotionEvent.ACTION_CANCEL -> {
+                tapCandidate = false
                 abortGesture()
                 requestRender()
             }
@@ -628,8 +663,8 @@ class InteractionController(
         // prior tool), a drag scrolls the page with the edit kept live (decided in handleUp's PAN
         // branch). A stylus / side-button / eraser press commits now and proceeds as usual. A Text
         // press never spawns a new box on the same gesture (that double-create was a bug).
-        if (editingText != null) {
-            if (toolType == MotionEvent.TOOL_TYPE_FINGER && effectiveTool == Tool.TEXT_BOX) {
+        if (editingText != null || editingLabel != null) {
+            if (toolType == MotionEvent.TOOL_TYPE_FINGER && (effectiveTool == Tool.TEXT_BOX || editingLabel != null)) {
                 panMayCommitText = true
                 beginPan(vx, vy)
                 return
@@ -2213,6 +2248,12 @@ class InteractionController(
 
     /** Keep the model in sync with the live editor field (for auto-grow / commit). */
     fun updateEditingText(text: String) {
+        editingLabel?.let { shape ->
+            shape.label = shape.label?.withText(text)
+            // The lines stay centred on the shape, so the field moves as they wrap.
+            onTextEditStart(editingField())
+            return
+        }
         editingText?.text = text
     }
 
@@ -2223,7 +2264,7 @@ class InteractionController(
      * finger, as in [extendPan]. A plain drag with no fling/overscroll.
      */
     fun panWhileEditing(dxFinger: Double, dyFinger: Double) {
-        if (editingText == null) return
+        if (editingText == null && editingLabel == null) return
         state.scrollBy(-dxFinger, -dyFinger)
         onViewChanged()
         requestRender()
@@ -2231,6 +2272,7 @@ class InteractionController(
 
     /** Current on-screen geometry of the editor field, or null when not editing. */
     fun editingField(): EditingField? {
+        editingLabel?.let { return labelField(it) }
         val item = editingText ?: return null
         if (state.pageRects.getOrNull(editingPageIndex) == null) return null
         // Anchor at the box's page-space top-left corner; a rotated view spins the overlay
@@ -2246,7 +2288,7 @@ class InteractionController(
             face = item.face,
             rgba = item.rgba,
             text = item.text,
-            rotation = state.rotationDeg,
+            rotation = state.rotationDeg.toDouble(),
         )
     }
 
@@ -2257,6 +2299,7 @@ class InteractionController(
      * ending an edit — the field no longer commits itself, so there is no double-commit.
      */
     fun commitTextEdit(finalText: String? = null, restoreTool: Boolean = false) {
+        if (editingLabel != null) return commitLabelEdit(finalText)
         val item = editingText ?: return
         finalText?.let { item.text = it }
         val pi = editingPageIndex
@@ -2317,6 +2360,11 @@ class InteractionController(
 
     /** Where to anchor the style bar and the box's current style, or null when no box is active. */
     fun computeTextBar(): TextBar? {
+        editingLabel?.let { shape ->
+            val f = editingField() ?: return null
+            val l = shape.label ?: return null
+            return TextBar(fieldBounds(f), l.style.face, l.style.pointSize, editing = true)
+        }
         val editing = editingText
         if (editing != null) {
             val f = editingField() ?: return null
@@ -2330,19 +2378,167 @@ class InteractionController(
 
     fun setTextFace(face: FontFace) {
         textFace = face
+        if (restyleLabel { it.copy(face = face) }) return
         restyleActive { it.face = face }
     }
 
     fun setTextPointSize(size: Double) {
         val s = size.coerceIn(TEXT_MIN_PT, TEXT_MAX_PT)
         textPointSize = s
+        if (restyleLabel { it.copy(pointSize = s) }) return
         restyleActive { it.pointSize = s }
     }
 
-    /** Set the ink colour (for new strokes/boxes) and recolour the active text box, if any. */
+    /** Set the ink colour (for new strokes/boxes) and recolour the active text box or label, if any. */
     fun pickInk(c: Rgba) {
         inkColor = c
+        if (restyleLabel { it.copy(rgba = c) }) return
         restyleActive { it.rgba = c }
+    }
+
+    /** Restyle the label being typed, false when none is; the whole edit is one undo step, taken at commit. */
+    private fun restyleLabel(change: (TextStyle) -> TextStyle): Boolean {
+        val shape = editingLabel ?: return false
+        val l = shape.label ?: return false
+        shape.label = l.withStyle(change(l.style))
+        onTextEditStart(editingField())
+        requestRender()
+        return true
+    }
+
+    // --- shape labels ---
+
+    /** True when the lone selection is a shape that can take a label. */
+    fun canLabelSelection(): Boolean = (selection.singleOrNull()?.item as? ShapeItem)?.let { it.takesLabel && !it.locked } == true
+
+    /** Type the lone selected shape's label. */
+    fun labelSelection() {
+        val sel = selection.singleOrNull() ?: return
+        val shape = sel.item as? ShapeItem ?: return
+        if (shape.takesLabel && !shape.locked) startLabelEdit(shape, sel.pageIndex)
+    }
+
+    /**
+     * Open the overlay on [shape]'s label, giving it one in the text box defaults if it has none.
+     * The shape is lifted out of the cache and drawn live without its words while the field shows them.
+     */
+    private fun startLabelEdit(shape: ShapeItem, pi: Int) {
+        commitTextEdit()
+        flowText?.endSession()
+        clearSelection()
+        val page = state.document.pages.getOrNull(pi) ?: return
+        editingLabel = shape
+        labelPageIndex = pi
+        labelBefore = shape.label
+        val l = shape.label ?: ShapeLabel("", ShapeLabel.styleFor(shape, textPointSize, textFace), textMeasurer).also { shape.label = it }
+        textFace = l.style.face
+        textPointSize = l.style.pointSize
+        shape.labelHidden = true
+        repairRegion(page, shape.paintBounds())
+        onTextEditStart(editingField())
+        requestRender()
+    }
+
+    /** End the label edit with its current (or [finalText]) words: blank clears the label; any change is one undo step. */
+    private fun commitLabelEdit(finalText: String?) {
+        val shape = editingLabel ?: return
+        finalText?.let { t -> shape.label = shape.label?.withText(t) }
+        val page = state.document.pages.getOrNull(labelPageIndex)
+        val before = labelBefore
+        val typed = shape.label
+        val after = typed?.takeIf { it.text.isNotBlank() }
+        val was = shape.paintBounds()
+        shape.label = after
+        shape.labelHidden = false
+        editingLabel = null
+        labelPageIndex = -1
+        labelBefore = null
+        val changed = if (after == null) before != null else !after.sameAs(before)
+        if (changed && page != null) {
+            history.push(EditLabel(shape, before, after))
+            state.document.dirty = true
+            onContentChanged()
+        }
+        page?.let { repairRegion(it, was.union(shape.paintBounds())) }
+        onTextEditEnd()
+        requestRender()
+    }
+
+    /** The overlay over [shape]'s label: its top-left corner on screen, turned with the shape and the view. */
+    private fun labelField(shape: ShapeItem): EditingField? {
+        if (state.pageRects.getOrNull(labelPageIndex) == null) return null
+        val l = shape.label ?: return null
+        val r = shape.labelFrame() ?: return null
+        val topLeft = state.contentToViewport(state.fromPageSpace(labelPageIndex, shape.toPage(r.topLeft)))
+        return EditingField(
+            x = topLeft.x,
+            y = topLeft.y,
+            width = r.w,
+            height = r.h,
+            fontPx = l.style.pointSize * com.xnotes.platform.AndroidText.POINTS_TO_PX,
+            zoom = state.zoom,
+            face = l.style.face,
+            rgba = l.style.rgba,
+            text = l.text,
+            rotation = state.rotationDeg + Math.toDegrees(shape.rotation),
+            centred = true,
+        )
+    }
+
+    /** [f]'s on-screen bounding box, turned corners and all. */
+    private fun fieldBounds(f: EditingField): Rect {
+        val a = Math.toRadians(f.rotation)
+        val cs = kotlin.math.cos(a)
+        val sn = kotlin.math.sin(a)
+        val w = f.width * f.zoom
+        val h = f.height * f.zoom
+        return Rect.bounding(listOf(Pt(0.0, 0.0), Pt(w, 0.0), Pt(w, h), Pt(0.0, h)).map { Pt(f.x + it.x * cs - it.y * sn, f.y + it.x * sn + it.y * cs) })
+    }
+
+    private fun repairRegion(page: Page, rect: Rect) {
+        if (!state.repairRegion(page, rect.outset(REPAIR_PAD))) state.invalidatePage(page)
+    }
+
+    private fun tapDown(e: MotionEvent) {
+        tapCandidate = true
+        tapDownViewport = Pt(e.x.toDouble(), e.y.toDouble())
+        tapDownTime = e.eventTime
+    }
+
+    /** A tap that follows another close by and soon after is a double tap. */
+    private fun tapUp(e: MotionEvent) {
+        val at = Pt(e.x.toDouble(), e.y.toDouble())
+        val tap = tapCandidate && e.eventTime - tapDownTime < LONG_PRESS_MS
+        tapCandidate = false
+        if (!tap) {
+            lastTapViewport = null
+            return
+        }
+        val prev = lastTapViewport
+        if (prev != null && tapDownTime - lastTapTime <= DOUBLE_TAP_MS && prev.distanceTo(at) <= DOUBLE_TAP_SLOP_DP * state.devicePxPerDp) {
+            lastTapViewport = null
+            onDoubleTap(at, e.getToolType(0))
+            return
+        }
+        lastTapViewport = at
+        lastTapTime = e.eventTime
+    }
+
+    /** A double tap on a closed shape, with the Shape or Select tool or a finger that pans, types its label. */
+    private fun onDoubleTap(viewport: Pt, toolType: Int) {
+        val fingerPans = toolType == MotionEvent.TOOL_TYPE_FINGER && !fingerDraws && tool.fingerPansWhenOff
+        if (tool != Tool.SHAPE && tool != Tool.SELECT && !fingerPans) return
+        // The free polygon's own double tap closes its outline.
+        if (tool == Tool.SHAPE && shapeConfig.placesCorners) return
+        if (editingText != null || editingLabel != null) return
+        val content = state.viewportToContent(viewport)
+        val pi = state.pageIndexAtContent(content) ?: return
+        val local = state.toPageSpace(pi, content)
+        val reach = OUTLINE_GRAB / state.zoom
+        val shape = state.document.pages[pi].items.lastOrNull {
+            it is ShapeItem && !it.locked && it.takesLabel && (it.touches(local, reach) || it.encloses(local))
+        } as? ShapeItem ?: return
+        startLabelEdit(shape, pi)
     }
 
     /**
@@ -3316,6 +3512,18 @@ class InteractionController(
                 }
             }
 
+            // A shape whose label is being typed, out of the cache and drawn here without its words.
+            editingLabel?.let { shape ->
+                val pr = state.pageRects.getOrNull(labelPageIndex)
+                if (pr != null) {
+                    r.withSave {
+                        r.translate(pr.left, pr.top)
+                        state.applyPageTransform(r, state.document.pages[labelPageIndex])
+                        shape.paint(r)
+                    }
+                }
+            }
+
             // Live in-progress stroke / shape preview, clipped to its page. The stroke goes through
             // the wet cache, which blits whatever has stopped moving instead of refilling it.
             if (frontInk?.live != true) {
@@ -3729,6 +3937,9 @@ class InteractionController(
 
         /** Two taps on the same vertex dot within this long (ms) delete the vertex. */
         const val DOUBLE_TAP_MS = 320L
+
+        /** How far apart, in dp, the two taps of a double tap may land. */
+        const val DOUBLE_TAP_SLOP_DP = 24.0
 
         private val CORNER_HANDLES = setOf(HandleId.TL, HandleId.TR, HandleId.BL, HandleId.BR)
 

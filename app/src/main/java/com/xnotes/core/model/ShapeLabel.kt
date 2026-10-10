@@ -1,5 +1,6 @@
 package com.xnotes.core.model
 
+import com.xnotes.core.pal.FontFace
 import com.xnotes.core.pal.FontSpec
 import com.xnotes.core.pal.TextFlags
 import com.xnotes.core.pal.TextMeasurer
@@ -37,6 +38,21 @@ class ShapeLabel(val text: String, val style: TextStyle, val measurer: TextMeasu
     fun sameAs(other: ShapeLabel?): Boolean = other != null && other.text == text && other.style == style
 
     companion object {
+        /**
+         * A new label's style for [shape]: the given type, in the outline's colour, unless a solid
+         * fill of that colour would swallow it, when black or white reads better on the fill.
+         */
+        fun styleFor(shape: ShapeItem, pointSize: Double, face: FontFace): TextStyle {
+            val outline = shape.strokeRgba.withAlpha(255)
+            val fill = shape.fillRgba
+            val swallowed = fill != null && fill.a >= SOLID_FILL_ALPHA && fill.r == outline.r && fill.g == outline.g && fill.b == outline.b
+            val color = if (!swallowed) outline else if (outline.luminance() > 0.55) Rgba(0, 0, 0) else Rgba(255, 255, 255)
+            return TextStyle(color, pointSize, face)
+        }
+
+        /** A fill at least this opaque hides text in its own colour. */
+        private const val SOLID_FILL_ALPHA = 160
+
         /** Wrapped, every line centred. */
         val FLAGS = TextFlags(wordWrap = true, alignLeft = false, alignTop = true)
 

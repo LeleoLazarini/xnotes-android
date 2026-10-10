@@ -627,6 +627,10 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     override fun selectionCount(): ShapeCount? = ShapeCount.of(selection.items.singleOrNull() as? ShapeItem)
 
+    override fun canLabelSelection(): Boolean = false
+
+    override fun labelSelection() {}
+
     override fun setSelectionCount(n: Int) {
         val shape = (selection.items.singleOrNull() as? ShapeItem) ?: return
         val range = shape.shape.nRange ?: return

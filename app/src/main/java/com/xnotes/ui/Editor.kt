@@ -2500,7 +2500,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         zoomPercent = (state.zoom * 100).roundToInt()
         pageIndex = state.currentPageIndex()
         warmVisibleLinks(pageIndex)
-        if (controller.editingItem != null) editingField = controller.editingField()
+        if (controller.isEditingText) editingField = controller.editingField()
         refreshTextBar()
     }
 
@@ -5491,6 +5491,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     fun undo() {
         flowText.flushBurst() // the open typing burst is the first thing Ctrl+Z takes back
+        if (controller.isEditingLabel) controller.commitTextEdit() // and so is a label being typed
         val command = history.nextUndo
         val pagesBefore = state.document.pages.size
         val was = touchedRegions(command)
@@ -5504,6 +5505,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     fun redo() {
         flowText.flushBurst()
+        if (controller.isEditingLabel) controller.commitTextEdit()
         val command = history.nextRedo
         val pagesBefore = state.document.pages.size
         val was = touchedRegions(command)
@@ -5849,6 +5851,10 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     override fun selectionCount() = ShapeCount.of(controller.countedShape())
 
     override fun setSelectionCount(n: Int) = controller.setSelectionCount(n)
+
+    override fun canLabelSelection() = controller.canLabelSelection()
+
+    override fun labelSelection() = controller.labelSelection()
 
     override fun restyleSelection(color: Rgba?, width: Double?, preview: Boolean) {
         controller.restyleSelection(color, width, preview)

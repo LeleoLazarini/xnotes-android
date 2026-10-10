@@ -32,6 +32,7 @@ import androidx.compose.ui.relocation.BringIntoViewModifierNode
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -186,6 +187,7 @@ fun TextEditorOverlay(editor: Editor, field: EditingField) {
                 color = field.rgba.toComposeColor(),
                 fontFamily = field.face.toComposeFamily(),
                 fontSize = fontSp,
+                textAlign = if (field.centred) TextAlign.Center else TextAlign.Start,
             ),
             cursorBrush = SolidColor(palette.accent.toComposeColor()),
         )

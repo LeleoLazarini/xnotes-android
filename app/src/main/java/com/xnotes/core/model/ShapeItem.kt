@@ -191,13 +191,20 @@ class ShapeItem(
      * under [ShapeLabel.MIN_WIDTH_LINES] lines' height), as tall as they wrap, centred on the rect
      * and spilling past it evenly when long. Null without a label.
      */
-    fun labelRect(): Rect? {
-        val l = label?.takeIf { it.text.isNotEmpty() } ?: return null
+    fun labelRect(): Rect? = label?.takeIf { it.text.isNotEmpty() }?.let(::frameOf)
+
+    /** [labelRect] even while the label is empty, one line tall: where the editor types it. */
+    fun labelFrame(): Rect? = label?.let(::frameOf)
+
+    private fun frameOf(l: ShapeLabel): Rect {
         val t = localGeometry().textRect
         val w = max(t.w, l.lineHeight * ShapeLabel.MIN_WIDTH_LINES)
         val h = l.height(w)
         return Rect(t.centerX - w / 2.0, t.centerY - h / 2.0, w, h)
     }
+
+    /** Closed kinds take a typed label; lines and arrows get theirs with connectors. */
+    val takesLabel: Boolean get() = shape.isClosed
 
     /** The label's four corners on the page, turned with the shape; empty without a label. */
     fun labelCorners(): List<Pt> {
@@ -406,16 +413,27 @@ class ShapeItem(
         return hits(toLocal(Pt(cx, cy)), radius + strokeWidth / 2.0)
     }
 
+    /** True when page point [p] lies inside the outline, filled or not: where a label would go. */
+    fun encloses(p: Pt): Boolean {
+        val q = toLocal(p)
+        return localGeometry().paths.any { path ->
+            (path.role == PathRole.OUTLINE || path.role == PathRole.FILL_ONLY) &&
+                inRings(path.contours.map { PathFlattener.flatten(it, HIT_FLATTEN) }, q)
+        }
+    }
+
+    /** Inside an odd number of [rings]: in their fill, holes left out. */
+    private fun inRings(rings: List<List<Pt>>, p: Pt): Boolean {
+        var inside = false
+        for (ring in rings) if (ring.size >= 3 && Geometry.pointInPolygon(ring, p)) inside = !inside
+        return inside
+    }
+
     /** Does [p] (unturned frame) land within [tol] of a stroked edge, or inside the fill? */
     private fun hits(p: Pt, tol: Double): Boolean {
         for (path in localGeometry().paths) {
             val rings = path.contours.map { PathFlattener.flatten(it, HIT_FLATTEN) }
-            if (path.role == PathRole.HEAD_FILLED || (fillRgba != null && path.role.fills)) {
-                // Inside an odd number of the path's rings: in the fill, holes left out.
-                var inside = false
-                for (ring in rings) if (ring.size >= 3 && Geometry.pointInPolygon(ring, p)) inside = !inside
-                if (inside) return true
-            }
+            if ((path.role == PathRole.HEAD_FILLED || (fillRgba != null && path.role.fills)) && inRings(rings, p)) return true
             if (path.role.strokes) {
                 for (i in rings.indices) if (nearPolyOutline(rings[i], p, tol, path.contours[i].closed)) return true
             }
