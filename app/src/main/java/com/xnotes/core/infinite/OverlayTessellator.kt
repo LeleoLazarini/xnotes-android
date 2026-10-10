@@ -176,6 +176,52 @@ object OverlayTessellator {
         return parts
     }
 
+    /** A lone connector's end dot, and the light core that marks a loose end, in device pixels. */
+    const val END_PX = 14.0
+    const val END_CORE_PX = 7.0
+
+    /**
+     * A lone selected connector's chrome, standing in for a box: a dot on each end (solid when
+     * glued, hollow when loose), a square on each middle segment it can slide, and on a straight
+     * one a dot on each waypoint and a faint one halfway along each stretch, where a drag adds one.
+     */
+    fun connectorChrome(
+        ends: List<Pair<Pt, Boolean>>,
+        segments: List<Pt>,
+        waypoints: List<Pt>,
+        midpoints: List<Pt>,
+        zoom: Double,
+        accent: Rgba,
+        tolerance: Double,
+    ): List<MeshPart> {
+        if (zoom <= 0.0) return emptyList()
+        val parts = ArrayList<MeshPart>(6)
+        if (midpoints.isNotEmpty()) {
+            val faint = MeshBuilder()
+            for (d in midpoints) faint.circle(d.x, d.y, EDGE_DOT_PX / zoom / 2.0, tolerance)
+            parts.add(MeshPart(faint.build(), accent.withAlpha(EDGE_DOT_ALPHA), InkPass.OPAQUE))
+        }
+        if (segments.isNotEmpty()) {
+            val squares = MeshBuilder()
+            val half = HANDLE_PX / zoom / 2.0
+            for (c in segments) squares.rect(c.x - half, c.y - half, half * 2, half * 2)
+            parts.add(MeshPart(squares.build(), accent, InkPass.OPAQUE))
+        }
+        val dots = MeshBuilder()
+        val cores = MeshBuilder()
+        for (d in waypoints) {
+            dots.circle(d.x, d.y, VERTEX_DOT_PX / zoom / 2.0, tolerance)
+            cores.circle(d.x, d.y, VERTEX_CORE_PX / zoom / 2.0, tolerance)
+        }
+        for ((at, glued) in ends) {
+            dots.circle(at.x, at.y, END_PX / zoom / 2.0, tolerance)
+            if (!glued) cores.circle(at.x, at.y, END_CORE_PX / zoom / 2.0, tolerance)
+        }
+        if (!dots.isEmpty) parts.add(MeshPart(dots.build(), accent, InkPass.OPAQUE))
+        if (!cores.isEmpty) parts.add(MeshPart(cores.build(), DOT_CORE, InkPass.OPAQUE))
+        return parts
+    }
+
     /** The rectangle a band-select drag has swept out so far, dashed like every other marquee. */
     fun band(
         rect: Rect,

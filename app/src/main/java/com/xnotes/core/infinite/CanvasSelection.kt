@@ -8,11 +8,14 @@ import com.xnotes.core.geometry.Obb
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.history.Command
+import com.xnotes.core.history.CompositeCommand
 import com.xnotes.core.history.MoveItems
 import com.xnotes.core.history.TransformItems
 import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.Carry
+import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.GeometrySnapshot
+import com.xnotes.core.model.GlueFollow
 import com.xnotes.core.model.ShapeItem
 
 /**
@@ -50,6 +53,13 @@ class CanvasSelection(private val doc: InfiniteDocument) {
     var carry: Carry = Carry.NONE
         private set
 
+    /** The connectors the drag under way keeps joined to what it moves. */
+    var follow: GlueFollow = GlueFollow.NONE
+        private set
+
+    /** The lone selected connector, whose chrome is its own handles rather than a box. */
+    val loneConnector: ConnectorItem? get() = items.singleOrNull() as? ConnectorItem
+
     fun select(next: List<CanvasItem>) {
         items = next
         box = boxOf(next)
@@ -59,6 +69,7 @@ class CanvasSelection(private val doc: InfiniteDocument) {
         items = emptyList()
         box = null
         carry = Carry.NONE
+        follow = GlueFollow.NONE
         startSnapshots = emptyList()
         startBox = null
         startGrabAngle = null
@@ -92,8 +103,8 @@ class CanvasSelection(private val doc: InfiniteDocument) {
     fun chromeMargin(screenMargin: Double): Double =
         (items.singleOrNull() as? ShapeItem)?.takeIf { it.frameObb() != null }?.let { it.framePad + screenMargin } ?: 0.0
 
-    /** The box the chrome draws and grabs by: [box] pushed out by [chromeMargin]. */
-    fun chromeBox(screenMargin: Double = 0.0): Obb? = box?.grow(chromeMargin(screenMargin))
+    /** The box the chrome draws and grabs by: [box] pushed out by [chromeMargin]; none round a lone connector. */
+    fun chromeBox(screenMargin: Double = 0.0): Obb? = if (loneConnector != null) null else box?.grow(chromeMargin(screenMargin))
 
     /** True when [p] is inside the selection, so a press there grabs it rather than starting a band. */
     fun contains(p: Pt, screenMargin: Double = 0.0): Boolean = chromeBox(screenMargin)?.contains(p) == true
@@ -121,9 +132,11 @@ class CanvasSelection(private val doc: InfiniteDocument) {
      * there, so a press a few pixels off the grip's centre no longer snaps the selection. A move,
      * turn or resize is [carrying] what the selected shapes hold; a point edit is not.
      */
-    fun beginTransform(grabAt: Pt? = null, carrying: Boolean = false) {
+    fun beginTransform(grabAt: Pt? = null, carrying: Boolean = false, pin: Boolean = true) {
         startSnapshots = items.map { it.snapshotGeometry() }
         carry = if (carrying) carryOf(items) else Carry.NONE
+        // A move, turn or resize moves everything by one map; a point edit reshapes what it edits.
+        follow = followOf(items + carry.items, rigid = carrying, pin = pin)
         startBox = box
         val centre = box?.center
         startGrabAngle = if (grabAt == null || centre == null) null
@@ -138,8 +151,10 @@ class CanvasSelection(private val doc: InfiniteDocument) {
         for (i in items.indices) items[i].restoreGeometry(startSnapshots[i])
         for (item in items) item.applyTransform(transform)
         carry.follow(transform, resize)
+        follow.follow(transform)
         doc.itemsChanged(items)
         doc.itemsChanged(carry.items)
+        doc.itemsChanged(follow.items)
     }
 
     /** [applyLive] for [only] some of the items, the ones a renderer-driven drag cannot carry. */
@@ -154,8 +169,35 @@ class CanvasSelection(private val doc: InfiniteDocument) {
         }
         // Only a resize bakes some items alone: the shapes, the selected ones and the ones carried.
         carry.follow(transform, resize = true, only = only)
+        // The rest the renderer is scaling, so connectors glued to them follow where they are drawn.
+        follow.follow(transform) { if (it in only) null else transform }
         doc.itemsChanged(changed)
         doc.itemsChanged(carry.items.filter { it in only })
+        doc.itemsChanged(follow.items)
+    }
+
+    /**
+     * Keep connectors joined through a frame the renderer is drawing displaced by [shown] past the
+     * model, which the model has not had applied yet ([moved] is what it will be).
+     */
+    fun followShown(moved: Affine, shown: Affine) {
+        if (follow.isEmpty) return
+        follow.follow(moved) { shown }
+        doc.itemsChanged(follow.items)
+    }
+
+    /** Keep connectors joined to items a point edit has just reshaped in place. */
+    fun followEdit() {
+        if (follow.isEmpty) return
+        follow.follow(Affine.IDENTITY)
+        doc.itemsChanged(follow.items)
+    }
+
+    /** Put the connectors a cancelled drag moved back where it found them. */
+    fun unfollow() {
+        if (follow.isEmpty) return
+        follow.restore()
+        doc.itemsChanged(follow.items)
     }
 
     /**
@@ -174,9 +216,11 @@ class CanvasSelection(private val doc: InfiniteDocument) {
         for (i in items.indices) items[i].restoreGeometry(startSnapshots[i])
         for (item in items) item.translate(dx, dy)
         carry.translate(dx, dy)
+        follow.follow(Affine.translateBy(dx, dy))
         startBox?.let { box = it.translate(dx, dy) }
         doc.itemsChanged(items)
         doc.itemsChanged(carry.items)
+        doc.itemsChanged(follow.items)
     }
 
     /**
@@ -256,14 +300,44 @@ class CanvasSelection(private val doc: InfiniteDocument) {
      */
     fun buildCommand(movedOnly: Boolean, dx: Double = 0.0, dy: Double = 0.0): Command? {
         if (items.isEmpty()) return null
+        follow.settle()
         val all = items + carry.items
-        if (movedOnly) {
-            if (dx == 0.0 && dy == 0.0) return null
-            return OnCanvas(doc, MoveItems(all, dx, dy), all)
+        val starts = startSnapshots + carry.startSnapshots
+        // Connectors are recorded whole, glue and all; a plain move of anything else stays a move.
+        val moved = ArrayList<CanvasItem>()
+        val shaped = ArrayList<CanvasItem>()
+        val before = ArrayList<GeometrySnapshot>()
+        for (i in all.indices) {
+            val item = all[i]
+            if (follow.places(item)) continue
+            if (movedOnly && item !is ConnectorItem) {
+                moved += item
+            } else {
+                shaped += item
+                before += starts[i]
+            }
         }
-        val after = all.map { it.snapshotGeometry() }
-        return OnCanvas(doc, TransformItems(all, startSnapshots + carry.startSnapshots, after), all)
+        shaped += follow.items
+        before += follow.startSnapshots
+        val after = shaped.map { it.snapshotGeometry() }
+        val cmds = listOfNotNull(
+            if (moved.isNotEmpty() && (dx != 0.0 || dy != 0.0)) MoveItems(moved, dx, dy) else null,
+            if (shaped.isNotEmpty() && (!movedOnly || before != after)) TransformItems(shaped, before, after) else null,
+        )
+        if (cmds.isEmpty()) return null
+        return OnCanvas(doc, cmds.singleOrNull() ?: CompositeCommand(cmds), moved + shaped)
     }
+
+    /** True when [item] is still on the canvas, so glue to it counts. */
+    fun holds(item: CanvasItem): Boolean = doc.holds(item)
+
+    /** The connectors that keep joined to [moving] as it changes; see [GlueFollow.of]. */
+    fun followOf(moving: List<CanvasItem>, rigid: Boolean, pin: Boolean): GlueFollow =
+        GlueFollow.of(moving, doc.items.filter { it is ConnectorItem }, doc::holds, rigid, pin)
+
+    /** The undoable edit that took [items] from [before] to how they are now, re-filed on undo and redo. */
+    fun commandFor(items: List<CanvasItem>, before: List<GeometrySnapshot>): Command =
+        OnCanvas(doc, TransformItems(items, before, items.map { it.snapshotGeometry() }), items)
 
     /** What [of]'s closed shapes hold: the unselected, unlocked items entirely inside them. */
     private fun carryOf(of: List<CanvasItem>): Carry {

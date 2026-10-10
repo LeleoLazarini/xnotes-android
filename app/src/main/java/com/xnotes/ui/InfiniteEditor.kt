@@ -651,6 +651,25 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
 
     override fun canLabelSelection(): Boolean = (selection.items.singleOrNull() as? ShapeItem)?.let { it.takesLabel && !it.locked } == true
 
+    override fun canRerouteSelection(): Boolean =
+        selection.loneConnector?.let { !it.locked && (it.routing.orthogonal || it.waypoints.isNotEmpty()) } == true
+
+    override fun rerouteSelection() {
+        val c = selection.loneConnector ?: return
+        val follow = selection.followOf(listOf(c), rigid = false, pin = false)
+        val before = c.snapshotGeometry()
+        val margin = InfiniteInteraction.ROUTE_MARGIN_DP * devicePxPerDp / viewport.zoom
+        com.xnotes.core.model.Glue.reroute(c, document.itemsIn(com.xnotes.core.model.Glue.routeArea(c.start.at, c.end.at, margin)), margin)
+        follow.follow(com.xnotes.core.geometry.Affine.IDENTITY)
+        val changed = listOf<CanvasItem>(c) + follow.items
+        document.itemsChanged(changed)
+        history.push(selection.commandFor(changed, listOf(before) + follow.startSnapshots))
+        selection.refreshBox()
+        markDirty()
+        refresh()
+        publishOverlay()
+    }
+
     override fun labelSelection() {
         val shape = selection.items.singleOrNull() as? ShapeItem ?: return
         if (shape.takesLabel && !shape.locked) startLabelEdit(shape)
@@ -786,11 +805,14 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         val range = shape.shape.nRange ?: return
         val next = n.coerceIn(range.first, range.last)
         if (next == shape.n) return
+        // What is glued to it follows the points that moved.
+        val follow = selection.followOf(listOf(shape), rigid = false, pin = false)
         val before = shape.snapshotGeometry()
         shape.n = next
-        val cmd = OnCanvas(document, com.xnotes.core.history.TransformItems(listOf(shape), listOf(before), listOf(shape.snapshotGeometry())), listOf(shape))
-        document.itemsChanged(listOf(shape))
-        history.push(cmd)
+        follow.follow(com.xnotes.core.geometry.Affine.IDENTITY)
+        val changed = listOf<CanvasItem>(shape) + follow.items
+        document.itemsChanged(changed)
+        history.push(selection.commandFor(changed, listOf(before) + follow.startSnapshots))
         selection.refreshBox()
         markDirty()
         refresh()
@@ -1234,7 +1256,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
                 bounds = m.bounds
             }
         }
-        if (interaction.connecting) {
+        if (interaction.marking) {
             val marks = interaction.connectionMarks()
             val hot = interaction.connectHot
             parts += OverlayTessellator.connectionMarks(marks, hot, zoom, accent, StrokeTessellator.DEFAULT_TOLERANCE)
@@ -1246,6 +1268,13 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
             bounds = it.outset(4.0 / zoom)
         }
         val margin = OverlayTessellator.FRAME_MARGIN_PX / zoom
+        interaction.connectorChrome()?.let { cc ->
+            parts += OverlayTessellator.connectorChrome(cc.ends, cc.segments, cc.waypoints, cc.midpoints, zoom, accent, StrokeTessellator.DEFAULT_TOLERANCE)
+            val pad = OverlayTessellator.END_PX / zoom
+            for (p in cc.ends.map { it.first } + cc.segments + cc.waypoints + cc.midpoints) {
+                bounds = (bounds ?: Rect(p.x, p.y, 0.0, 0.0)).union(Rect(p.x - pad, p.y - pad, 2 * pad, 2 * pad))
+            }
+        }
         selection.chromeBox(margin)?.let { box ->
             // A lone shape also shows the dots that edit its points, except while a drag carries it.
             val shape = (selection.items.singleOrNull() as? ShapeItem)?.takeIf { interaction.showsEditDots }
@@ -1836,7 +1865,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     private fun onViewChanged() {
         if (editingLabel != null) refreshField()
         // The connection marks are sized for the screen and only cover what is on it.
-        if (interaction.connecting) publishOverlay()
+        if (interaction.marking) publishOverlay()
         document.lastView = viewport.toWaypoint()
         zoomPercent = Math.round(viewport.zoom * 100).toInt()
         // The menu is anchored in viewport pixels, so a pan or a zoom moves it.

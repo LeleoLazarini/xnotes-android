@@ -6,12 +6,18 @@ import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.CanvasItem
+import com.xnotes.core.model.ConnectorEnd
+import com.xnotes.core.model.ConnectorItem
+import com.xnotes.core.model.Glue
 import com.xnotes.core.model.ImageData
 import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.Routing
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.stroke.Sample
+import com.xnotes.core.shapes.Axis
+import com.xnotes.core.shapes.Elbow
 import com.xnotes.core.shapes.ShapeKind
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolDefaults
@@ -506,4 +512,49 @@ class CanvasSelectionTest {
         sel.beginTransform(carrying = true)
         assertTrue("already moving with the selection", sel.carry.isEmpty)
     }
+
+    // --- connectors ---
+
+    private fun rect(l: Double, t: Double, r: Double, b: Double) = ShapeItem(ShapeKind.RECTANGLE, Pt(l, t), Pt(r, b), Rgba(1, 2, 3, 255))
+
+    private fun joining(a: ShapeItem, b: ShapeItem) = ConnectorItem(
+        Routing.ELBOW, ConnectorEnd(Glue.point(a, 5)!!.at, a, 5), ConnectorEnd(Glue.point(b, 7)!!.at, b, 7), Rgba(1, 2, 3, 255),
+    ).apply { elbow = Elbow(Axis.H, doubleArrayOf(200.0)) }
+
+    @Test fun movingAShapeTakesWhatIsGluedToItAlongInOneUndoStep() {
+        val a = rect(0.0, 0.0, 100.0, 60.0)
+        val b = rect(300.0, 100.0, 400.0, 160.0)
+        val c = joining(a, b)
+        val doc = docOf(a, b, c)
+        val sel = CanvasSelection(doc)
+        sel.select(listOf(b))
+        sel.beginTransform(carrying = true)
+        sel.moveLive(0.0, 50.0)
+        assertEquals(Pt(300.0, 180.0), c.end.at)
+        val cmd = sel.buildCommand(movedOnly = true, dx = 0.0, dy = 50.0)!!
+        cmd.undo()
+        assertEquals(Pt(300.0, 130.0), c.end.at)
+        assertEquals(Pt(300.0, 100.0), b.box.topLeft)
+        cmd.redo()
+        assertEquals(Pt(300.0, 180.0), c.end.at)
+    }
+
+    @Test fun aLoneConnectorDraggedByItsLineLetsGoAndUndoGluesItBack() {
+        val a = rect(0.0, 0.0, 100.0, 60.0)
+        val b = rect(300.0, 100.0, 400.0, 160.0)
+        val c = joining(a, b)
+        val doc = docOf(a, b, c)
+        val sel = CanvasSelection(doc)
+        sel.select(listOf(c))
+        assertNull("a lone connector has no box to grab", sel.chromeBox())
+        sel.beginTransform(carrying = true, pin = false)
+        sel.moveLive(20.0, 20.0)
+        c.letGo()
+        val cmd = sel.buildCommand(movedOnly = true, dx = 20.0, dy = 20.0)!!
+        assertNull(c.start.target)
+        cmd.undo()
+        assertSame(a, c.start.target)
+        assertEquals(Pt(100.0, 30.0), c.start.at)
+    }
 }
+

@@ -111,6 +111,12 @@ interface SelectionMenuHost : SwatchHost {
 
     /** Open the editor on that shape's label. */
     fun labelSelection()
+
+    /** True when the lone selection is a connector whose route can be planned afresh. */
+    fun canRerouteSelection(): Boolean
+
+    /** Plan that connector's route afresh round what is in its way, as one undo step. */
+    fun rerouteSelection()
 }
 
 /**
@@ -173,6 +179,12 @@ fun SelectionMenu(host: SelectionMenuHost) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.shape_label)) },
                             onClick = { overflowOpen = false; host.labelSelection() },
+                        )
+                    }
+                    if (host.canRerouteSelection()) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.connector_reroute)) },
+                            onClick = { overflowOpen = false; host.rerouteSelection() },
                         )
                     }
                     DropdownMenuItem(

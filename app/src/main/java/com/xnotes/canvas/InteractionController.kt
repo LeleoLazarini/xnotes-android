@@ -31,6 +31,7 @@ import com.xnotes.core.history.TransformItems
 import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.Carry
 import com.xnotes.core.model.ConnectorDraft
+import com.xnotes.core.model.ConnectorEdit
 import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Document
 import com.xnotes.core.model.DrawStyle
@@ -44,6 +45,7 @@ import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeHandle
 import com.xnotes.core.model.GeometrySnapshot
 import com.xnotes.core.model.Glue
+import com.xnotes.core.model.GlueFollow
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
@@ -80,7 +82,7 @@ import kotlin.math.sin
 /** The pointer state machine modes (spec 06 §1). */
 enum class PointerMode {
     IDLE, DRAW, ERASE, BAND, LASSO_DRAW, SHOT, SHAPE, MOVE, RESIZE, TRANSFORM, PAN, PINCH, FLOW_TEXT,
-    TEXT_DRAG, RULER_MOVE, RULER_TRANSFORM, RULER_ROTATE, PDF_TEXT, VERTEX, POLYGON, CONNECT,
+    TEXT_DRAG, RULER_MOVE, RULER_TRANSFORM, RULER_ROTATE, PDF_TEXT, VERTEX, POLYGON, CONNECT, JOINT,
 }
 
 /**
@@ -382,6 +384,26 @@ class InteractionController(
 
     /** True when the shape tool has a connector chip armed, so the points connectors glue to show. */
     val connecting: Boolean get() = tool == Tool.SHAPE && shapeConfig.connector != null
+
+    /** True while the points connectors glue to show: a connector armed, or an end being dragged to glue again. */
+    private val marking: Boolean
+        get() = connecting || jointEdit?.grab.let { it == ConnectorEdit.Grab.START || it == ConnectorEdit.Grab.END }
+
+    // Connectors kept joined to what a gesture moves, page by page, drawn live (lifted) while it runs.
+    private var follows: List<Pair<Int, GlueFollow>> = emptyList()
+    private var followed: Set<CanvasItem> = emptySet()
+    private var followedFrom: List<Rect> = emptyList()
+
+    // A drag of a lone connector's own handle.
+    private var jointEdit: ConnectorEdit? = null
+    private var jointPage = -1
+    private var jointDownAt = Pt.ZERO
+    private var jointMoved = false
+    private var lastWaypointTap = -1
+    private var lastWaypointTapAt = 0L
+
+    // A lone connector dragged by its line lets go of what it joined; how it was, for undo.
+    private var looseBefore: GeometrySnapshot? = null
     private var pendingShape: ShapeItem? = null
     private var shapePageIndex: Int? = null
 
@@ -486,7 +508,7 @@ class InteractionController(
 
     init {
         state.isLiftedItem = { item ->
-            item === editingText || item === editingLabel || item in carried || frontInk?.holding(item) == true ||
+            item === editingText || item === editingLabel || item in carried || item in followed || frontInk?.holding(item) == true ||
                 selection.any { it.item === item }
         }
     }
@@ -877,6 +899,7 @@ class InteractionController(
             PointerMode.POLYGON -> showPolygonDraft(content)
             PointerMode.SHAPE -> extendShape(content)
             PointerMode.CONNECT -> extendConnector(content)
+            PointerMode.JOINT -> extendJoint(content)
             PointerMode.FLOW_TEXT ->
                 // A plain drag with the text tool scrolls the document; only a long-pressed
                 // drag extends the selection (dragTo returns true to request the pan handoff).
@@ -954,6 +977,7 @@ class InteractionController(
             PointerMode.POLYGON -> endPolygonTap(content, e.eventTime)
             PointerMode.SHAPE -> endShape()
             PointerMode.CONNECT -> endConnector()
+            PointerMode.JOINT -> endJoint(e.eventTime)
             PointerMode.FLOW_TEXT -> {
                 mode = PointerMode.IDLE
                 flowText?.release(content, Pt(e.getX(idx).toDouble(), e.getY(idx).toDouble()), e.eventTime)
@@ -1510,6 +1534,17 @@ class InteractionController(
         return if (square) all.filter { it.id in CORNER_HANDLES } else all
     }
 
+    /** The lone selected connector, whose chrome is its own handles rather than a box. */
+    private fun loneConnector(): Selected? = selection.singleOrNull()?.takeIf { it.item is ConnectorItem }
+
+    /** Whether content point [content] lands on the lone connector: a handle, its line or its label. */
+    private fun grabsConnector(sel: Selected, content: Pt): Boolean {
+        if (state.pageRects.getOrNull(sel.pageIndex) == null) return false
+        val c = sel.item as ConnectorItem
+        val local = state.toPageSpace(sel.pageIndex, content)
+        return ConnectorEdit.grab(c, local, dotReach()) != null || c.touches(local, OUTLINE_GRAB / state.zoom)
+    }
+
     /** The lone selected shape that shows its own frame, or null. */
     private fun framedShape(): Selected? =
         selection.singleOrNull()?.takeIf { (it.item as? ShapeItem)?.frameObb() != null }
@@ -1528,7 +1563,7 @@ class InteractionController(
     }
 
     /** The box the chrome draws and grabs by: [selObb] pushed out by [selectionChromeMargin]. */
-    private fun selectionChromeBox(): Obb? = selObb?.grow(selectionChromeMargin())
+    private fun selectionChromeBox(): Obb? = if (loneConnector() != null) null else selObb?.grow(selectionChromeMargin())
 
     /** A line/arrow's two endpoint handles, mapped from page space into content space. */
     private fun endpointHandles(sel: Selected): List<ResizeHandle> {
@@ -1558,6 +1593,7 @@ class InteractionController(
      *  selection the finger still pans). */
     private fun fingerHitsSelection(content: Pt): Boolean {
         if (selection.isEmpty()) return false
+        loneConnector()?.let { return grabsConnector(it, content) }
         val tol = HANDLE_HIT / state.zoom
         selectionRotatePoint()?.let { if (it.distanceTo(content) <= tol) return true }
         if (ResizeMath.hitHandle(selectionResizeHandles(), content, tol) != null) return true
@@ -1577,6 +1613,7 @@ class InteractionController(
      * other selection is grabbed anywhere in its box, as a finger grabs everything.
      */
     private fun drawingGrabsSelection(content: Pt): Boolean {
+        loneConnector()?.let { return grabsConnector(it, content) }
         val lone = pointShape() ?: return fingerHitsSelection(content)
         if (state.pageRects.getOrNull(lone.pageIndex) == null) return false
         val tol = HANDLE_HIT / state.zoom
@@ -1592,6 +1629,12 @@ class InteractionController(
      *  select and lasso tools so both grab handles the same way. */
     private fun tryGrabSelectionHandle(content: Pt): Boolean {
         if (selection.isEmpty()) return false
+        loneConnector()?.let { sel ->
+            if (state.pageRects.getOrNull(sel.pageIndex) == null) return false
+            val edit = ConnectorEdit.grab(sel.item as ConnectorItem, state.toPageSpace(sel.pageIndex, content), dotReach()) ?: return false
+            beginJoint(sel, edit, content)
+            return true
+        }
         if (tryGrabDot(content)) return true
         val tol = HANDLE_HIT / state.zoom
         selectionRotatePoint()?.let {
@@ -1753,11 +1796,20 @@ class InteractionController(
         moveOrigin = content
         moveOffset = Pt.ZERO
         beginCarry()
+        // A lone connector dragged by its line lets go of what it joined; anything else keeps it.
+        val lone = loneConnector()
+        looseBefore = lone?.item?.snapshotGeometry()
+        beginFollow(rigid = true, pin = lone == null)
         onSelectionMenu(null) // hide while dragging
     }
 
     private fun extendMove(content: Pt) {
         moveOffset = content - moveOrigin
+        if (follows.isNotEmpty()) {
+            val local = state.vectorToPageSpace(moveOffset)
+            val shift = Affine.translateBy(local.x, local.y)
+            for ((_, f) in follows) f.follow(shift) { shift }
+        }
         requestRender()
     }
 
@@ -1770,11 +1822,23 @@ class InteractionController(
             val local = state.vectorToPageSpace(moveOffset)
             for (item in items) item.translate(local.x, local.y)
             for ((_, c) in carries) c.translate(local.x, local.y)
+            val shift = Affine.translateBy(local.x, local.y)
+            for ((_, f) in follows) {
+                f.follow(shift)
+                f.settle()
+            }
             selObb = selObb?.translate(moveOffset.x, moveOffset.y)
-            val move: Command = MoveItems(items + carries.flatMap { it.second.items }, local.x, local.y)
+            // A lone connector let go: recorded whole, so undo glues it back.
+            val loose = loneConnector()?.item as? ConnectorItem
+            val looseWas = looseBefore
+            if (loose != null) loose.letGo()
+            val moving = (items + carries.flatMap { it.second.items }).filter { it !in followed && !(loose != null && it === loose) }
+            val move: Command? = if (moving.isEmpty()) null else MoveItems(moving, local.x, local.y)
+            val looseCmd = if (loose != null && looseWas != null) TransformItems(listOf(loose), listOf(looseWas), listOf(loose.snapshotGeometry())) else null
+            val joined = followCommand()
             val transfer = reassignSelectionPages()
             val carriedOver = transferCarried()
-            val cmds = listOfNotNull(move, transfer, carriedOver)
+            val cmds = listOfNotNull(move, looseCmd, joined, transfer, carriedOver)
             history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
             state.document.dirty = true
             // Moved items stay lifted (drawn live in the overlay), so the ink cache — which
@@ -1783,6 +1847,8 @@ class InteractionController(
             onContentChanged()
         }
         moveOffset = Pt.ZERO
+        looseBefore = null
+        endFollow()
         endCarry()
         mode = PointerMode.IDLE
         refreshSelectionMenu()
@@ -1866,6 +1932,7 @@ class InteractionController(
         // Knobs first: one can sit right on a vertex, and the knob is the finer control.
         val knob = shape.knobDots().withIndex().minByOrNull { it.value.distanceTo(local) }?.takeIf { it.value.distanceTo(local) <= reach }
         if (knob != null) {
+            beginFollow(rigid = false, pin = false)
             vertexBefore = shape.snapshotGeometry()
             vertexBase = vertexBefore
             vertexSel = sel
@@ -1885,6 +1952,7 @@ class InteractionController(
                 .minByOrNull { it.at.distanceTo(local) }?.takeIf { it.at.distanceTo(local) <= reach }
         }
         val dot = vertex ?: edge ?: return false
+        beginFollow(rigid = false, pin = false)
         vertexBefore = shape.snapshotGeometry()
         shape.toFree()
         vertexSpot = if (edge != null) shape.splitEdge(dot.spot) ?: dot.spot else dot.spot
@@ -1911,6 +1979,7 @@ class InteractionController(
         shape.restoreGeometry(base)
         val local = state.toPageSpace(sel.pageIndex, content)
         if (knobIndex >= 0) shape.dragKnob(knobIndex, local) else shape.moveVertex(vertexSpot ?: return, local)
+        for ((_, f) in follows) f.follow(Affine.IDENTITY)
         selObb = selectionBox()
         requestRender()
     }
@@ -1927,12 +1996,18 @@ class InteractionController(
                 lastVertexTap = null
             } else {
                 shape.restoreGeometry(before)
+                for ((_, f) in follows) f.restore()
                 if (knobIndex < 0 && !vertexWasEdge && spot != null && spot == lastVertexTap &&
                     eventTime - lastVertexTapAt <= DOUBLE_TAP_MS
                 ) {
                     lastVertexTap = null
                     shape.toFree()
-                    if (shape.deleteVertex(spot)) commitPointEdit(shape, before) else shape.restoreGeometry(before)
+                    if (shape.deleteVertex(spot)) {
+                        for ((_, f) in follows) f.follow(Affine.IDENTITY)
+                        commitPointEdit(shape, before)
+                    } else {
+                        shape.restoreGeometry(before)
+                    }
                 } else {
                     lastVertexTap = if (vertexWasEdge) null else spot
                     lastVertexTapAt = eventTime
@@ -1940,14 +2015,17 @@ class InteractionController(
             }
         }
         clearVertex()
+        endFollow()
         selObb = selectionBox()
         mode = PointerMode.IDLE
         refreshSelectionMenu()
         requestRender()
     }
 
+    /** One undo step for a shape [before] a point edit, and the connectors that followed it. */
     private fun commitPointEdit(shape: ShapeItem, before: GeometrySnapshot) {
-        history.push(TransformItems(listOf(shape), listOf(before), listOf(shape.snapshotGeometry())))
+        val cmds = listOfNotNull(TransformItems(listOf(shape), listOf(before), listOf(shape.snapshotGeometry())), followCommand())
+        history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
         state.document.dirty = true
         onContentChanged()
     }
@@ -1955,6 +2033,7 @@ class InteractionController(
     private fun abandonVertex() {
         val shape = vertexSel?.item as? ShapeItem
         vertexBefore?.let { shape?.restoreGeometry(it) }
+        for ((_, f) in follows) f.restore()
         clearVertex()
         selObb = selectionBox()
     }
@@ -2001,6 +2080,7 @@ class InteractionController(
         txItems = selection.toList()
         txSnaps = txItems.map { it.item.snapshotGeometry() }
         beginCarry()
+        beginFollow(rigid = true, pin = true)
         txStartObb = selObb
         txMargin = selectionChromeMargin()
         txHandle = handle
@@ -2040,6 +2120,10 @@ class InteractionController(
             if (state.pageRects.getOrNull(pi) == null) continue
             c.follow(state.affineToPageSpace(pi, world), resize = handle != null)
         }
+        for ((pi, f) in follows) {
+            if (state.pageRects.getOrNull(pi) == null) continue
+            f.follow(state.affineToPageSpace(pi, world))
+        }
         requestRender()
     }
 
@@ -2050,13 +2134,16 @@ class InteractionController(
             val after = items.map { it.snapshotGeometry() }
             // Nothing moved: what the shapes hold goes back exactly, not a rounding away.
             if (after == txSnaps) for ((_, c) in carries) c.restore()
+            if (after == txSnaps) for ((_, f) in follows) f.restore()
             if (after != txSnaps) {
                 changed = true
+                for ((_, f) in follows) f.settle()
                 val held = carries.flatMap { it.second.items }
-                val tx: Command = TransformItems(items + held, txSnaps + carries.flatMap { it.second.startSnapshots }, after + held.map { it.snapshotGeometry() })
+                val tx: Command = TransformItems(items + held, txSnaps + carries.flatMap { it.second.startSnapshots }, items.map { it.snapshotGeometry() } + held.map { it.snapshotGeometry() })
+                val joined = followCommand()
                 val transfer = reassignSelectionPages()
                 val carriedOver = transferCarried()
-                val cmds = listOfNotNull(tx, transfer, carriedOver)
+                val cmds = listOfNotNull(tx, joined, transfer, carriedOver)
                 history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
                 state.document.dirty = true
                 // Members stay lifted (overlay-drawn); the ink cache they were lifted out of needs
@@ -2068,6 +2155,7 @@ class InteractionController(
         txSnaps = emptyList()
         txStartObb = null
         txHandle = null
+        endFollow()
         endCarry()
         // A lone shape knows its own frame, so its box is refound rather than kept as dragged.
         if ((selection.singleOrNull()?.item as? ShapeItem)?.frameObb() != null) selObb = selectionBox()
@@ -2250,7 +2338,7 @@ class InteractionController(
         val view = Rect.fromPoints(state.viewportToContent(Pt.ZERO), state.viewportToContent(Pt(state.viewportW.toDouble(), state.viewportH.toDouble())))
         val pen = Pen(accent, ot.MARK_LINE_PX, cosmetic = true)
         val arm = ot.MARK_PX / 2.0 / state.zoom
-        val drawing = connectorDraft?.connector
+        val drawing = connectorDraft?.connector ?: jointEdit?.connector
         var count = 0
         marks@ for (pi in state.pageRects.indices) {
             if (!state.pageRects[pi].intersects(view)) continue
@@ -2501,7 +2589,15 @@ class InteractionController(
                 state.document.dirty = true
                 onContentChanged()
             } else if (item.text != editingOldText) {
-                history.push(EditText(item, editingOldText, item.text))
+                // A box that grew or shrank takes the connectors glued to it along.
+                val present = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<CanvasItem, Boolean>()).apply { addAll(page.items) }
+                val follow = GlueFollow.of(listOf(item), page.items, { it in present }, rigid = false, pin = false)
+                val was = follow.items.map { it.paintBounds() }
+                follow.follow(Affine.IDENTITY)
+                val joined = if (follow.isEmpty) null else TransformItems(follow.items, follow.startSnapshots, follow.items.map { it.snapshotGeometry() })
+                val cmds = listOfNotNull(EditText(item, editingOldText, item.text), joined)
+                history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
+                for ((i, c) in follow.items.withIndex()) repairRegion(page, was[i].union(c.paintBounds()))
                 state.document.dirty = true
                 onContentChanged()
             }
@@ -2647,6 +2743,162 @@ class InteractionController(
                 val page = home ?: state.document.pages.firstOrNull { p -> p.items.any { it === item } } ?: continue
                 repairRegion(page, item.paintBounds())
             }
+        }
+    }
+
+    // --- connectors following what they join ---
+
+    /**
+     * Collect, page by page, the connectors glued to what the gesture starting now moves (the
+     * selection and what it carries), and lift them out of the cache: the overlay draws them live
+     * until [endFollow]. [rigid] for a move, turn or resize; [pin] unless a lone connector lets go.
+     */
+    private fun beginFollow(rigid: Boolean, pin: Boolean) {
+        val out = ArrayList<Pair<Int, GlueFollow>>()
+        for ((pi, sels) in selection.groupBy { it.pageIndex }) {
+            val page = state.document.pages.getOrNull(pi) ?: continue
+            val present = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<CanvasItem, Boolean>()).apply { addAll(page.items) }
+            val moving = sels.map { it.item } + carries.filter { it.first == pi }.flatMap { it.second.items }
+            val f = GlueFollow.of(moving, page.items, { it in present }, rigid, pin)
+            if (!f.isEmpty) out += pi to f
+        }
+        follows = out
+        followed = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<CanvasItem, Boolean>()).apply { for ((_, f) in out) addAll(f.items) }
+        followedFrom = out.map { (_, f) -> f.items.map { it.paintBounds() }.fold(null as Rect?) { a, b -> a?.union(b) ?: b } ?: Rect(0.0, 0.0, 0.0, 0.0) }
+        for ((i, pf) in out.withIndex()) state.document.pages.getOrNull(pf.first)?.let { repairRegion(it, followedFrom[i]) }
+    }
+
+    /** The connectors the gesture placed, from how it found them to how they are, as one undoable step; null when none. */
+    private fun followCommand(): Command? {
+        val items = follows.flatMap { it.second.items }
+        if (items.isEmpty()) return null
+        return TransformItems(items, follows.flatMap { it.second.startSnapshots }, items.map { it.snapshotGeometry() })
+    }
+
+    /** Put the connectors a gesture placed back into the cache, where they were and where they are. */
+    private fun endFollow() {
+        if (follows.isEmpty()) return
+        val done = follows
+        val was = followedFrom
+        follows = emptyList()
+        followed = emptySet()
+        followedFrom = emptyList()
+        for ((i, pf) in done.withIndex()) {
+            val page = state.document.pages.getOrNull(pf.first) ?: continue
+            repairRegion(page, was[i])
+            for (c in pf.second.items) repairRegion(page, c.paintBounds())
+        }
+    }
+
+    // --- a lone connector's own handles ---
+
+    private fun beginJoint(sel: Selected, edit: ConnectorEdit, content: Pt) {
+        jointEdit = edit
+        jointPage = sel.pageIndex
+        jointDownAt = content
+        jointMoved = false
+        beginFollow(rigid = false, pin = false)
+        mode = PointerMode.JOINT
+        onSelectionMenu(null)
+        requestRender()
+    }
+
+    private fun extendJoint(content: Pt) {
+        val edit = jointEdit ?: return
+        val page = state.document.pages.getOrNull(jointPage) ?: return
+        if (state.pageRects.getOrNull(jointPage) == null) return
+        // A handle is small: a press that wobbles a pixel or two is still a tap.
+        if (!jointMoved && content.distanceTo(jointDownAt) * state.zoom < LONG_PRESS_SLOP) return
+        jointMoved = true
+        edit.drag(state.toPageSpace(jointPage, content), page.items, dotReach(), routeMargin())
+        for ((_, f) in follows) f.follow(Affine.IDENTITY)
+        connectHot = listOfNotNull(edit.hot?.let { jointPage to it.point.at })
+        selObb = selectionBox()
+        requestRender()
+    }
+
+    /** Pen up: a drag is one undo step; a tap changes nothing, and a second on a waypoint removes it. */
+    private fun endJoint(eventTime: Long) {
+        val edit = jointEdit ?: return
+        val c = edit.connector
+        val removing = !jointMoved && edit.grab == ConnectorEdit.Grab.WAYPOINT && edit.index == lastWaypointTap &&
+            eventTime - lastWaypointTapAt <= DOUBLE_TAP_MS
+        if (!jointMoved) {
+            edit.restore()
+            for ((_, f) in follows) f.restore()
+            if (removing) {
+                c.removeWaypoint(edit.index)
+                for ((_, f) in follows) f.follow(Affine.IDENTITY)
+            }
+            lastWaypointTap = if (edit.grab == ConnectorEdit.Grab.WAYPOINT && !removing) edit.index else -1
+            lastWaypointTapAt = eventTime
+        } else {
+            lastWaypointTap = -1
+        }
+        if (jointMoved || removing) {
+            val cmds = listOfNotNull(TransformItems(listOf(c), listOf(edit.before), listOf(c.snapshotGeometry())), followCommand())
+            history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
+            state.document.dirty = true
+            onContentChanged()
+        }
+        jointEdit = null
+        jointPage = -1
+        connectHot = emptyList()
+        endFollow()
+        selObb = selectionBox()
+        mode = PointerMode.IDLE
+        refreshSelectionMenu()
+        requestRender()
+    }
+
+    /** True when the lone selection is a connector whose route can be planned afresh. */
+    fun canRerouteSelection(): Boolean =
+        (loneConnector()?.item as? ConnectorItem)?.let { !it.locked && (it.routing.orthogonal || it.waypoints.isNotEmpty()) } == true
+
+    /** Plan the lone connector's route afresh round what is in its way, as one undo step. */
+    fun rerouteSelection() {
+        val sel = loneConnector() ?: return
+        val c = sel.item as ConnectorItem
+        val page = state.document.pages.getOrNull(sel.pageIndex) ?: return
+        beginFollow(rigid = false, pin = false)
+        val before = c.snapshotGeometry()
+        Glue.reroute(c, page.items, routeMargin())
+        for ((_, f) in follows) f.follow(Affine.IDENTITY)
+        val cmds = listOfNotNull(TransformItems(listOf(c), listOf(before), listOf(c.snapshotGeometry())), followCommand())
+        history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
+        endFollow()
+        state.document.dirty = true
+        selObb = selectionBox()
+        onContentChanged()
+        refreshSelectionMenu()
+        requestRender()
+    }
+
+    /** A lone connector's own chrome: its ends (solid when glued), middle segments, waypoints and stretch middles. */
+    private fun drawConnectorChrome(r: Renderer) {
+        if (mode == PointerMode.MOVE) return
+        val sel = loneConnector() ?: return
+        if (state.pageRects.getOrNull(sel.pageIndex) == null) return
+        val c = sel.item as ConnectorItem
+        val page = state.document.pages[sel.pageIndex]
+        val ot = com.xnotes.core.infinite.OverlayTessellator
+        val accent = state.palette.accent
+        val z = state.zoom
+        fun at(p: Pt) = state.fromPageSpace(sel.pageIndex, p)
+        for (d in c.midpointDots()) r.fillCircle(at(d), ot.EDGE_DOT_PX / 2.0 / z, accent.withAlpha(140))
+        val half = ot.HANDLE_PX / 2.0 / z
+        for (h in c.segmentHandles()) {
+            val p = at(h)
+            r.fillRect(Rect(p.x - half, p.y - half, 2 * half, 2 * half), accent)
+        }
+        for (w in c.waypoints) {
+            r.fillCircle(at(w), ot.VERTEX_DOT_PX / 2.0 / z, accent)
+            r.fillCircle(at(w), ot.VERTEX_CORE_PX / 2.0 / z, ot.DOT_CORE)
+        }
+        for (end in listOf(c.start, c.end)) {
+            r.fillCircle(at(end.at), ot.END_PX / 2.0 / z, accent)
+            val glued = end.target?.let { t -> page.items.any { it === t } } == true
+            if (!glued) r.fillCircle(at(end.at), ot.END_CORE_PX / 2.0 / z, ot.DOT_CORE)
         }
     }
 
@@ -3124,9 +3376,12 @@ class InteractionController(
         val range = shape.shape.nRange ?: return
         val next = n.coerceIn(range.first, range.last)
         if (next == shape.n) return
+        beginFollow(rigid = false, pin = false)
         val before = shape.snapshotGeometry()
         shape.n = next
+        for ((_, f) in follows) f.follow(Affine.IDENTITY)
         commitPointEdit(shape, before)
+        endFollow()
         refreshSelectionMenu()
         requestRender()
     }
@@ -3717,8 +3972,15 @@ class InteractionController(
         clearOverscroll()
         if (mode == PointerMode.ERASE) endErase() // what a cancelled erase took stays one undo step
         if (mode == PointerMode.VERTEX) abandonVertex()
+        if (mode == PointerMode.JOINT) jointEdit?.restore()
+        jointEdit = null
         if (mode == PointerMode.POLYGON) showPolygonDraft(null)
         if (mode == PointerMode.MOVE) moveOffset = Pt.ZERO
+        if (mode == PointerMode.MOVE || mode == PointerMode.TRANSFORM || mode == PointerMode.VERTEX || mode == PointerMode.JOINT) {
+            for ((_, f) in follows) f.restore()
+        }
+        looseBefore = null
+        endFollow()
         endCarry()
         pushStrokeEdit(null) // a cancelled crossing still left segments on the pages behind it
         liveStroke = null
@@ -3755,8 +4017,9 @@ class InteractionController(
 
             markupOverlay?.draw(r)
 
-            // Lifted (selected) items, drawn live at the move offset.
+            // Lifted (selected) items, drawn live at the move offset; one that bends to stay joined is drawn below.
             for (sel in selection) {
+                if (sel.item in followed) continue
                 val pr = state.pageRects.getOrNull(sel.pageIndex) ?: continue
                 r.withSave {
                     r.translate(pr.left + moveOffset.x, pr.top + moveOffset.y)
@@ -3771,7 +4034,17 @@ class InteractionController(
                 r.withSave {
                     r.translate(pr.left + moveOffset.x, pr.top + moveOffset.y)
                     state.applyPageTransform(r, state.document.pages[pi])
-                    for (item in c.items) item.paint(r)
+                    for (item in c.items) if (item !in followed) item.paint(r)
+                }
+            }
+
+            // Connectors kept joined to what moves, placed in the model frame by frame.
+            for ((pi, f) in follows) {
+                val pr = state.pageRects.getOrNull(pi) ?: continue
+                r.withSave {
+                    r.translate(pr.left, pr.top)
+                    state.applyPageTransform(r, state.document.pages[pi])
+                    for (item in f.items) item.paint(r)
                 }
             }
 
@@ -3846,10 +4119,11 @@ class InteractionController(
                     r.fillRect(Rect(c.x - side / 2, c.y - side / 2, side, side), state.palette.accent)
                 }
                 drawEditDots(r)
+                drawConnectorChrome(r)
             }
 
-            // Where a connector can glue, while one is armed.
-            if (connecting) drawConnectionMarks(r)
+            // Where a connector can glue, while one is armed or an end is being dragged.
+            if (marking) drawConnectionMarks(r)
         }
 
         // Note icons: chrome of one size at any zoom, so in viewport space.

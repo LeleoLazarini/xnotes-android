@@ -20,8 +20,10 @@ import com.xnotes.core.infinite.LiftTransform
 import com.xnotes.core.infinite.OverlayTessellator
 import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.ConnectorDraft
+import com.xnotes.core.model.ConnectorEdit
 import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Glue
+import com.xnotes.core.model.GlueFollow
 import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
@@ -41,7 +43,7 @@ import kotlin.math.exp
 import kotlin.math.max
 
 /** What the current gesture is doing. */
-enum class CanvasPointerMode { IDLE, PAN, PINCH, DRAW, ERASE, SHAPE, BAND, LASSO, MOVE, RESIZE, ROTATE, VERTEX, POLYGON, CONNECT }
+enum class CanvasPointerMode { IDLE, PAN, PINCH, DRAW, ERASE, SHAPE, BAND, LASSO, MOVE, RESIZE, ROTATE, VERTEX, POLYGON, CONNECT, JOINT }
 
 /**
  * Gestures on the infinite canvas.
@@ -168,12 +170,26 @@ class InfiniteInteraction(
     // A connector being drawn with a connector chip armed.
     private var connectorDraft: ConnectorDraft? = null
 
+    // A drag of a lone connector's own handle, and the connectors glued to it that follow.
+    private var jointEdit: ConnectorEdit? = null
+    private var jointFollow: GlueFollow = GlueFollow.NONE
+    private var jointDownAt = Pt.ZERO
+    private var jointMoved = false
+
+    // The last tap on a straight connector's waypoint, for the double tap that removes it.
+    private var lastWaypointTap = -1
+    private var lastWaypointTapAt = 0L
+
     /** The connection points lit for the chrome: under a hovering pen, where a connector set off and where it is going. */
     var connectHot: List<Pt> = emptyList()
         private set
 
     /** True when the shape tool has a connector chip armed, so the points connectors glue to show. */
     val connecting: Boolean get() = tool == Tool.SHAPE && shapeConfig().connector != null
+
+    /** True while the points connectors glue to show: a connector armed, or an end being dragged to glue again. */
+    val marking: Boolean
+        get() = connecting || jointEdit?.grab.let { it == ConnectorEdit.Grab.START || it == ConnectorEdit.Grab.END }
 
     // Band and lasso, in content space, live only while their gesture runs.
     var bandRect: Rect? = null
@@ -562,6 +578,7 @@ class InfiniteInteraction(
             CanvasPointerMode.ERASE -> extendErase(e)
             CanvasPointerMode.SHAPE -> extendShape(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.CONNECT -> extendConnector(e.getX(0).toDouble(), e.getY(0).toDouble())
+            CanvasPointerMode.JOINT -> extendJoint(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.BAND -> extendBand(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.LASSO -> extendLasso(e.getX(0).toDouble(), e.getY(0).toDouble())
             CanvasPointerMode.MOVE -> extendMove(e.getX(0).toDouble(), e.getY(0).toDouble())
@@ -612,6 +629,7 @@ class InfiniteInteraction(
             CanvasPointerMode.MOVE -> endMove()
             CanvasPointerMode.RESIZE, CanvasPointerMode.ROTATE -> endTransform()
             CanvasPointerMode.VERTEX -> endVertex(e.eventTime)
+            CanvasPointerMode.JOINT -> endJoint(e.eventTime)
             CanvasPointerMode.POLYGON -> endPolygonTap(viewport.viewportToContent(Pt(e.getX(0).toDouble(), e.getY(0).toDouble())), e.eventTime)
             else -> Unit
         }
@@ -635,14 +653,17 @@ class InfiniteInteraction(
         // dropping the lift is the whole undo.
         if (mode == CanvasPointerMode.MOVE) {
             selection()?.previewMove(0.0, 0.0)
+            selection()?.unfollow()
             onLiftSelection(emptyList(), LiftTransform.NONE)
             onSelectionChanged()
         }
         if (mode == CanvasPointerMode.VERTEX) abandonVertex()
+        if (mode == CanvasPointerMode.JOINT) abandonJoint()
         if (mode == CanvasPointerMode.POLYGON) showPolygonDraft(null)
         if ((mode == CanvasPointerMode.ROTATE || mode == CanvasPointerMode.RESIZE) && liftedTransform) {
             selection()?.previewBack()
             if (bakedInLift.isNotEmpty()) selection()?.applyLiveTo(bakedInLift, Affine.IDENTITY)
+            selection()?.unfollow()
             onLiftSelection(emptyList(), LiftTransform.NONE)
             endLift()
             onSelectionChanged()
@@ -779,6 +800,7 @@ class InfiniteInteraction(
     private fun hitsSelection(at: Pt): Boolean {
         val sel = selection() ?: return false
         if (sel.isEmpty) return false
+        sel.loneConnector?.let { return grabsConnector(it, at) }
         val tolerance = HANDLE_TOUCH_PX / viewport.zoom
         val margin = frameMargin()
         val grip = sel.rotateGrip(OverlayTessellator.GRIP_ARM_PX / viewport.zoom, margin)
@@ -797,6 +819,7 @@ class InfiniteInteraction(
      */
     private fun drawingGrabsSelection(at: Pt): Boolean {
         val sel = selection() ?: return false
+        sel.loneConnector?.let { return grabsConnector(it, at) }
         val shape = sel.items.singleOrNull() as? ShapeItem ?: return hitsSelection(at)
         val tolerance = HANDLE_TOUCH_PX / viewport.zoom
         val margin = frameMargin()
@@ -806,6 +829,11 @@ class InfiniteInteraction(
         return shape.dotNear(at, OverlayTessellator.DOT_TOUCH_PX / viewport.zoom) ||
             shape.touches(at, InteractionController.OUTLINE_GRAB / viewport.zoom)
     }
+
+    /** Whether [at] lands on lone connector [c]: one of its handles, or its line or label. */
+    private fun grabsConnector(c: ConnectorItem, at: Pt): Boolean =
+        ConnectorEdit.grab(c, at, OverlayTessellator.DOT_TOUCH_PX / viewport.zoom) != null ||
+            c.touches(at, InteractionController.OUTLINE_GRAB / viewport.zoom)
 
     /** The on-screen gap a lone shape's chrome keeps from its outline, in content pixels. */
     private fun frameMargin(): Double = OverlayTessellator.FRAME_MARGIN_PX / viewport.zoom
@@ -832,6 +860,16 @@ class InfiniteInteraction(
      */
     private fun tryGrabSelection(sel: CanvasSelection, at: Pt): Boolean {
         if (sel.isEmpty) return false
+        sel.loneConnector?.let { c ->
+            val edit = ConnectorEdit.grab(c, at, OverlayTessellator.DOT_TOUCH_PX / viewport.zoom)
+            if (edit != null) {
+                beginJoint(edit, at)
+                return true
+            }
+            if (!c.touches(at, InteractionController.OUTLINE_GRAB / viewport.zoom)) return false
+            beginMoveAt(sel, at)
+            return true
+        }
         if (tryGrabDot(sel, at)) return true
         val tolerance = HANDLE_TOUCH_PX / viewport.zoom
         val margin = frameMargin()
@@ -884,12 +922,16 @@ class InfiniteInteraction(
 
     /** Start dragging the selection from [at], the tail of every press that grabs one. */
     private fun beginMoveAt(sel: CanvasSelection, at: Pt) {
-        sel.beginTransform(carrying = true)
+        // A lone connector dragged by its line lets go of what it joined; anything else keeps it.
+        sel.beginTransform(carrying = true, pin = sel.loneConnector == null)
         moveAnchor = at
         movedBy = Pt.ZERO
         mode = CanvasPointerMode.MOVE
-        onLiftSelection(sel.items + sel.carry.items, LiftTransform.NONE)
+        onLiftSelection(liftedOf(sel), LiftTransform.NONE)
     }
+
+    /** What a move hands the renderer to offset: everything that moves whole, not what bends to stay joined. */
+    private fun liftedOf(sel: CanvasSelection): List<CanvasItem> = (sel.items + sel.carry.items).filter { !sel.follow.places(it) }
 
     /**
      * The topmost item under [content], or null. The index is queried with a slop-sized rect, but
@@ -967,7 +1009,9 @@ class InfiniteInteraction(
         val at = viewport.viewportToContent(Pt(vx, vy))
         movedBy = Pt(at.x - moveAnchor.x, at.y - moveAnchor.y)
         sel.previewMove(movedBy.x, movedBy.y)
-        onLiftSelection(sel.items + sel.carry.items, LiftTransform.shift(movedBy.x, movedBy.y))
+        val shift = Affine.translateBy(movedBy.x, movedBy.y)
+        sel.followShown(shift, shift)
+        onLiftSelection(liftedOf(sel), LiftTransform.shift(movedBy.x, movedBy.y))
         onSelectionChanged()
         requestRender()
     }
@@ -976,6 +1020,7 @@ class InfiniteInteraction(
     private fun endMove() {
         val sel = selection() ?: return
         sel.moveLive(movedBy.x, movedBy.y)
+        if (movedBy != Pt.ZERO) sel.loneConnector?.letGo()
         onLiftSelection(emptyList(), LiftTransform.NONE)
         onCommitSelection(sel.buildCommand(movedOnly = true, dx = movedBy.x, dy = movedBy.y))
         onSelectionChanged()
@@ -1037,6 +1082,8 @@ class InfiniteInteraction(
         transformPointer = at
         if (liftedTransform) {
             val swept = sel.previewRotate(at)
+            val turn = Affine.rotateAbout(sel.transformPivot ?: Pt.ZERO, swept)
+            sel.followShown(turn, turn)
             onLiftSelection(liftItems, LiftTransform.turn(sel.transformPivot ?: Pt.ZERO, swept))
         } else {
             sel.rotateLive(at)
@@ -1128,6 +1175,7 @@ class InfiniteInteraction(
         shape.restoreGeometry(base)
         if (knobIndex >= 0) shape.dragKnob(knobIndex, at) else shape.moveVertex(vertexSpot ?: return, at)
         selection()?.itemChanged(shape)
+        selection()?.followEdit()
         onSelectionChanged()
         requestRender()
     }
@@ -1147,8 +1195,12 @@ class InfiniteInteraction(
             ) {
                 lastVertexTap = null
                 shape.toFree()
-                if (shape.deleteVertex(spot)) onCommitSelection(sel?.buildCommand(movedOnly = false))
-                else vertexBefore?.let { shape.restoreGeometry(it) }
+                if (shape.deleteVertex(spot)) {
+                    sel?.followEdit()
+                    onCommitSelection(sel?.buildCommand(movedOnly = false))
+                } else {
+                    vertexBefore?.let { shape.restoreGeometry(it) }
+                }
             } else {
                 lastVertexTap = if (vertexWasEdge) null else spot
                 lastVertexTapAt = eventTime
@@ -1162,6 +1214,7 @@ class InfiniteInteraction(
         val shape = vertexShape ?: return
         vertexBefore?.let { shape.restoreGeometry(it) }
         selection()?.itemChanged(shape)
+        selection()?.unfollow()
         clearVertex()
         onSelectionChanged()
     }
@@ -1173,6 +1226,94 @@ class InfiniteInteraction(
         vertexBase = null
         vertexMoved = false
         knobIndex = -1
+    }
+
+    // --- a lone connector's own handles ---
+
+    private fun beginJoint(edit: ConnectorEdit, at: Pt) {
+        jointEdit = edit
+        jointFollow = selection()?.followOf(listOf(edit.connector), rigid = false, pin = false) ?: GlueFollow.NONE
+        jointDownAt = at
+        jointMoved = false
+        mode = CanvasPointerMode.JOINT
+        setInteractive(false, false)
+        onSelectionChanged()
+        requestRender()
+    }
+
+    private fun extendJoint(vx: Double, vy: Double) {
+        val edit = jointEdit ?: return
+        val at = viewport.viewportToContent(Pt(vx, vy))
+        // A handle is small: a press that wobbles a pixel or two is still a tap.
+        if (!jointMoved && at.distanceTo(jointDownAt) * viewport.zoom < InteractionController.LONG_PRESS_SLOP) return
+        jointMoved = true
+        val reach = OverlayTessellator.DOT_TOUCH_PX / viewport.zoom
+        val margin = routeMargin()
+        val c = edit.connector
+        val area = Glue.routeArea(c.start.at, c.end.at, margin).union(Glue.routeArea(at, at, margin))
+        edit.drag(at, itemsIn(area), reach, margin)
+        jointFollow.follow(Affine.IDENTITY)
+        connectHot = listOfNotNull(edit.hot?.point?.at)
+        selection()?.itemChanged(c)
+        jointFollow.items.forEach { selection()?.itemChanged(it) }
+        onSelectionChanged()
+        requestRender()
+    }
+
+    /** Finger up: a drag is one undo step; a tap changes nothing, and a second on a waypoint removes it. */
+    private fun endJoint(eventTime: Long) {
+        val edit = jointEdit ?: return
+        val c = edit.connector
+        val removing = !jointMoved && edit.grab == ConnectorEdit.Grab.WAYPOINT && edit.index == lastWaypointTap &&
+            eventTime - lastWaypointTapAt <= InteractionController.DOUBLE_TAP_MS
+        if (!jointMoved) {
+            edit.restore()
+            jointFollow.restore()
+            if (removing) {
+                c.removeWaypoint(edit.index)
+                jointFollow.follow(Affine.IDENTITY)
+            }
+            lastWaypointTap = if (edit.grab == ConnectorEdit.Grab.WAYPOINT && !removing) edit.index else -1
+            lastWaypointTapAt = eventTime
+        } else {
+            lastWaypointTap = -1
+        }
+        if (jointMoved || removing) {
+            val items = listOf<CanvasItem>(c) + jointFollow.items
+            val before = listOf(edit.before) + jointFollow.startSnapshots
+            onCommitSelection(selection()?.commandFor(items, before))
+        }
+        selection()?.itemChanged(c)
+        jointFollow.items.forEach { selection()?.itemChanged(it) }
+        jointEdit = null
+        jointFollow = GlueFollow.NONE
+        connectHot = emptyList()
+        onSelectionChanged()
+    }
+
+    private fun abandonJoint() {
+        val edit = jointEdit ?: return
+        edit.restore()
+        jointFollow.restore()
+        selection()?.itemChanged(edit.connector)
+        jointFollow.items.forEach { selection()?.itemChanged(it) }
+        jointEdit = null
+        jointFollow = GlueFollow.NONE
+        connectHot = emptyList()
+        onSelectionChanged()
+    }
+
+    /** The lone connector's chrome for the overlay: its ends (glued or not), middle segments, waypoints and stretch middles. */
+    fun connectorChrome(): ConnectorChrome? {
+        val sel = selection() ?: return null
+        val c = sel.loneConnector ?: return null
+        if (mode == CanvasPointerMode.MOVE) return null
+        return ConnectorChrome(
+            listOf(c.start.at to (c.start.target?.let(sel::holds) == true), c.end.at to (c.end.target?.let(sel::holds) == true)),
+            c.segmentHandles(),
+            c.waypoints,
+            c.midpointDots(),
+        )
     }
 
     // --- free polygon ---
@@ -1331,9 +1472,9 @@ class InfiniteInteraction(
      * so dense that it would mark more than [MAX_MARKS] marks none.
      */
     fun connectionMarks(): List<Pt> {
-        if (!connecting) return emptyList()
+        if (!marking) return emptyList()
         val out = ArrayList<Pt>()
-        val drawing = connectorDraft?.connector
+        val drawing = connectorDraft?.connector ?: jointEdit?.connector
         for (item in itemsIn(viewport.visibleContentRect())) {
             if (item === drawing) continue
             for (cp in Glue.points(item)) out += cp.at
@@ -1633,3 +1774,6 @@ class InfiniteInteraction(
         }
     }
 }
+
+/** What a lone selected connector shows instead of a box: its ends (glued or not), middle segments, waypoints and stretch middles. */
+class ConnectorChrome(val ends: List<Pair<Pt, Boolean>>, val segments: List<Pt>, val waypoints: List<Pt>, val midpoints: List<Pt>)
