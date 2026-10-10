@@ -267,8 +267,6 @@ class InteractionController(
     /** Segments the current stroke left behind on pages it has already walked off, so the whole
      *  crossing lifts and re-lays as one undo step. Empty for a stroke that stayed on its page. */
     private val crossedSegments = mutableListOf<Command>()
-    /** Viewport-px down point of the current stroke, for the tap-vs-drag dismiss test. */
-    private var drawDownViewport = Pt.ZERO
 
     // PAN + inertial fling
     private var lastPan = Pt.ZERO
@@ -1032,7 +1030,6 @@ class InteractionController(
         // Reaching here with a live selection means the press landed off it (on it the stylus would
         // have grabbed it): dismiss it. A bare tap that only dismissed is dropped in endDraw.
         strokeDismissedSelection = hasSelection
-        drawDownViewport = downViewport
         if (hasSelection) clearSelection()
         // Capture content-px → dp scale now, so the speed pen judges gesture speed in
         // zoom- and density-independent dp regardless of how the stroke is later viewed.
@@ -1245,14 +1242,13 @@ class InteractionController(
         // skipped and the freehand stroke is intentionally not also committed.
         val stroke = liveStroke
         val pi = strokePageIndex
-        val up = Pt(e.getX(idx).toDouble(), e.getY(idx).toDouble())
         if (stroke != null && pi != null && !stroke.isEmpty) {
             // The pen is up: rebuild with lift-time rules on (a dot-sized calligraphy stroke
             // takes the nib's broad face) before the stroke is committed or held for fading.
             stroke.finished = true
             when {
                 // A bare tap whose only job was to dismiss the selection: drop the dot it would leave.
-                strokeDismissedSelection && up.distanceTo(drawDownViewport) <= TAP_SLOP -> Unit
+                strokeDismissedSelection && tapCandidate -> Unit
                 wandMode && stroke.tool.isStroke -> {
                     // Disappearing ink: held ephemerally, never committed to the model/undo/cache/save.
                     // A stroke drawn mid-fade cancels the fade and re-solidifies the whole held batch.
