@@ -3,6 +3,7 @@ package com.xnotes.platform
 import android.text.StaticLayout
 import android.text.TextPaint
 import com.xnotes.core.pal.FontSpec
+import com.xnotes.core.pal.TextFlags
 
 /**
  * Shared text layout so measuring and drawing produce identical results
@@ -23,10 +24,10 @@ object AndroidText {
             color = argb
         }
 
-    fun layout(text: CharSequence, widthPx: Int, paint: TextPaint): StaticLayout =
+    fun layout(text: CharSequence, widthPx: Int, paint: TextPaint, flags: TextFlags = TextFlags()): StaticLayout =
         StaticLayout.Builder
             .obtain(text, 0, text.length, paint, widthPx.coerceAtLeast(1))
-            .setAlignment(android.text.Layout.Alignment.ALIGN_NORMAL)
+            .setAlignment(if (flags.alignLeft) android.text.Layout.Alignment.ALIGN_NORMAL else android.text.Layout.Alignment.ALIGN_CENTER)
             .setIncludePad(false)
             .build()
 

@@ -17,6 +17,9 @@ import com.xnotes.core.model.PageSize
 import com.xnotes.core.model.PageStyle
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.pal.FontFace
+import com.xnotes.core.model.TextStyle
+import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.model.TextItem
 import com.xnotes.core.stroke.Sample
@@ -814,6 +817,29 @@ class DocumentCodecTest {
             assertEquals(1650.0, page.height, 1e-9)
             assertNull(page.pdfPage)
         }
+    }
+
+    @Test fun aShapesLabelRoundTripsAndOnlyLabelledShapesWriteOne() {
+        val doc = Document(dpi = 150)
+        val page = Page(1240.0, 1754.0)
+        val box = ShapeItem(ShapeKind.RECTANGLE, Pt(10.0, 20.0), Pt(110.0, 70.0), Rgba(1, 2, 3, 255), 2.0)
+        box.label = ShapeLabel("Start\nhere", TextStyle(Rgba(9, 8, 7, 255), 18.0, FontFace.SERIF), FakeTextMeasurer())
+        val mono = ShapeItem(ShapeKind.ELLIPSE, Pt(10.0, 20.0), Pt(110.0, 70.0), Rgba(1, 2, 3, 255), 2.0)
+        mono.label = ShapeLabel("x", TextStyle(Rgba(1, 2, 3, 255), 13.0, TextItem.DEFAULT_FACE), FakeTextMeasurer())
+        page.items.add(box)
+        page.items.add(mono)
+        page.items.add(ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(5.0, 5.0), Rgba(1, 2, 3, 255)))
+        doc.pages.add(page)
+        val out = ByteArrayOutputStream()
+        codec.write(doc, out)
+        val manifest = manifestOf(out.toByteArray())
+        assertEquals("only the two labelled shapes", 2, Regex("\"label\"").findAll(manifest).count())
+        assertEquals("the default face goes unwritten", 1, Regex("\"font_face\"").findAll(manifest).count())
+        val back = roundTrip(doc).pages[0].items.map { it as ShapeItem }
+        assertEquals("Start\nhere", back[0].label!!.text)
+        assertEquals(TextStyle(Rgba(9, 8, 7, 255), 18.0, FontFace.SERIF), back[0].label!!.style)
+        assertEquals(TextItem.DEFAULT_FACE, back[1].label!!.style.face)
+        assertNull(back[2].label)
     }
 
     @Test fun turnedShapesRoundTripInANote() {

@@ -22,6 +22,7 @@ import com.xnotes.core.model.Page
 import com.xnotes.core.model.PageInsets
 import com.xnotes.core.model.PageSize
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.insets
 import com.xnotes.core.pal.Mark
 import com.xnotes.core.pal.Renderer
@@ -416,6 +417,7 @@ object PdfExporter {
                     renderer.drawItemBitmap(raster.bmp, raster.rect, raster.multiply)
                     raster.bmp.recycle()
                 }
+                if (item is ShapeItem) item.paintLabel(renderer)
             } else {
                 item.paint(renderer)
             }

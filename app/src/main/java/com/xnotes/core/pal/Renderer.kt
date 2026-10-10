@@ -229,6 +229,14 @@ interface Renderer {
     fun drawText(text: String, rect: Rect, font: FontSpec, color: Rgba, flags: TextFlags = TextFlags())
 
     /**
+     * [drawText] turned [angle] radians clockwise about [rect]'s centre: a shape's label, which
+     * turns with its shape. Laid-out text is the other thing that cannot turn by moving points.
+     * The default draws it upright, for backends that never meet a turned shape.
+     */
+    fun drawTextTurned(text: String, rect: Rect, font: FontSpec, color: Rgba, flags: TextFlags, angle: Double) =
+        drawText(text, rect, font, color, flags)
+
+    /**
      * Draw a single pre-positioned line fragment with its left edge at [x] and its
      * baseline at [baseline] (content space, no wrapping). The flow-text painter
      * places these from [TextMeasurer.advances] prefix sums, so the two must share

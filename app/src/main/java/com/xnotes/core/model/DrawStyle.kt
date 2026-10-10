@@ -21,6 +21,11 @@ data class DrawStyle(val color: Rgba, val width: Double) {
                 item.fillRgba = item.fillRgba?.let { f ->
                     if (f.r == item.strokeRgba.r && f.g == item.strokeRgba.g && f.b == item.strokeRgba.b) color.copy(a = f.a) else f
                 }
+                // So does a label in the outline's colour.
+                item.label = item.label?.let { l ->
+                    val c = l.style.rgba
+                    if (c.r == item.strokeRgba.r && c.g == item.strokeRgba.g && c.b == item.strokeRgba.b) l.withStyle(l.style.copy(rgba = color.copy(a = c.a))) else l
+                }
                 item.strokeRgba = color
                 item.strokeWidth = width
             }

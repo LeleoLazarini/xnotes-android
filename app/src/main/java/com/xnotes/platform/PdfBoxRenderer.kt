@@ -315,8 +315,9 @@ internal class PdfBoxRenderer(
      */
     override fun drawText(text: String, rect: Rect, font: FontSpec, color: Rgba, flags: TextFlags) {
         if (text.isEmpty()) return
-        val layout = AndroidText.layout(text, rect.w.toInt(), AndroidText.textPaint(font))
-        val links = LinkFinder.find(text)
+        val layout = AndroidText.layout(text, rect.w.toInt(), AndroidText.textPaint(font), flags)
+        // A link's clickable area is an upright rect in the page's own space, so turned text goes without.
+        val links = if (turning) emptyList() else LinkFinder.find(text)
         // Tagged, a word stops where a link starts or ends, so the link's text is an element of its own.
         fun linkAt(k: Int): Int = if (tagger == null) -1 else links.indexOfFirst { k >= it.start && k < it.end }
         for (line in 0 until layout.lineCount) {
@@ -362,6 +363,28 @@ internal class PdfBoxRenderer(
             }
         }
         tagger?.boxLink = -1
+    }
+
+    /** True inside [drawTextTurned], whose text the page's upright annotations cannot follow. */
+    private var turning = false
+
+    // The turn goes into the stream as a cm about the rect's centre, so the text stays real text.
+    override fun drawTextTurned(text: String, rect: Rect, font: FontSpec, color: Rgba, flags: TextFlags, angle: Double) {
+        if (angle == 0.0) return drawText(text, rect, font, color, flags)
+        if (text.isEmpty()) return
+        val cx = ux(rect.centerX).toDouble()
+        val cy = uy(rect.centerY).toDouble()
+        val co = cos(angle)
+        val sn = sin(angle)
+        save()
+        cs.transform(Matrix(co.toFloat(), (-sn).toFloat(), sn.toFloat(), co.toFloat(), (cx - co * cx - sn * cy).toFloat(), (cy + sn * cx - co * cy).toFloat()))
+        turning = true
+        try {
+            drawText(text, rect, font, color, flags)
+        } finally {
+            turning = false
+            restore()
+        }
     }
 
     override val writesText: Boolean get() = true

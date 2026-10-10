@@ -14,6 +14,7 @@ import com.xnotes.core.infinite.isFinite
 import com.xnotes.core.model.CanvasItem
 import com.xnotes.core.model.PagePattern
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.paintPagePattern
 import com.xnotes.core.pal.Mark
 import com.xnotes.core.pal.Renderer
@@ -116,6 +117,7 @@ object CanvasPdfExporter {
                     r.drawItemBitmap(raster.bmp, raster.rect, raster.multiply)
                     raster.bmp.recycle()
                 }
+                if (item is ShapeItem) item.paintLabel(r)
             } else {
                 item.paint(r)
             }

@@ -9,6 +9,7 @@ import com.xnotes.core.model.Page
 import com.xnotes.core.model.Resizable
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.TextItem
 import com.xnotes.core.model.TextMarkup
 import com.xnotes.core.model.TextStyle
@@ -213,6 +214,23 @@ class RestyleText(
     override fun undo() = oldStyle.applyTo(item)
 
     override fun touched(locate: (CanvasItem) -> Page?) = pagedItems(listOf(item), locate)
+}
+
+/** Type, retype, restyle or clear a shape's label: labels are immutable, so the two sides are kept whole. */
+class EditLabel(
+    private val shape: ShapeItem,
+    private val oldLabel: ShapeLabel?,
+    private val newLabel: ShapeLabel?,
+) : Command {
+    override fun redo() {
+        shape.label = newLabel
+    }
+
+    override fun undo() {
+        shape.label = oldLabel
+    }
+
+    override fun touched(locate: (CanvasItem) -> Page?) = pagedItems(listOf(shape), locate)
 }
 
 /**

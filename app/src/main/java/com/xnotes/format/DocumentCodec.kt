@@ -16,8 +16,10 @@ import com.xnotes.core.model.PageMargins
 import com.xnotes.core.model.PageStyle
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.model.TextItem
+import com.xnotes.core.model.TextStyle
 import com.xnotes.core.pal.FontFace
 import com.xnotes.core.pal.ImageCodec
 import com.xnotes.core.pal.TextMeasurer
@@ -427,6 +429,16 @@ class DocumentCodec(
             j.name("dash_length").value(s.dashLength)
             j.name("dash_gap").value(s.dashGap)
         }
+        // A label is additive too: written only on a labelled shape.
+        s.label?.takeIf { it.text.isNotEmpty() }?.let { l ->
+            j.name("label").beginObject()
+            j.name("text").value(l.text)
+            j.name("rgba")
+            writeRgba(j, l.style.rgba)
+            j.name("point_size").value(l.style.pointSize)
+            if (l.style.face != TextItem.DEFAULT_FACE) j.name("font_face").value(l.style.face.id)
+            j.endObject()
+        }
         if (s.locked) j.name("locked").value(true)
         j.endObject()
     }
@@ -817,6 +829,7 @@ class DocumentCodec(
         var n = 0
         var headStart: String? = null
         var headEnd: String? = null
+        var label: LabelScratch? = null
         var start: Pt? = null
         var end: Pt? = null
         var strokeRgba: Rgba? = null
@@ -882,6 +895,7 @@ class DocumentCodec(
                 "n" -> s.n = intOr(p, 0)
                 "head_start" -> s.headStart = stringOrNull(p)
                 "head_end" -> s.headEnd = stringOrNull(p)
+                "label" -> s.label = parseLabel(p)
                 "start" -> s.start = ptOrNull(p)
                 "end" -> s.end = ptOrNull(p)
                 "stroke_rgba" -> s.strokeRgba = rgbaOrNull(p)
@@ -971,7 +985,37 @@ class DocumentCodec(
         s.adj?.let { shape.adj = it }
         s.headStart?.let { shape.headStart = Head.fromId(it) }
         s.headEnd?.let { shape.headEnd = Head.fromId(it) }
+        s.label?.takeIf { it.text.isNotEmpty() }?.let { l ->
+            shape.label = ShapeLabel(l.text, TextStyle(l.rgba ?: shape.strokeRgba, l.pointSize, FontFace.fromId(l.fontFace)), textMeasurer)
+        }
         return shape
+    }
+
+    private class LabelScratch {
+        var text = ""
+        var rgba: Rgba? = null
+        var pointSize = TextItem.DEFAULT_POINT_SIZE
+        var fontFace = ""
+    }
+
+    private fun parseLabel(p: JsonPull): LabelScratch? {
+        if (p.peek() != JsonPull.Token.BEGIN_OBJECT) {
+            p.skipValue()
+            return null
+        }
+        val l = LabelScratch()
+        p.beginObject()
+        while (p.hasNext()) {
+            when (p.nextName()) {
+                "text" -> l.text = stringOr(p, "")
+                "rgba" -> l.rgba = rgbaOrNull(p)
+                "point_size" -> l.pointSize = doubleOr(p, TextItem.DEFAULT_POINT_SIZE)
+                "font_face" -> l.fontFace = stringOr(p, "")
+                else -> p.skipValue()
+            }
+        }
+        p.endObject()
+        return l
     }
 
     private fun buildDrawnShape(s: ItemScratch): ShapeItem {

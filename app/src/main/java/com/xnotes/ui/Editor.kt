@@ -337,7 +337,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     private val codec = DocumentCodec(imageCodec, textMeasurer) { doc, pdfPage ->
         pdfSource?.takeIf { doc.pdfFile != null && it.file == doc.pdfFile }?.pageGeometry(pdfPage)
     }
-    private val canvasCodec = com.xnotes.format.CanvasCodec(imageCodec)
+    private val canvasCodec = com.xnotes.format.CanvasCodec(imageCodec, textMeasurer)
 
     /** One flow layout + snapshot: repainted from cache threads, so only the published frame is read. */
     private class PublishedFlow(val frame: FlowFrame, val indexOf: Map<Page, Int>)

@@ -5,6 +5,7 @@ import com.xnotes.core.geometry.Geometry
 import com.xnotes.core.geometry.Obb
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
+import com.xnotes.core.pal.Mark
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.Renderer
 import com.xnotes.core.shapes.EditDot
@@ -74,6 +75,13 @@ class ShapeItem(
     override val kind = KIND
     override val resizable = true
     override var locked = false
+
+    /** The typed label, centred in the kind's text rect and turning with the shape; null for none. */
+    var label: ShapeLabel? = null
+
+    /** True while the label is being typed: the editor shows it, so the shape draws without. Never saved. */
+    @Volatile
+    var labelHidden = false
 
     /** Normalized AABB of the two drag points: the shape's frame before [rotation] turns it. */
     val box: Rect get() = Rect.fromPoints(start, end)
@@ -154,11 +162,51 @@ class ShapeItem(
     }
 
     override fun paint(r: Renderer) {
+        paintBody(r)
+        paintLabel(r)
+    }
+
+    /** Everything but the label: fills, then the outline, glowing when neon. */
+    fun paintBody(r: Renderer) {
         val paths = paths()
         if (neon) return paintNeon(r, paths)
         ShapePainter.fill(r, paths, fillRgba, strokeRgba)
         ShapePainter.stroke(r, paths, pen())
     }
+
+    /** The label set in [labelRect] and turned with the shape, as text a PDF reader can select. */
+    fun paintLabel(r: Renderer) {
+        if (labelHidden) return
+        val l = label ?: return
+        val rect = labelRect() ?: return
+        val c = toPage(rect.center)
+        val placed = Rect(c.x - rect.w / 2.0, c.y - rect.h / 2.0, rect.w, rect.h)
+        if (r.writesText) r.beginMark(Mark.TextBox(Rect.bounding(labelCorners())))
+        r.drawTextTurned(l.text, placed, l.font, l.style.rgba, ShapeLabel.FLAGS, rotation)
+        if (r.writesText) r.endMark()
+    }
+
+    /**
+     * Where the label's lines set, in the unturned frame: as wide as the kind's text rect (never
+     * under [ShapeLabel.MIN_WIDTH_LINES] lines' height), as tall as they wrap, centred on the rect
+     * and spilling past it evenly when long. Null without a label.
+     */
+    fun labelRect(): Rect? {
+        val l = label?.takeIf { it.text.isNotEmpty() } ?: return null
+        val t = localGeometry().textRect
+        val w = max(t.w, l.lineHeight * ShapeLabel.MIN_WIDTH_LINES)
+        val h = l.height(w)
+        return Rect(t.centerX - w / 2.0, t.centerY - h / 2.0, w, h)
+    }
+
+    /** The label's four corners on the page, turned with the shape; empty without a label. */
+    fun labelCorners(): List<Pt> {
+        val r = labelRect() ?: return emptyList()
+        return listOf(r.topLeft, Pt(r.right, r.top), Pt(r.right, r.bottom), Pt(r.left, r.bottom)).map(::toPage)
+    }
+
+    /** True when page point [p] lands on the label's lines. */
+    fun labelContains(p: Pt): Boolean = labelRect()?.contains(toLocal(p)) == true
 
     /**
      * Neon: the outline as a glowing glass tube — a blurred ink-colour **halo**
@@ -199,8 +247,9 @@ class ShapeItem(
 
     override fun bounds(): Rect {
         val pad = strokeWidth / 2.0 + 1.0
-        if (shape.isEndpointShape && !hasHeads()) return Rect.fromPoints(start, end).outset(pad)
-        return outlineBounds().outset(pad)
+        val own = if (shape.isEndpointShape && !hasHeads()) Rect.fromPoints(start, end).outset(pad) else outlineBounds().outset(pad)
+        val corners = labelCorners()
+        return if (corners.isEmpty()) own else own.union(Rect.bounding(corners))
     }
 
     /**
@@ -339,16 +388,16 @@ class ShapeItem(
         end = Pt(end.x + dx, end.y + dy)
     }
 
-    override fun contains(p: Pt): Boolean = hits(toLocal(p), max(strokeWidth / 2.0, HIT_TOLERANCE))
+    override fun contains(p: Pt): Boolean = hits(toLocal(p), max(strokeWidth / 2.0, HIT_TOLERANCE)) || labelContains(p)
 
     override fun centroid(): Pt = bounds().center
 
     /**
      * True when page point [p] lands on the shape itself: within [tolerance] of a stroked edge (or
-     * half the outline's width, if wider), or anywhere in a fill. The empty middle of an unfilled
-     * shape is not the shape, so a press there can start a new one inside it.
+     * half the outline's width, if wider), anywhere in a fill, or on its label. The empty middle of
+     * an unfilled shape is not the shape, so a press there can start a new one inside it.
      */
-    fun touches(p: Pt, tolerance: Double): Boolean = hits(toLocal(p), max(strokeWidth / 2.0, tolerance))
+    fun touches(p: Pt, tolerance: Double): Boolean = hits(toLocal(p), max(strokeWidth / 2.0, tolerance)) || labelContains(p)
 
     /** True if an eraser circle of [radius] at (cx,cy) touches the shape's geometry. */
     override fun intersectsCircle(cx: Double, cy: Double, radius: Double): Boolean {
@@ -613,8 +662,8 @@ class ShapeItem(
         var hh = h
         var a = normalizeTurn(turn)
         val quarters = round(a / (PI / 2.0))
-        // A rectangle or ellipse turned a whole number of quarters is just an upright one.
-        val symmetric = shape == ShapeKind.RECTANGLE || shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE
+        // A rectangle or ellipse turned a whole number of quarters is just an upright one, unless its label turns too.
+        val symmetric = label == null && (shape == ShapeKind.RECTANGLE || shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE)
         if (symmetric && abs(a - quarters * PI / 2.0) < TURN_SNAP) {
             if (quarters.toInt() % 2 != 0) {
                 ww = h
@@ -633,7 +682,8 @@ class ShapeItem(
         if (contours.isEmpty()) return
         var a = normalizeTurn(turn)
         val quarters = round(a / (PI / 2.0))
-        if (abs(a - quarters * PI / 2.0) < TURN_SNAP) a = 0.0 // bounds read the same either way
+        // The bounds read the same either way, but a label turns with its frame.
+        if (abs(a - quarters * PI / 2.0) < TURN_SNAP && (label == null || quarters == 0.0)) a = 0.0
         val cs = cos(a)
         val sn = sin(a)
         val unturned = FreePath.map(contours) { Pt(it.x * cs + it.y * sn, -it.x * sn + it.y * cs) }

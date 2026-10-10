@@ -12,7 +12,7 @@ class AndroidTextMeasurer : TextMeasurer {
     override fun measure(text: String, font: FontSpec, wrapWidth: Double, flags: TextFlags): Rect {
         val probe = text.ifEmpty { " " }
         val paint = AndroidText.textPaint(font)
-        val layout = AndroidText.layout(probe, wrapWidth.toInt(), paint)
+        val layout = AndroidText.layout(probe, wrapWidth.toInt(), paint, flags)
         // Width is fixed to the wrap width; height follows the text.
         return Rect(0.0, 0.0, wrapWidth, layout.height.toDouble())
     }

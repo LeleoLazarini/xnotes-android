@@ -44,7 +44,8 @@ internal object PdfItemRaster {
     /** Render a single item, cropped to its [cover]-clamped paint bounds, into a transparent bitmap. */
     fun item(item: CanvasItem, cover: Rect): Raster? {
         val multiply = item is Stroke && item.tool == Tool.HIGHLIGHTER
-        return region(item.paintBounds(), cover, multiply) { r, _ -> item.paint(r) }
+        // A shape's label stays out of its picture: the exporter writes it on top as real text.
+        return region(item.paintBounds(), cover, multiply) { r, _ -> if (item is ShapeItem) item.paintBody(r) else item.paint(r) }
     }
 
     /**

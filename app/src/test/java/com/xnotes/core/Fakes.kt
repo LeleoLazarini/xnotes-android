@@ -89,6 +89,13 @@ class FakeRenderer : Renderer {
     }
     override fun drawImage(image: ImageData, dest: Rect, orientation: Int, angle: Double) { ops += "drawImage" }
     override fun drawText(text: String, rect: Rect, font: FontSpec, color: Rgba, flags: TextFlags) { ops += "drawText" }
+    override fun drawTextTurned(text: String, rect: Rect, font: FontSpec, color: Rgba, flags: TextFlags, angle: Double) {
+        ops += "drawTextTurned:$text@$angle"
+        textRects += rect
+    }
+
+    /** Where every turned text was set, centred on the point its angle turns it about. */
+    val textRects = mutableListOf<Rect>()
     override fun drawTextRun(text: String, x: Double, baseline: Double, font: FontSpec, color: Rgba) {
         ops += "drawTextRun:$text@$x,$baseline"
     }

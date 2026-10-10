@@ -1,6 +1,7 @@
 package com.xnotes.format
 
 import com.xnotes.core.FakeImageCodec
+import com.xnotes.core.FakeTextMeasurer
 import com.xnotes.core.geometry.Affine
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
@@ -12,6 +13,9 @@ import com.xnotes.core.model.ImageItem
 import com.xnotes.core.model.PagePattern
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
+import com.xnotes.core.pal.FontFace
+import com.xnotes.core.model.TextStyle
+import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.stroke.Sample
 import com.xnotes.core.shapes.ShapeKind
@@ -36,7 +40,7 @@ import java.util.zip.ZipOutputStream
 
 class CanvasCodecTest {
 
-    private val codec = CanvasCodec(FakeImageCodec())
+    private val codec = CanvasCodec(FakeImageCodec(), FakeTextMeasurer())
 
     private fun imageFile(bytes: ByteArray = byteArrayOf(1, 2, 3, 4)): File =
         File.createTempFile("img", null).apply { writeBytes(bytes); deleteOnExit() }
@@ -188,6 +192,19 @@ class CanvasCodecTest {
         assertTrue(!back[1].locked)
         assertTrue(back[2].locked)
         assertTrue(back[3].locked)
+    }
+
+    @Test fun aShapesLabelRoundTripsOnTheCanvas() {
+        val doc = InfiniteDocument()
+        val box = ShapeItem(ShapeKind.DIAMOND, Pt(0.0, 0.0), Pt(90.0, 60.0), Rgba(4, 5, 6, 255), 2.0)
+        box.label = ShapeLabel("Yes?", TextStyle(Rgba(4, 5, 6, 200), 22.0, FontFace.HAND), FakeTextMeasurer())
+        doc.add(box)
+        doc.add(ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(9.0, 9.0), Rgba(1, 2, 3, 255)))
+        val back = roundTrip(doc).items.map { it as ShapeItem }
+        assertEquals("Yes?", back[0].label!!.text)
+        assertEquals(TextStyle(Rgba(4, 5, 6, 200), 22.0, FontFace.HAND), back[0].label!!.style)
+        assertEquals(null, back[1].label)
+        assertEquals(1, Regex("\"label\"").findAll(manifestText(doc)).count())
     }
 
     @Test fun loadedItemsAreIndexedAndOrdered() {

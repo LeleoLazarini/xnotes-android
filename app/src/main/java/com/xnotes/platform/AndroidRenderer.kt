@@ -378,10 +378,18 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
     override fun drawText(text: String, rect: Rect, font: FontSpec, color: Rgba, flags: TextFlags) {
         if (text.isEmpty()) return
         val paint = AndroidText.textPaint(font, color.toArgb())
-        val layout = AndroidText.layout(text, rect.w.toInt(), paint)
+        val layout = AndroidText.layout(text, rect.w.toInt(), paint, flags)
         canvas.save()
         canvas.translate(rect.left.toFloat(), rect.top.toFloat())
         layout.draw(canvas)
+        canvas.restore()
+    }
+
+    override fun drawTextTurned(text: String, rect: Rect, font: FontSpec, color: Rgba, flags: TextFlags, angle: Double) {
+        if (angle == 0.0) return drawText(text, rect, font, color, flags)
+        canvas.save()
+        canvas.rotate(Math.toDegrees(angle).toFloat(), rect.centerX.toFloat(), rect.centerY.toFloat())
+        drawText(text, rect, font, color, flags)
         canvas.restore()
     }
 
