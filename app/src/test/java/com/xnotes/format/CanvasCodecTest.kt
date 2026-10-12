@@ -354,6 +354,17 @@ class CanvasCodecTest {
         assertArrayEquals(byteArrayOf(2, 2), second.image.file.readBytes())
     }
 
+    @Test fun aMirroredImageRoundTrips() {
+        val doc = InfiniteDocument()
+        doc.add(ImageItem(ImageData(imageFile(), 8, 8), Rect(0.0, 0.0, 8.0, 8.0), orientation = 90, flip = Flip.XY))
+        doc.add(ImageItem(ImageData(imageFile(), 8, 8), Rect(9.0, 0.0, 8.0, 8.0)))
+        assertEquals("only the mirrored one says so", 1, Regex("\"flip\"").findAll(manifestText(doc)).count())
+        val back = roundTrip(doc).items.map { it as ImageItem }
+        assertEquals(Flip.XY, back[0].flip)
+        assertEquals(90, back[0].orientation)
+        assertEquals(Flip.NONE, back[1].flip)
+    }
+
     @Test fun animageWhoseAssetIsMissingIsDroppedWithoutShiftingTheRest() {
         val doc = InfiniteDocument()
         doc.add(ImageItem(ImageData(imageFile(), 8, 8), Rect(0.0, 0.0, 8.0, 8.0)))

@@ -374,6 +374,7 @@ class DocumentCodec(
         // Additive fields: written only when turned, so older readers stay compatible.
         if (item.orientation != 0) j.name("orientation").value(item.orientation)
         if (item.angle != 0.0) j.name("angle").value(item.angle)
+        if (item.flip != Flip.NONE) j.name("flip").value(item.flip.id)
         if (item.locked) j.name("locked").value(true)
         j.endObject()
     }
@@ -752,6 +753,7 @@ class DocumentCodec(
         val srcH: Int,
         val orientation: Int,
         val angle: Double,
+        val flip: Flip,
         val locked: Boolean,
         val id: Int?,
     )
@@ -1033,7 +1035,7 @@ class DocumentCodec(
                     pending.add(
                         PendingImage(
                             items.size + pending.size, asset, s.rect, s.srcW, s.srcH,
-                            s.orientation, s.angle, s.locked, s.id,
+                            s.orientation, s.angle, Flip.fromId(s.flip), s.locked, s.id,
                         ),
                     )
                 }
@@ -1405,7 +1407,7 @@ class DocumentCodec(
             h = probed.height
         }
         val rect = spec.rect ?: Rect(0.0, 0.0, w.toDouble(), h.toDouble())
-        return ImageItem(ImageData(file, w, h), rect, spec.orientation, spec.angle)
+        return ImageItem(ImageData(file, w, h), rect, spec.orientation, spec.angle, spec.flip)
             .also { it.locked = spec.locked }
     }
 

@@ -512,6 +512,16 @@ class DocumentCodecTest {
         assertEquals(100, (loaded.pages[0].items[0] as Stroke).samples.size)
     }
 
+    @Test fun aMirroredImageRoundTripsInANote() {
+        val doc = Document(dpi = 150)
+        val page = Page(200.0, 200.0)
+        page.items.add(ImageItem(ImageData(imageFile(), 8, 8), Rect(0.0, 0.0, 8.0, 8.0), angle = 0.5, flip = Flip.Y))
+        doc.pages.add(page)
+        val back = roundTrip(doc).pages[0].items.single() as ImageItem
+        assertEquals(Flip.Y, back.flip)
+        assertEquals(0.5, back.angle, 1e-12)
+    }
+
     @Test fun imageKeepsItsZOrderSlot() {
         // Image files stream out of the zip after the manifest, so image items are
         // inserted late; they must still land between the items they were drawn between.

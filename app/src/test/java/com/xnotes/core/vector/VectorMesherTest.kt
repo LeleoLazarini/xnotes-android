@@ -187,6 +187,25 @@ class VectorMesherTest {
     private fun blue(argb: Int) = argb and 0xFF
 
     @Test
+    fun `a mirrored placement mirrors every vertex about the box`() {
+        val body = """<path d="M0 0 L100 0 L0 100 Z" fill="#000000"/>"""
+        val rect = Rect(200.0, 100.0, 60.0, 40.0)
+        val svg = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">$body</svg>"""
+        val scene = SvgReader.parse(svg.toByteArray())
+        val plain = VectorMesher.mesh(scene, rect, 90, 0.3, tolerance)
+        val flipped = VectorMesher.mesh(scene, rect, 90, 0.3, tolerance, com.xnotes.core.geometry.Flip.X)
+        fun pts(parts: List<MeshPart>) = parts.flatMap { part -> (0 until part.mesh.vertexCount).map { com.xnotes.core.geometry.Pt(part.mesh.positions[2 * it], part.mesh.positions[2 * it + 1]) } }
+        // Mirrored inside the box, then turned with it: undo the turn, mirror, turn back.
+        val c = rect.center
+        fun mirror(p: com.xnotes.core.geometry.Pt): com.xnotes.core.geometry.Pt {
+            val back = com.xnotes.core.geometry.Affine.rotateAbout(c, -0.3).apply(p)
+            return com.xnotes.core.geometry.Affine.rotateAbout(c, 0.3).apply(com.xnotes.core.geometry.Pt(2 * c.x - back.x, back.y))
+        }
+        val got = pts(flipped)
+        for (p in pts(plain).map(::mirror)) assertTrue("missing $p", got.any { it.distanceTo(p) < 1e-6 })
+    }
+
+    @Test
     fun `a linear gradient runs across the fill`() {
         val parts = mesh(
             """<defs><linearGradient id="g"><stop offset="0" stop-color="#ff0000"/>

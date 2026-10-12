@@ -1,6 +1,7 @@
 package com.xnotes.core.model
 
 import com.xnotes.core.geometry.Affine
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.pal.Renderer
@@ -14,7 +15,7 @@ import kotlin.math.sin
  * A turn is stored, never baked: ink and shapes rotate by moving their own points, but pixels
  * cannot be moved without resampling them, so the rotate handle only advances [angle] and the
  * renderer places the bitmap turned. [rect] therefore stays the image's own upright box, and
- * [bounds] is the box that box sweeps out once turned.
+ * [bounds] is the box that box sweeps out once turned. A mirror is stored the same way, as [flip].
  */
 class ImageItem(
     var image: ImageData,
@@ -22,13 +23,15 @@ class ImageItem(
     var orientation: Int = 0,
     /** Free rotation about [rect]'s centre, radians clockwise. */
     var angle: Double = 0.0,
+    /** How the picture is mirrored in [rect], after [orientation] turns it and before [angle] does. */
+    var flip: Flip = Flip.NONE,
 ) : CanvasItem, Resizable {
 
     override val kind = KIND
     override val resizable = true
     override var locked = false
 
-    override fun paint(r: Renderer) = r.drawImage(image, rect, orientation, angle)
+    override fun paint(r: Renderer) = r.drawImage(image, rect, orientation, angle, flip)
 
     override fun bounds(): Rect = if (angle == 0.0) rect else Rect.bounding(corners())
 
@@ -75,26 +78,34 @@ class ImageItem(
         if (handle is RectHandle) rect = handle.rect
     }
 
-    override fun snapshotGeometry(): GeometrySnapshot = ImageSnapshot(rect, angle)
+    override fun snapshotGeometry(): GeometrySnapshot = ImageSnapshot(rect, angle, flip)
 
     override fun restoreGeometry(snap: GeometrySnapshot) {
         if (snap is ImageSnapshot) {
             rect = snap.rect
             angle = snap.angle
+            flip = snap.flip
         }
     }
 
     /**
      * Scale the upright box about its mapped centre and add the transform's own turn to [angle].
      * The scale factors are the world axes' — an image already turned is stretched along its own
-     * axes rather than sheared, since a bitmap has no shear to be drawn with.
+     * axes rather than sheared, since a bitmap has no shear to be drawn with. A mirror flips the
+     * picture in its box and turns the box the other way.
      */
     override fun applyTransform(t: Affine) {
         val c = t.apply(rect.center)
         val w = rect.w * t.scaleX
         val h = rect.h * t.scaleY
         rect = Rect(c.x - w / 2.0, c.y - h / 2.0, w, h)
-        angle += t.rotationAngle
+        if (t.determinant >= 0.0) {
+            angle += t.rotationAngle
+            return
+        }
+        val (turn, across) = Flip.across(t, angle)
+        angle = turn
+        flip = flip.toggled(across)
     }
 
     companion object {
@@ -103,4 +114,4 @@ class ImageItem(
 }
 
 /** Snapshot of an image's transformable geometry. */
-private data class ImageSnapshot(val rect: Rect, val angle: Double) : GeometrySnapshot
+private data class ImageSnapshot(val rect: Rect, val angle: Double, val flip: Flip) : GeometrySnapshot

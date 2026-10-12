@@ -1,5 +1,6 @@
 package com.xnotes.core
 
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.ImageData
@@ -88,7 +89,7 @@ class FakeRenderer : Renderer {
         ops += "drawRaster"
         rasterDests += dest
     }
-    override fun drawImage(image: ImageData, dest: Rect, orientation: Int, angle: Double) { ops += "drawImage" }
+    override fun drawImage(image: ImageData, dest: Rect, orientation: Int, angle: Double, flip: Flip) { ops += "drawImage" }
     override fun drawText(text: String, rect: Rect, font: FontSpec, color: Rgba, flags: TextFlags) { ops += "drawText" }
     override fun drawTextTurned(text: String, rect: Rect, font: FontSpec, color: Rgba, flags: TextFlags, angle: Double) {
         ops += "drawTextTurned:$text@$angle"

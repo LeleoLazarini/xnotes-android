@@ -547,15 +547,9 @@ class ShapeItem(
         when {
             isFree -> refit(FreePath.map(FreePath.place(path.orEmpty(), b)) { t.apply(toPage(it)) }, uprightTurn(ux, mirrors))
             square -> {
-                // A mirror is the frame flipped left to right or upside down, then turned; of the
-                // two, the one that leaves the frame (and so its label) nearer upright.
-                var turn = atan2(uy.y, uy.x) - PI / 2.0
-                var across = Flip.X
-                if (mirrors && abs(normalizeTurn(turn)) > PI / 2.0 + TURN_SNAP) {
-                    turn = atan2(ux.y, ux.x)
-                    across = Flip.Y
-                }
-                if (mirrors) flip = flip.toggled(across.and(shape.flips))
+                val (turn, across) = if (mirrors) Flip.across(t, rotation) else atan2(uy.y, uy.x) - PI / 2.0 to Flip.NONE
+                // A kind symmetric along that axis looks the same either way, so it carries no flip.
+                flip = flip.toggled(across.and(shape.flips))
                 setFrame(t.apply(b.center), ux.length() * b.w, uy.length() * b.h, turn)
             }
             !square && (shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE) -> {

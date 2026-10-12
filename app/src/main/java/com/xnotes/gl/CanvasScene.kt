@@ -659,8 +659,11 @@ class CanvasScene(private val store: GeometryStore = GeometryStore()) : GlScene 
         val texture = textures.textureFor(image.image, onScreenEdge, decodeOn)
         if (texture == 0) return
         val corners = FloatArray(8)
-        val xs = doubleArrayOf(rect.left, rect.right, rect.left, rect.right)
-        val ys = doubleArrayOf(rect.top, rect.top, rect.bottom, rect.bottom)
+        // A mirrored picture lays each corner's texels on the opposite corner.
+        val (l, r) = if (image.flip.x) rect.right to rect.left else rect.left to rect.right
+        val (t, b) = if (image.flip.y) rect.bottom to rect.top else rect.top to rect.bottom
+        val xs = doubleArrayOf(l, r, l, r)
+        val ys = doubleArrayOf(t, t, b, b)
         val turn = image.angle
         val co = kotlin.math.cos(turn)
         val sn = kotlin.math.sin(turn)

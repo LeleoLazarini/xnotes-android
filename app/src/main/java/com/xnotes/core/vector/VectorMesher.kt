@@ -1,5 +1,6 @@
 package com.xnotes.core.vector
 
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.infinite.InkPass
@@ -24,9 +25,9 @@ import kotlin.math.sin
 object VectorMesher {
 
     /**
-     * [scene] meshed into the box [rect], turned by [orientation] quarter-turns' worth of degrees
-     * and then by [angle] radians, both about the box's centre — the same placement the raster path
-     * gives a bitmap, so an SVG lands where a PNG would.
+     * [scene] meshed into the box [rect], turned by [orientation] quarter-turns' worth of degrees,
+     * mirrored by [flip] and then turned by [angle] radians, all about the box's centre: the same
+     * placement the raster path gives a bitmap, so an SVG lands where a PNG would.
      *
      * [tolerance] is the deviation allowed from the true curve, in content pixels. Geometry is
      * uploaded once, so this is fixed at the value that stays invisible at the canvas's deepest
@@ -38,9 +39,10 @@ object VectorMesher {
         orientation: Int = 0,
         angle: Double = 0.0,
         tolerance: Double,
+        flip: Flip = Flip.NONE,
     ): List<MeshPart> {
         if (scene.isEmpty || rect.w <= 0.0 || rect.h <= 0.0) return emptyList()
-        val place = placement(scene, rect, orientation, angle)
+        val place = placement(scene, rect, orientation, angle, flip)
         val scale = place.lengthScale()
         val parts = ArrayList<MeshPart>()
         var vertices = 0
@@ -96,18 +98,19 @@ object VectorMesher {
 
     /**
      * The document box mapped onto [rect]. A quarter turn swaps which side of the box each document
-     * axis lands on, exactly as the bitmap path does, and the free angle turns the result about the
-     * same centre, so the two compose by adding.
+     * axis lands on, exactly as the bitmap path does; the mirror and then the free angle apply about
+     * the same centre.
      */
-    private fun placement(scene: VectorScene, rect: Rect, orientation: Int, angle: Double): Affine {
+    private fun placement(scene: VectorScene, rect: Rect, orientation: Int, angle: Double, flip: Flip): Affine {
         val turns = ((orientation % 360) + 360) % 360
         val turned = turns == 90 || turns == 270
         val boxW = if (turned) rect.h else rect.w
         val boxH = if (turned) rect.w else rect.h
-        val theta = turns * PI / 180.0 + angle
-        val turn = Affine(cos(theta), sin(theta), -sin(theta), cos(theta))
+        fun turn(theta: Double) = Affine(cos(theta), sin(theta), -sin(theta), cos(theta))
         return Affine.translate(rect.centerX, rect.centerY)
-            .times(turn)
+            .times(turn(angle))
+            .times(Affine.scale(if (flip.x) -1.0 else 1.0, if (flip.y) -1.0 else 1.0))
+            .times(turn(turns * PI / 180.0))
             .times(Affine.translate(-boxW / 2.0, -boxH / 2.0))
             .times(Affine.scale(boxW / scene.width, boxH / scene.height))
     }

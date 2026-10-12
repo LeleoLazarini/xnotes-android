@@ -13,6 +13,7 @@ import com.tom_roush.pdfbox.pdmodel.graphics.blend.BlendMode
 import com.tom_roush.pdfbox.pdmodel.graphics.image.LosslessFactory
 import com.tom_roush.pdfbox.util.Matrix
 import com.xnotes.core.geometry.Affine
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.ImageData
@@ -250,10 +251,11 @@ internal class PdfBoxRenderer(
     }
 
     // Inserted images embed as XObjects: decode the source (capped for file size/memory), apply the
-    // stored quarter turn to the pixels, then place it like any other bitmap. A vector (SVG) source
-    // has no native pixels, so it rasterizes at the placed size supersampled for print instead of at
-    // the cap; the decode box is pre-swapped for quarter turns (dest already carries the turned box).
-    override fun drawImage(image: ImageData, dest: Rect, orientation: Int, angle: Double) {
+    // stored quarter turn and mirror to the pixels, then place it like any other bitmap. A vector
+    // (SVG) source has no native pixels, so it rasterizes at the placed size supersampled for print
+    // instead of at the cap; the decode box is pre-swapped for quarter turns (dest already carries
+    // the turned box).
+    override fun drawImage(image: ImageData, dest: Rect, orientation: Int, angle: Double, flip: Flip) {
         if (dest.w <= 0.0 || dest.h <= 0.0) return
         val turned = orientation % 180 != 0
         val (reqW, reqH) = if (ImageDecoder.isVector(image.file.path)) {
@@ -265,8 +267,11 @@ internal class PdfBoxRenderer(
         }
         var bmp = ImageDecoder.decodeSampledFile(image.file.path, reqW, reqH) ?: return
         val o = ((orientation % 360) + 360) % 360
-        if (o != 0) {
-            val m = android.graphics.Matrix().apply { postRotate(o.toFloat()) }
+        if (o != 0 || flip != Flip.NONE) {
+            val m = android.graphics.Matrix().apply {
+                postRotate(o.toFloat())
+                postScale(if (flip.x) -1f else 1f, if (flip.y) -1f else 1f)
+            }
             bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
         }
         tag()

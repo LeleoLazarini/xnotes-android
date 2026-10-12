@@ -325,13 +325,14 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         val rect = item.rect
         val orientation = item.orientation
         val angle = item.angle
+        val flip = item.flip
         decodeExecutor.execute {
             val started = System.nanoTime()
             val parsed = com.xnotes.platform.VectorScenes.sceneFor(item.image.file)
             val parts = if (parsed == null) {
                 emptyList()
             } else {
-                VectorMesher.mesh(parsed, rect, orientation, angle, StrokeTessellator.DEFAULT_TOLERANCE)
+                VectorMesher.mesh(parsed, rect, orientation, angle, StrokeTessellator.DEFAULT_TOLERANCE, flip)
             }
             val ms = (System.nanoTime() - started) / 1_000_000.0
             // The mesher stops at a vertex ceiling; say so rather than silently drawing part of it.

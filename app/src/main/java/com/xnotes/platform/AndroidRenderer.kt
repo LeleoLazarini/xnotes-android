@@ -8,6 +8,7 @@ import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.RectF
 import android.os.Build
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.ImageData
@@ -317,25 +318,26 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
     }
 
     // Decode the source only to the destination's device-pixel size (capped, never upscaled past the
-    // source) so a huge photo never fully decodes; the quarter turn and the free angle are applied
-    // as one canvas rotation about the destination centre (they share it, so they simply add), the
-    // rect already carrying the quarter-turned (w/h-swapped) box.
-    override fun drawImage(image: ImageData, dest: Rect, orientation: Int, angle: Double) {
+    // source) so a huge photo never fully decodes; the free angle, the mirror and the quarter turn
+    // all apply about the destination centre, the rect already carrying the quarter-turned
+    // (w/h-swapped) box.
+    override fun drawImage(image: ImageData, dest: Rect, orientation: Int, angle: Double, flip: Flip) {
         if (dest.w <= 0.0 || dest.h <= 0.0) return
         val devW = (dest.w * scaleX).toInt()
         val devH = (dest.h * scaleY).toInt()
         val o = ((orientation % 360) + 360) % 360
-        if (o == 0 && angle == 0.0 && drawVectorSlice(image, dest, devW, devH)) return
+        if (o == 0 && angle == 0.0 && drawVectorSlice(image, dest, devW, devH, flip)) return
         val turned = o == 90 || o == 270
         val reqW = (if (turned) devH else devW).coerceIn(1, DECODE_CAP_PX)
         val reqH = (if (turned) devW else devH).coerceIn(1, DECODE_CAP_PX)
         val bmp = ImageDecoder.decodeSampledFile(image.file.path, reqW, reqH) ?: return
         val uw = (if (turned) dest.h else dest.w).toFloat()
         val uh = (if (turned) dest.w else dest.h).toFloat()
-        val degrees = o + Math.toDegrees(angle)
         canvas.save()
         canvas.translate(((dest.left + dest.right) / 2.0).toFloat(), ((dest.top + dest.bottom) / 2.0).toFloat())
-        if (degrees != 0.0) canvas.rotate(degrees.toFloat())
+        if (angle != 0.0) canvas.rotate(Math.toDegrees(angle).toFloat())
+        if (flip != Flip.NONE) canvas.scale(if (flip.x) -1f else 1f, if (flip.y) -1f else 1f)
+        if (o != 0) canvas.rotate(o.toFloat())
         canvas.drawBitmap(bmp, null, RectF(-uw / 2f, -uh / 2f, uw / 2f, uh / 2f), bitmapPaint)
         canvas.restore()
     }
@@ -346,7 +348,7 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
      * visible sliver instead of the whole document at a 4096 px bucket. Returns false when the
      * image isn't a vector (or the slice failed) so the caller falls back to the raster path.
      */
-    private fun drawVectorSlice(image: ImageData, dest: Rect, devW: Int, devH: Int): Boolean {
+    private fun drawVectorSlice(image: ImageData, dest: Rect, devW: Int, devH: Int, flip: Flip): Boolean {
         val path = image.file.path
         if (!ImageDecoder.isVector(path)) return false
         if (!canvas.getClipBounds(clipBounds)) return true // clipped away entirely
@@ -355,23 +357,31 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
         val r = minOf(dest.right, clipBounds.right.toDouble())
         val b = minOf(dest.bottom, clipBounds.bottom.toDouble())
         if (r <= l || b <= t) return true
+        // What shows there, in the picture's own fractions: a mirrored picture has its far side here.
+        val ul = (l - dest.left) / dest.w
+        val ur = (r - dest.left) / dest.w
+        val vt = (t - dest.top) / dest.h
+        val vb = (b - dest.top) / dest.h
         val slice = ImageDecoder.renderVectorSlice(
             path,
-            (l - dest.left) / dest.w, (t - dest.top) / dest.h,
-            (r - dest.left) / dest.w, (b - dest.top) / dest.h,
+            if (flip.x) 1.0 - ur else ul, if (flip.y) 1.0 - vb else vt,
+            if (flip.x) 1.0 - ul else ur, if (flip.y) 1.0 - vt else vb,
             devW, devH,
         ) ?: return false
-        canvas.drawBitmap(
-            slice.bitmap,
-            null,
-            RectF(
-                (dest.left + slice.u0 * dest.w).toFloat(),
-                (dest.top + slice.v0 * dest.h).toFloat(),
-                (dest.left + slice.u1 * dest.w).toFloat(),
-                (dest.top + slice.v1 * dest.h).toFloat(),
-            ),
-            bitmapPaint,
+        val x0 = if (flip.x) 1.0 - slice.u1 else slice.u0
+        val y0 = if (flip.y) 1.0 - slice.v1 else slice.v0
+        val x1 = if (flip.x) 1.0 - slice.u0 else slice.u1
+        val y1 = if (flip.y) 1.0 - slice.v0 else slice.v1
+        val target = RectF(
+            (dest.left + x0 * dest.w).toFloat(),
+            (dest.top + y0 * dest.h).toFloat(),
+            (dest.left + x1 * dest.w).toFloat(),
+            (dest.top + y1 * dest.h).toFloat(),
         )
+        canvas.save()
+        if (flip != Flip.NONE) canvas.scale(if (flip.x) -1f else 1f, if (flip.y) -1f else 1f, target.centerX(), target.centerY())
+        canvas.drawBitmap(slice.bitmap, null, target, bitmapPaint)
+        canvas.restore()
         return true
     }
 

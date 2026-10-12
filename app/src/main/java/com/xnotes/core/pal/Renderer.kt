@@ -1,5 +1,6 @@
 package com.xnotes.core.pal
 
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Geometry
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
@@ -218,13 +219,13 @@ interface Renderer {
 
     /**
      * Draw [image] (its encoded source) scaled into [dest], turned [orientation] degrees clockwise
-     * (0/90/180/270) and then [angle] radians clockwise about [dest]'s centre. The backend decodes
-     * only as large as [dest] needs, so a big photo is never fully decoded into memory. A placed
-     * bitmap is the one thing that cannot rotate by moving its own points, which is why this is the
-     * single primitive that takes a free angle. Default is a no-op for backends that don't place
-     * images.
+     * (0/90/180/270), mirrored by [flip] inside [dest], and then turned [angle] radians clockwise
+     * about [dest]'s centre. The backend decodes only as large as [dest] needs, so a big photo is
+     * never fully decoded into memory. A placed bitmap is the one thing that cannot rotate by moving
+     * its own points, which is why this is the single primitive that takes a free angle. Default is
+     * a no-op for backends that don't place images.
      */
-    fun drawImage(image: ImageData, dest: Rect, orientation: Int = 0, angle: Double = 0.0) {}
+    fun drawImage(image: ImageData, dest: Rect, orientation: Int = 0, angle: Double = 0.0, flip: Flip = Flip.NONE) {}
 
     fun drawText(text: String, rect: Rect, font: FontSpec, color: Rgba, flags: TextFlags = TextFlags())
 
