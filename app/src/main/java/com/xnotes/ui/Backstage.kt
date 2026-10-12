@@ -808,14 +808,13 @@ private fun HomePane(
 ) {
     val palette = LocalPalette.current
     val focusManager = LocalFocusManager.current
-    val prefs = remember(editor.prefsVersion) { editor.preferences }
     // A tap on empty space anywhere in the pane drops focus from the search field, dismissing it
     // (children like tiles and buttons consume their own taps, so this only fires "outside").
     Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }) {
         ExplorerSection(editor, calls, createMode, onCreateMode, sidebarOpen, onShowSidebar, link)
         // A round quick-create button: the same things as the ⋮ menu's New block, landed in the current
         // folder. Only with a folder granted, else there's nowhere to create.
-        if (editor.browseRoot != null && prefs.showCreateButton) {
+        if (editor.browseRoot != null) {
             var createMenuOpen by remember { mutableStateOf(false) }
             Box(Modifier.align(Alignment.BottomEnd).padding(20.dp)) {
                 Tooltip(stringResource(R.string.create_new)) {

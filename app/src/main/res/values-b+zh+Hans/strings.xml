@@ -879,7 +879,6 @@
     <string name="pref_colour_names">颜色名称</string>
     <string name="name_a_colour">为颜色命名</string>
     <string name="pref_per_folder_views">为每个文件夹记住视图</string>
-    <string name="pref_show_create_button">显示快速创建按钮</string>
     <string name="pref_show_folder_counts">在文件夹上显示项目数</string>
     <string name="pref_show_extensions">显示文件扩展名（.xnote、.xcanvas）</string>
     <string name="pref_dates">日期</string>

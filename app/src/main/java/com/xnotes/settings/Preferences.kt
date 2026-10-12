@@ -106,7 +106,6 @@ data class Preferences(
     val trashDays: Int = 30,
     /** Each folder keeps its own view instead of every folder sharing one. */
     val perFolderViews: Boolean = false,
-    val showCreateButton: Boolean = true,
     val showFolderCounts: Boolean = true,
     val showExtensions: Boolean = false,
     /** Whether an exported PDF gets a bookmark for each heading of the note's text. */
@@ -193,7 +192,6 @@ data class Preferences(
         .put("tap_previews", tapPreviews)
         .put("trash_days", trashDays)
         .put("per_folder_views", perFolderViews)
-        .put("show_create_button", showCreateButton)
         .put("show_folder_counts", showFolderCounts)
         .put("show_extensions", showExtensions)
         .put("pdf_heading_bookmarks", pdfHeadingBookmarks)
@@ -301,7 +299,6 @@ data class Preferences(
                 tapPreviews = o.optBoolean("tap_previews", false),
                 trashDays = o.optInt("trash_days", 30).let { if (it == TRASH_FOREVER || it in 0..365) it else 30 },
                 perFolderViews = o.optBoolean("per_folder_views", false),
-                showCreateButton = o.optBoolean("show_create_button", true),
                 showFolderCounts = o.optBoolean("show_folder_counts", true),
                 showExtensions = o.optBoolean("show_extensions", false),
                 pdfHeadingBookmarks = o.optBoolean("pdf_heading_bookmarks", true),

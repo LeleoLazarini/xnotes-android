@@ -465,7 +465,6 @@ fun PreferencesPane(
                 }
             }
             CheckRow(stringResource(R.string.pref_per_folder_views), prefs.perFolderViews) { updateHome(prefs.copy(perFolderViews = it)) }
-            CheckRow(stringResource(R.string.pref_show_create_button), prefs.showCreateButton) { updateHome(prefs.copy(showCreateButton = it)) }
             CheckRow(stringResource(R.string.pref_show_folder_counts), prefs.showFolderCounts) { updateHome(prefs.copy(showFolderCounts = it)) }
             CheckRow(stringResource(R.string.pref_show_extensions), prefs.showExtensions) { updateHome(prefs.copy(showExtensions = it)) }
 

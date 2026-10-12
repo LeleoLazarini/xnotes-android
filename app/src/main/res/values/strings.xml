@@ -926,7 +926,6 @@
     <string name="pref_colour_names">Colour names</string>
     <string name="name_a_colour">Name a colour</string>
     <string name="pref_per_folder_views">Remember the view per folder</string>
-    <string name="pref_show_create_button">Show the quick-create button</string>
     <string name="pref_show_folder_counts">Show item counts on folders</string>
     <string name="pref_show_extensions">Show file extensions (.xnote, .xcanvas)</string>
     <string name="pref_dates">Dates</string>
