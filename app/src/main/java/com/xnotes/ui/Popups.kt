@@ -839,6 +839,7 @@ fun EraserConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
     var switchBack by remember { mutableStateOf(base.switchBackAfterErase) }
     var scale by remember { mutableStateOf(base.scale) }
     var markups by remember { mutableStateOf(base.eraseMarkups) }
+    var scribble by remember { mutableStateOf(base.scribbleErase) }
 
     fun emit() = editor.updateToolConfig(
         Tool.ERASER,
@@ -848,6 +849,7 @@ fun EraserConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
             switchBackAfterErase = switchBack,
             scale = scale,
             eraseMarkups = markups,
+            scribbleErase = scribble,
         ),
     )
 
@@ -866,6 +868,8 @@ fun EraserConfigPopup(editor: ToolPopupHost, onDismiss: () -> Unit) {
             // you in the eraser.
             ToggleRow(stringResource(R.string.caption_switch_back), switchBack) { switchBack = it; emit() }
             if (editor.hostHasPdf) ToggleRow(stringResource(R.string.caption_erase_markups), markups) { markups = it; emit() }
+            // A pen scribbled over ink erases it without picking up the eraser.
+            ToggleRow(stringResource(R.string.caption_scribble_erase), scribble) { scribble = it; emit() }
         }
     }
 }

@@ -341,6 +341,7 @@ data class Settings(
             .put("erase_mode", c.eraseMode.id)
             .put("switch_back_after_erase", c.switchBackAfterErase)
             .put("erase_markups", c.eraseMarkups)
+            .put("scribble_erase", c.scribbleErase)
             .put("switch_back_after_select", c.switchBackAfterSelect)
             .put("straight_line", c.straightLine)
             .put("scale", c.scale)
@@ -369,6 +370,7 @@ data class Settings(
                 eraseMode = EraseMode.fromId(o.optString("erase_mode", d.eraseMode.id)),
                 switchBackAfterErase = o.optBoolean("switch_back_after_erase", d.switchBackAfterErase),
                 eraseMarkups = o.optBoolean("erase_markups", d.eraseMarkups),
+                scribbleErase = o.optBoolean("scribble_erase", d.scribbleErase),
                 switchBackAfterSelect = o.optBoolean("switch_back_after_select", d.switchBackAfterSelect),
                 straightLine = o.optBoolean("straight_line", d.straightLine),
                 scale = o.optBoolean("scale", d.scale),
