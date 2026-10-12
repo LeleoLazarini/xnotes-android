@@ -415,7 +415,8 @@ class FrontInk(
         if (items.isEmpty()) return false
         holds = emptyList()
         handoverTail = null
-        for (h in items) h.page?.let { state.appendToCache(it, h.item) }
+        // One erased while it was held (a scribble over ink still on the pad) must not come back.
+        for (h in items) h.page?.let { page -> if (page.items.any { it === h.item }) state.appendToCache(page, h.item) }
         // Every settle tracks its own publication, whichever path settled: what the caller does
         // next is not what says when these pixels reached the glass.
         awaitingPublish = true

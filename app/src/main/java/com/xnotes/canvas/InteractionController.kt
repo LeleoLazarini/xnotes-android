@@ -51,6 +51,7 @@ import com.xnotes.core.model.ShapeLabel
 import com.xnotes.core.model.Stroke
 import com.xnotes.core.model.TextHandle
 import com.xnotes.core.model.TextItem
+import com.xnotes.core.model.TextMarkup
 import com.xnotes.core.model.TextStyle
 import com.xnotes.core.pal.FontFace
 import com.xnotes.core.pal.FontSpec
@@ -59,6 +60,7 @@ import com.xnotes.core.pal.Renderer
 import com.xnotes.core.pal.TextMeasurer
 import com.xnotes.core.pdf.MarkupPainter
 import com.xnotes.core.stroke.RecognizedShape
+import com.xnotes.core.stroke.Scribble
 import com.xnotes.core.stroke.Sample
 import com.xnotes.core.stroke.ShapeRecognizer
 import com.xnotes.core.stroke.StrokeSimplify
@@ -1252,6 +1254,7 @@ class InteractionController(
                     fadeAlpha = 1.0
                     scheduleFade()
                 }
+                scribbleErase(stroke, pi) -> Unit
                 else -> pushStrokeEdit(fileStroke(stroke, pi))
             }
         }
@@ -1345,6 +1348,58 @@ class InteractionController(
         onContentChanged()
         onHaptic()
         requestRender()
+    }
+
+    /**
+     * Scribble to erase: when [stroke] reads as a scribble over ink, take that ink off instead of
+     * filing the scribble. The undo stack gets the scribble and then its erase, so one undo says
+     * "that was not an erase" and gives both back. False when the stroke stays ink.
+     */
+    private fun scribbleErase(stroke: Stroke, pageIndex: Int): Boolean {
+        val eraser = configFor(Tool.ERASER)
+        if (!eraser.scribbleErase || !stroke.tool.isStroke || stroke.tool == Tool.HIGHLIGHTER) return false
+        if (crossedSegments.isNotEmpty()) return false // it ran across a page edge
+        val page = state.document.pages.getOrNull(pageIndex) ?: return false
+        val dpPerUnit = state.zoom / state.devicePxPerDp
+        val path = List(stroke.sampleCount) { Pt(stroke.xAt(it), stroke.yAt(it)) }
+        val passes = Scribble.passes(path, dpPerUnit) ?: return false
+        val radius = stroke.config.baseWidth / 2.0 + Scribble.TOUCH_DP / dpPerUnit
+        val reach = Rect.bounding(path).outset(radius)
+        val candidates = ArrayList<Any>()
+        page.items.filterTo(candidates) {
+            !it.locked && it !is ImageItem && it !is TextItem && it.paintBounds().intersects(reach)
+        }
+        if (eraser.eraseMarkups) candidates.addAll(page.markups)
+        val ptPerPx = 72.0 / state.document.dpi
+        val taken = Scribble.taken(passes, radius, candidates) { c, x, y, r ->
+            when (c) {
+                is CanvasItem -> c.intersectsCircle(x, y, r)
+                is TextMarkup -> MarkupPainter.touches(c, x * ptPerPx, y * ptPerPx, r * ptPerPx)
+                else -> false
+            }
+        }
+        if (taken.isEmpty()) return false
+        simplifyForCommit(stroke)
+        val items = taken.filterIsInstance<CanvasItem>().sortedBy { item -> page.items.indexOfFirst { it === item } }
+        var dirty: Rect? = null
+        for (item in items) {
+            page.items.remove(item)
+            val b = item.paintBounds()
+            dirty = dirty?.union(b) ?: b
+        }
+        dirty?.let { if (!state.repairRegion(page, it.outset(REPAIR_PAD))) state.invalidatePage(page) }
+        // The scribble rides with the erase, so undoing it comes back on top of the ink, as drawn.
+        val cmds = ArrayList<Command>()
+        cmds += EraseItems(items.map { page to it } + (page to stroke))
+        val marks = taken.filterIsInstance<TextMarkup>()
+        for (m in marks) cmds += RemoveMarkup(page, m).also { it.redo() }
+        if (marks.isNotEmpty()) state.rebakeBackground(page, emptyList())
+        history.push(AddItem(page, stroke))
+        history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
+        state.document.dirty = true
+        onContentChanged()
+        onHaptic()
+        return true
     }
 
     // --- ERASE ---
