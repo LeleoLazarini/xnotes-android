@@ -29,7 +29,6 @@ import com.xnotes.core.history.RestyleText
 import com.xnotes.core.history.TransferItems
 import com.xnotes.core.history.TransformItems
 import com.xnotes.core.model.CanvasItem
-import com.xnotes.core.model.Carry
 import com.xnotes.core.model.ConnectorDraft
 import com.xnotes.core.model.ConnectorEdit
 import com.xnotes.core.model.ConnectorItem
@@ -479,11 +478,6 @@ class InteractionController(
     private var labelPageIndex = -1
     private var labelBefore: ShapeLabel? = null
 
-    // CARRY (what the selected closed shapes take along through a move, turn or resize)
-    private var carries: List<Pair<Int, Carry>> = emptyList()
-    private var carried: Set<CanvasItem> = emptySet()
-    private var carriedFrom: List<Rect> = emptyList()
-
     // DOUBLE TAP (a shape's label)
     private var tapCandidate = false
     private var tapDownViewport = Pt.ZERO
@@ -511,7 +505,7 @@ class InteractionController(
 
     init {
         state.isLiftedItem = { item ->
-            item === editingText || item === editingLabel || item in carried || item in followed || frontInk?.holding(item) == true ||
+            item === editingText || item === editingLabel || item in followed || frontInk?.holding(item) == true ||
                 selection.any { it.item === item }
         }
     }
@@ -1802,7 +1796,6 @@ class InteractionController(
         mode = PointerMode.MOVE
         moveOrigin = content
         moveOffset = Pt.ZERO
-        beginCarry()
         // A lone connector dragged by its line lets go of what it joined; anything else keeps it.
         val lone = loneConnector()
         looseBefore = lone?.item?.snapshotGeometry()
@@ -1828,7 +1821,6 @@ class InteractionController(
             // Items hold page-space geometry: rotate the on-screen offset into page space.
             val local = state.vectorToPageSpace(moveOffset)
             for (item in items) item.translate(local.x, local.y)
-            for ((_, c) in carries) c.translate(local.x, local.y)
             val shift = Affine.translateBy(local.x, local.y)
             for ((_, f) in follows) {
                 f.follow(shift)
@@ -1839,13 +1831,12 @@ class InteractionController(
             val loose = loneConnector()?.item as? ConnectorItem
             val looseWas = looseBefore
             if (loose != null) loose.letGo()
-            val moving = (items + carries.flatMap { it.second.items }).filter { it !in followed && !(loose != null && it === loose) }
+            val moving = items.filter { it !in followed && !(loose != null && it === loose) }
             val move: Command? = if (moving.isEmpty()) null else MoveItems(moving, local.x, local.y)
             val looseCmd = if (loose != null && looseWas != null) TransformItems(listOf(loose), listOf(looseWas), listOf(loose.snapshotGeometry())) else null
             val joined = followCommand()
             val transfer = reassignSelectionPages()
-            val carriedOver = transferCarried()
-            val cmds = listOfNotNull(move, looseCmd, joined, transfer, carriedOver)
+            val cmds = listOfNotNull(move, looseCmd, joined, transfer)
             history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
             state.document.dirty = true
             // Moved items stay lifted (drawn live in the overlay), so the ink cache — which
@@ -1858,7 +1849,6 @@ class InteractionController(
         moveOffset = Pt.ZERO
         looseBefore = null
         endFollow()
-        endCarry()
         mode = PointerMode.IDLE
         refreshSelectionMenu()
         requestRender()
@@ -2088,7 +2078,6 @@ class InteractionController(
     private fun beginTransform(handle: HandleId?, content: Pt) {
         txItems = selection.toList()
         txSnaps = txItems.map { it.item.snapshotGeometry() }
-        beginCarry()
         beginFollow(rigid = true, pin = true)
         txStartObb = selObb
         txMargin = selectionChromeMargin()
@@ -2125,10 +2114,6 @@ class InteractionController(
             if (state.pageRects.getOrNull(sel.pageIndex) == null) continue
             sel.item.applyTransform(state.affineToPageSpace(sel.pageIndex, world))
         }
-        for ((pi, c) in carries) {
-            if (state.pageRects.getOrNull(pi) == null) continue
-            c.follow(state.affineToPageSpace(pi, world), resize = handle != null)
-        }
         for ((pi, f) in follows) {
             if (state.pageRects.getOrNull(pi) == null) continue
             f.follow(state.affineToPageSpace(pi, world))
@@ -2141,18 +2126,14 @@ class InteractionController(
         var changed = false
         if (items.isNotEmpty()) {
             val after = items.map { it.snapshotGeometry() }
-            // Nothing moved: what the shapes hold goes back exactly, not a rounding away.
-            if (after == txSnaps) for ((_, c) in carries) c.restore()
             if (after == txSnaps) for ((_, f) in follows) f.restore()
             if (after != txSnaps) {
                 changed = true
                 for ((_, f) in follows) f.settle()
-                val held = carries.flatMap { it.second.items }
-                val tx: Command = TransformItems(items + held, txSnaps + carries.flatMap { it.second.startSnapshots }, items.map { it.snapshotGeometry() } + held.map { it.snapshotGeometry() })
+                val tx: Command = TransformItems(items, txSnaps, items.map { it.snapshotGeometry() })
                 val joined = followCommand()
                 val transfer = reassignSelectionPages()
-                val carriedOver = transferCarried()
-                val cmds = listOfNotNull(tx, joined, transfer, carriedOver)
+                val cmds = listOfNotNull(tx, joined, transfer)
                 history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
                 state.document.dirty = true
                 // Members stay lifted (overlay-drawn); the ink cache they were lifted out of needs
@@ -2165,7 +2146,6 @@ class InteractionController(
         txStartObb = null
         txHandle = null
         endFollow()
-        endCarry()
         // A lone shape knows its own frame, so its box is refound rather than kept as dragged.
         if ((selection.singleOrNull()?.item as? ShapeItem)?.frameObb() != null) selObb = selectionBox()
         mode = PointerMode.IDLE
@@ -2663,73 +2643,11 @@ class InteractionController(
         return true
     }
 
-    // --- carrying ---
-
-    /**
-     * Collect what the selected closed shapes hold, page by page, and lift it out of the cache for
-     * the drag starting now: the overlay draws it alongside the selection until [endCarry].
-     */
-    private fun beginCarry() {
-        val selected = selection.map { it.item }
-        val out = ArrayList<Pair<Int, Carry>>()
-        for ((pi, sels) in selection.groupBy { it.pageIndex }) {
-            val page = state.document.pages.getOrNull(pi) ?: continue
-            val c = Carry.of(sels.map { it.item }, page.items, selected)
-            if (!c.isEmpty) out += pi to c
-        }
-        carries = out
-        carried = out.flatMapTo(HashSet()) { it.second.items }
-        carriedFrom = out.map { (_, c) -> c.items.map { it.paintBounds() }.reduce { a, b -> a.union(b) } }
-        for ((i, pc) in out.withIndex()) state.document.pages.getOrNull(pc.first)?.let { repairRegion(it, carriedFrom[i]) }
-    }
-
-    /**
-     * Carried items whose shape changed pages follow it there, keeping where they sit on screen.
-     * Applied at once; the command undoes it. Null when none moved.
-     */
-    private fun transferCarried(): Command? {
-        val transfers = ArrayList<TransferItems.Transfer>()
-        for ((pi, c) in carries) {
-            for (item in c.items) {
-                val holder = c.holderOf(item) ?: continue
-                val target = selection.firstOrNull { it.item === holder }?.pageIndex ?: continue
-                if (target == pi) continue
-                val from = state.document.pages.getOrNull(pi) ?: continue
-                val to = state.document.pages.getOrNull(target) ?: continue
-                val d = state.toPageSpace(target, state.fromPageSpace(pi, Pt.ZERO))
-                transfers += TransferItems.Transfer(from, to, item, d.x, d.y)
-            }
-        }
-        if (transfers.isEmpty()) return null
-        val cmd = TransferItems(transfers)
-        cmd.redo()
-        return cmd
-    }
-
-    /** Put what was carried back into the cache, on whichever page each item now sits. */
-    private fun endCarry() {
-        if (carries.isEmpty()) return
-        val done = carries
-        val was = carriedFrom
-        carries = emptyList()
-        carried = emptySet()
-        carriedFrom = emptyList()
-        for ((i, pc) in done.withIndex()) {
-            val (pi, c) = pc
-            state.document.pages.getOrNull(pi)?.let { repairRegion(it, was[i]) }
-            for (item in c.items) {
-                val home = state.document.pages.getOrNull(pi)?.takeIf { p -> p.items.any { it === item } }
-                val page = home ?: state.document.pages.firstOrNull { p -> p.items.any { it === item } } ?: continue
-                repairRegion(page, item.paintBounds())
-            }
-        }
-    }
-
     // --- connectors following what they join ---
 
     /**
      * Collect, page by page, the connectors glued to what the gesture starting now moves (the
-     * selection and what it carries), and lift them out of the cache: the overlay draws them live
+     * selection), and lift them out of the cache: the overlay draws them live
      * until [endFollow]. [rigid] for a move, turn or resize; [pin] unless a lone connector lets go.
      */
     private fun beginFollow(rigid: Boolean, pin: Boolean) {
@@ -2737,8 +2655,7 @@ class InteractionController(
         for ((pi, sels) in selection.groupBy { it.pageIndex }) {
             val page = state.document.pages.getOrNull(pi) ?: continue
             val present = java.util.Collections.newSetFromMap(java.util.IdentityHashMap<CanvasItem, Boolean>()).apply { addAll(page.items) }
-            val moving = sels.map { it.item } + carries.filter { it.first == pi }.flatMap { it.second.items }
-            val f = GlueFollow.of(moving, page.items, { it in present }, rigid, pin)
+            val f = GlueFollow.of(sels.map { it.item }, page.items, { it in present }, rigid, pin)
             if (!f.isEmpty) out += pi to f
         }
         follows = out
@@ -4009,7 +3926,6 @@ class InteractionController(
         }
         looseBefore = null
         endFollow()
-        endCarry()
         pushStrokeEdit(null) // a cancelled crossing still left segments on the pages behind it
         liveStroke = null
         strokePageIndex = null
@@ -4053,16 +3969,6 @@ class InteractionController(
                     r.translate(pr.left + moveOffset.x, pr.top + moveOffset.y)
                     state.applyPageTransform(r, state.document.pages[sel.pageIndex])
                     sel.item.paint(r)
-                }
-            }
-
-            // What the selected shapes carry through a drag, drawn live alongside them.
-            for ((pi, c) in carries) {
-                val pr = state.pageRects.getOrNull(pi) ?: continue
-                r.withSave {
-                    r.translate(pr.left + moveOffset.x, pr.top + moveOffset.y)
-                    state.applyPageTransform(r, state.document.pages[pi])
-                    for (item in c.items) if (item !in followed) item.paint(r)
                 }
             }
 

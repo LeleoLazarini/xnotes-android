@@ -12,7 +12,6 @@ import com.xnotes.core.history.CompositeCommand
 import com.xnotes.core.history.MoveItems
 import com.xnotes.core.history.TransformItems
 import com.xnotes.core.model.CanvasItem
-import com.xnotes.core.model.Carry
 import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.GeometrySnapshot
 import com.xnotes.core.model.GlueFollow
@@ -49,10 +48,6 @@ class CanvasSelection(private val doc: InfiniteDocument) {
     /** Where the finger came down, as an angle about the box's centre. Null when it was not given. */
     private var startGrabAngle: Double? = null
 
-    /** What the selected closed shapes take along through the drag under way. */
-    var carry: Carry = Carry.NONE
-        private set
-
     /** The connectors the drag under way keeps joined to what it moves. */
     var follow: GlueFollow = GlueFollow.NONE
         private set
@@ -68,7 +63,6 @@ class CanvasSelection(private val doc: InfiniteDocument) {
     fun clear() {
         items = emptyList()
         box = null
-        carry = Carry.NONE
         follow = GlueFollow.NONE
         startSnapshots = emptyList()
         startBox = null
@@ -129,14 +123,12 @@ class CanvasSelection(private val doc: InfiniteDocument) {
     /**
      * Capture the state a drag will be measured against. Call once, at pointer down. [grabAt] is
      * where the finger actually landed, which a rotation needs: it turns by the angle swept from
-     * there, so a press a few pixels off the grip's centre no longer snaps the selection. A move,
-     * turn or resize is [carrying] what the selected shapes hold; a point edit is not.
+     * there, so a press a few pixels off the grip's centre no longer snaps the selection.
      */
-    fun beginTransform(grabAt: Pt? = null, carrying: Boolean = false, pin: Boolean = true) {
+    fun beginTransform(grabAt: Pt? = null, rigid: Boolean = false, pin: Boolean = true) {
         startSnapshots = items.map { it.snapshotGeometry() }
-        carry = if (carrying) carryOf(items) else Carry.NONE
         // A move, turn or resize moves everything by one map; a point edit reshapes what it edits.
-        follow = followOf(items + carry.items, rigid = carrying, pin = pin)
+        follow = followOf(items, rigid = rigid, pin = pin)
         startBox = box
         val centre = box?.center
         startGrabAngle = if (grabAt == null || centre == null) null
@@ -147,13 +139,11 @@ class CanvasSelection(private val doc: InfiniteDocument) {
      * Put every item back where the drag began and bake [transform] over it. Called per frame, so
      * the drag is always one transform of the original rather than a chain of small ones.
      */
-    fun applyLive(transform: Affine, resize: Boolean = false) {
+    fun applyLive(transform: Affine) {
         for (i in items.indices) items[i].restoreGeometry(startSnapshots[i])
         for (item in items) item.applyTransform(transform)
-        carry.follow(transform, resize)
         follow.follow(transform)
         doc.itemsChanged(items)
-        doc.itemsChanged(carry.items)
         doc.itemsChanged(follow.items)
     }
 
@@ -167,12 +157,9 @@ class CanvasSelection(private val doc: InfiniteDocument) {
             item.applyTransform(transform)
             changed.add(item)
         }
-        // Only a resize bakes some items alone: the shapes, the selected ones and the ones carried.
-        carry.follow(transform, resize = true, only = only)
         // The rest the renderer is scaling, so connectors glued to them follow where they are drawn.
         follow.follow(transform) { if (it in only) null else transform }
         doc.itemsChanged(changed)
-        doc.itemsChanged(carry.items.filter { it in only })
         doc.itemsChanged(follow.items)
     }
 
@@ -215,11 +202,9 @@ class CanvasSelection(private val doc: InfiniteDocument) {
     fun moveLive(dx: Double, dy: Double) {
         for (i in items.indices) items[i].restoreGeometry(startSnapshots[i])
         for (item in items) item.translate(dx, dy)
-        carry.translate(dx, dy)
         follow.follow(Affine.translateBy(dx, dy))
         startBox?.let { box = it.translate(dx, dy) }
         doc.itemsChanged(items)
-        doc.itemsChanged(carry.items)
         doc.itemsChanged(follow.items)
     }
 
@@ -231,7 +216,7 @@ class CanvasSelection(private val doc: InfiniteDocument) {
         val from = startBox ?: return
         val result = ResizeMath.obbResize(from, handle, pointer, margin)
         box = result.obb
-        applyLive(result.transform, resize = true)
+        applyLive(result.transform)
     }
 
     /**
@@ -301,20 +286,18 @@ class CanvasSelection(private val doc: InfiniteDocument) {
     fun buildCommand(movedOnly: Boolean, dx: Double = 0.0, dy: Double = 0.0): Command? {
         if (items.isEmpty()) return null
         follow.settle()
-        val all = items + carry.items
-        val starts = startSnapshots + carry.startSnapshots
         // Connectors are recorded whole, glue and all; a plain move of anything else stays a move.
         val moved = ArrayList<CanvasItem>()
         val shaped = ArrayList<CanvasItem>()
         val before = ArrayList<GeometrySnapshot>()
-        for (i in all.indices) {
-            val item = all[i]
+        for (i in items.indices) {
+            val item = items[i]
             if (follow.places(item)) continue
             if (movedOnly && item !is ConnectorItem) {
                 moved += item
             } else {
                 shaped += item
-                before += starts[i]
+                before += startSnapshots[i]
             }
         }
         shaped += follow.items
@@ -338,13 +321,6 @@ class CanvasSelection(private val doc: InfiniteDocument) {
     /** The undoable edit that took [items] from [before] to how they are now, re-filed on undo and redo. */
     fun commandFor(items: List<CanvasItem>, before: List<GeometrySnapshot>): Command =
         OnCanvas(doc, TransformItems(items, before, items.map { it.snapshotGeometry() }), items)
-
-    /** What [of]'s closed shapes hold: the unselected, unlocked items entirely inside them. */
-    private fun carryOf(of: List<CanvasItem>): Carry {
-        val holders = of.filter { it is ShapeItem }
-        val area = boundsOf(holders) ?: return Carry.NONE
-        return Carry.of(holders, doc.itemsIn(area), of)
-    }
 
     private fun boundsOf(of: List<CanvasItem>): Rect? {
         var acc: Rect? = null

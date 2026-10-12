@@ -445,72 +445,51 @@ class CanvasSelectionTest {
         return maxX - 100.0
     }
 
-    // --- carrying what a shape holds ---
+    // --- a shape leaves what it holds ---
 
     private fun frame() = ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(200.0, 100.0), Rgba(1, 2, 3, 255), 2.0)
 
-    @Test fun aMovedFrameTakesItsContentsAndOneUndoPutsAllBack() {
+    @Test fun aMovedFrameLeavesWhatItHoldsWhereItWas() {
         val f = frame()
         val note = line(20.0, 50.0)
-        val stray = line(400.0, 50.0)
-        val doc = docOf(f, note, stray)
+        val doc = docOf(f, note)
         val sel = CanvasSelection(doc).apply { select(listOf(f)) }
-        sel.beginTransform(carrying = true)
-        assertEquals(listOf<CanvasItem>(note), sel.carry.items)
-        val was = note.bounds()
+        val was = note.samples.map { it.pos }
+        sel.beginTransform(rigid = true)
         sel.moveLive(30.0, 5.0)
-        assertEquals(was.left + 30.0, note.bounds().left, 1e-6)
-        assertEquals(400.0 - 1.5, stray.bounds().left, 1e-6)
+        assertEquals(30.0, f.box.left, 1e-9)
+        assertEquals(was, note.samples.map { it.pos })
         val cmd = sel.buildCommand(movedOnly = true, dx = 30.0, dy = 5.0)!!
         cmd.undo()
-        assertEquals(was.left, note.bounds().left, 1e-6)
         assertEquals(0.0, f.box.left, 1e-9)
-        cmd.redo()
-        assertEquals(was.left + 30.0, note.bounds().left, 1e-6)
+        assertEquals(was, note.samples.map { it.pos })
     }
 
-    @Test fun aResizedFrameScalesItsContentsWithIt() {
+    @Test fun aResizedFrameLeavesWhatItHoldsItsSize() {
         val f = frame()
         val note = line(80.0, 50.0)
         val doc = docOf(f, note)
         val sel = CanvasSelection(doc).apply { select(listOf(f)) }
-        val before = note.samples.map { it.pos }
-        sel.beginTransform(carrying = true)
+        val was = note.samples.map { it.pos }
+        val width = note.config.baseWidth
+        sel.beginTransform(rigid = true)
         val right = sel.handles().first { it.id == HandleId.R }.content
         sel.resizeLive(HandleId.R, Pt(right.x + 200.0, right.y))
-        val k = f.box.w / 200.0
-        assertTrue("the frame widened", k > 1.5)
-        for ((was, now) in before.zip(note.samples.map { it.pos })) {
-            assertEquals("stretched with the frame", f.box.left + (was.x - 0.0) * k, now.x, 1e-3)
-            assertEquals(was.y, now.y, 1e-3)
-        }
-        val cmd = sel.buildCommand(movedOnly = false)!!
-        cmd.undo()
-        assertEquals(before.first().x, note.samples.first().pos.x, 1e-3)
+        assertTrue("the frame widened", f.box.w > 300.0)
+        assertEquals(was, note.samples.map { it.pos })
+        assertEquals(width, note.config.baseWidth, 0.0)
     }
 
-    @Test fun aTurnedFrameTurnsItsContentsWithIt() {
+    @Test fun aTurnedFrameLeavesWhatItHoldsUpright() {
         val f = frame()
         val note = line(20.0, 50.0)
         val doc = docOf(f, note)
         val sel = CanvasSelection(doc).apply { select(listOf(f)) }
-        sel.beginTransform(Pt(100.0, -40.0), carrying = true)
+        val was = note.samples.map { it.pos }
+        sel.beginTransform(Pt(100.0, -40.0), rigid = true)
         sel.rotateLive(Pt(240.0, 50.0))
-        val first = note.samples.first().pos
-        val want = Affine.rotateAbout(Pt(100.0, 50.0), Math.PI / 2).apply(Pt(20.0, 50.0))
-        assertEquals(0.0, first.distanceTo(want), 1e-3)
-    }
-
-    @Test fun aPointEditCarriesNothingAndNeitherDoesASelectedItem() {
-        val f = frame()
-        val note = line(20.0, 50.0)
-        val doc = docOf(f, note)
-        val sel = CanvasSelection(doc).apply { select(listOf(f)) }
-        sel.beginTransform()
-        assertTrue(sel.carry.isEmpty)
-        sel.select(listOf(f, note))
-        sel.beginTransform(carrying = true)
-        assertTrue("already moving with the selection", sel.carry.isEmpty)
+        assertTrue("the frame turned", f.bounds().h > f.bounds().w)
+        assertEquals(was, note.samples.map { it.pos })
     }
 
     // --- connectors ---
@@ -528,7 +507,7 @@ class CanvasSelectionTest {
         val doc = docOf(a, b, c)
         val sel = CanvasSelection(doc)
         sel.select(listOf(b))
-        sel.beginTransform(carrying = true)
+        sel.beginTransform(rigid = true)
         sel.moveLive(0.0, 50.0)
         assertEquals(Pt(300.0, 180.0), c.end.at)
         val cmd = sel.buildCommand(movedOnly = true, dx = 0.0, dy = 50.0)!!
@@ -547,7 +526,7 @@ class CanvasSelectionTest {
         val sel = CanvasSelection(doc)
         sel.select(listOf(c))
         assertNull("a lone connector has no box to grab", sel.chromeBox())
-        sel.beginTransform(carrying = true, pin = false)
+        sel.beginTransform(rigid = true, pin = false)
         sel.moveLive(20.0, 20.0)
         c.letGo()
         val cmd = sel.buildCommand(movedOnly = true, dx = 20.0, dy = 20.0)!!

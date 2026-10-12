@@ -900,7 +900,7 @@ class InfiniteInteraction(
         val margin = frameMargin()
         val grip = sel.rotateGrip(OverlayTessellator.GRIP_ARM_PX / viewport.zoom, margin)
         if (grip != null && at.distanceTo(grip) <= tolerance) {
-            sel.beginTransform(at, carrying = true)
+            sel.beginTransform(at, rigid = true)
             beginLiftedTransform(sel, at, resize = false)
             mode = CanvasPointerMode.ROTATE
             return true
@@ -909,7 +909,7 @@ class InfiniteInteraction(
         if (handle != null) {
             grabHandle = handle
             transformMargin = sel.chromeMargin(margin)
-            sel.beginTransform(carrying = true)
+            sel.beginTransform(rigid = true)
             beginLiftedTransform(sel, at, resize = true)
             mode = CanvasPointerMode.RESIZE
             return true
@@ -987,7 +987,7 @@ class InfiniteInteraction(
     /** Start dragging the selection from [at], the tail of every press that grabs one. */
     private fun beginMoveAt(sel: CanvasSelection, at: Pt) {
         // A lone connector dragged by its line lets go of what it joined; anything else keeps it.
-        sel.beginTransform(carrying = true, pin = sel.loneConnector == null)
+        sel.beginTransform(rigid = true, pin = sel.loneConnector == null)
         moveAnchor = at
         movedBy = Pt.ZERO
         mode = CanvasPointerMode.MOVE
@@ -995,7 +995,7 @@ class InfiniteInteraction(
     }
 
     /** What a move hands the renderer to offset: everything that moves whole, not what bends to stay joined. */
-    private fun liftedOf(sel: CanvasSelection): List<CanvasItem> = (sel.items + sel.carry.items).filter { !sel.follow.places(it) }
+    private fun liftedOf(sel: CanvasSelection): List<CanvasItem> = sel.items.filter { !sel.follow.places(it) }
 
     /**
      * The topmost item under [content], or null. The index is queried with a slop-sized rect, but
@@ -1101,12 +1101,10 @@ class InfiniteInteraction(
      */
     private fun beginLiftedTransform(sel: CanvasSelection, at: Pt, resize: Boolean) {
         transformPointer = at
-        // What the shapes hold takes the same map as they do, so the shader carries it too.
-        val moving = sel.items + sel.carry.items
-        liftedTransform = moving.all { it is Stroke || it is ShapeItem || isVectorImage(it) }
+        liftedTransform = sel.items.all { it is Stroke || it is ShapeItem || isVectorImage(it) }
         if (!liftedTransform) return
-        bakedInLift = if (resize) moving.filterTo(HashSet()) { it is ShapeItem } else emptySet()
-        liftItems = if (bakedInLift.isEmpty()) moving else moving.filter { it !in bakedInLift }
+        bakedInLift = if (resize) sel.items.filterTo(HashSet()) { it is ShapeItem } else emptySet()
+        liftItems = if (bakedInLift.isEmpty()) sel.items else sel.items.filter { it !in bakedInLift }
         onLiftSelection(liftItems, LiftTransform.NONE)
     }
 

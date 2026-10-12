@@ -460,14 +460,12 @@ class ShapeItem(
     }
 
     /** True when page point [p] lies inside the outline, filled or not: where a label would go. */
-    fun encloses(p: Pt): Boolean = interior()(p)
-
-    /** [encloses] with the outline flattened once, for testing many points against one shape. */
-    fun interior(): (Pt) -> Boolean {
-        val regions = localGeometry().paths
-            .filter { it.role == PathRole.OUTLINE || it.role == PathRole.FILL_ONLY }
-            .map { path -> path.contours.map { PathFlattener.flatten(it, Outline.HIT_FLATTEN) } }
-        return { p -> toLocal(p).let { q -> regions.any { Outline.inRings(it, q) } } }
+    fun encloses(p: Pt): Boolean {
+        val q = toLocal(p)
+        return localGeometry().paths.any { path ->
+            (path.role == PathRole.OUTLINE || path.role == PathRole.FILL_ONLY) &&
+                Outline.inRings(path.contours.map { PathFlattener.flatten(it, Outline.HIT_FLATTEN) }, q)
+        }
     }
 
     /** Does [p] (unturned frame) land within [tol] of a stroked edge, or inside the fill? */
