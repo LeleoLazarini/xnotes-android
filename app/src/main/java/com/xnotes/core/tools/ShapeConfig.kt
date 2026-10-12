@@ -1,5 +1,6 @@
 package com.xnotes.core.tools
 
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.model.ConnectorEnd
 import com.xnotes.core.model.ConnectorItem
@@ -81,6 +82,15 @@ data class ShapeConfig(
             headStart = if (kind.isOpen) headStart else Head.NONE,
             headEnd = if (kind.isOpen) headEnd else Head.NONE,
         )
+    }
+
+    /**
+     * Face a shape being drawn the way the drag runs: the chip is what a drag down and right
+     * draws, so heading left mirrors it and heading up turns it upside down, as far as the chip
+     * lets a drag turn it.
+     */
+    fun followDrag(shape: ShapeItem) {
+        shape.flip = chip.dragFlips.and(Flip.of(shape.end.x < shape.start.x, shape.end.y < shape.start.y))
     }
 
     /** True when the chosen chip places a polygon corner by corner rather than dragging a box. */

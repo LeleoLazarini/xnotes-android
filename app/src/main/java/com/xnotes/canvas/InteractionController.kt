@@ -2173,6 +2173,7 @@ class InteractionController(
         val pi = shapePageIndex ?: return
         if (state.pageRects.getOrNull(pi) == null) return
         shape.end = ResizeMath.drawnEnd(shape, state.toPageSpace(pi, content), shapeConfig.perfect)
+        shapeConfig.followDrag(shape)
         requestRender()
     }
 

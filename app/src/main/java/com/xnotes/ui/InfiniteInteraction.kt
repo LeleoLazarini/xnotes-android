@@ -1448,7 +1448,9 @@ class InfiniteInteraction(
 
     private fun extendShape(vx: Double, vy: Double) {
         val shape = pendingShape ?: return
-        shape.end = ResizeMath.drawnEnd(shape, viewport.viewportToContent(Pt(vx, vy)), shapeConfig().perfect)
+        val cfg = shapeConfig()
+        shape.end = ResizeMath.drawnEnd(shape, viewport.viewportToContent(Pt(vx, vy)), cfg.perfect)
+        cfg.followDrag(shape)
         onPendingShape(shape)
         requestRender()
     }

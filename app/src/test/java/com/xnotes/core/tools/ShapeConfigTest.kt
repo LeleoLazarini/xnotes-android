@@ -1,5 +1,6 @@
 package com.xnotes.core.tools
 
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.history.RefillShapes
 import com.xnotes.core.model.ConnectorEnd
@@ -27,6 +28,39 @@ class ShapeConfigTest {
         assertTrue(ShapePresets.pages.all { it.presets.size <= ShapePresets.ROWS * ShapePresets.COLUMNS })
         assertSame(ShapePresets.byKey("circle"), ShapePresets.forKind(ShapeKind.CIRCLE))
         assertEquals("rectangle", ShapePresets.forKind(ShapeKind.CURVE).key)
+    }
+
+    /** The flip a drag from (100, 100) to [to] gives a shape of chip [key]. */
+    private fun dragged(key: String, to: Pt): Flip {
+        val c = ShapeConfig().choose(ShapePresets.byKey(key)!!)
+        val s = c.startShape(Pt(100.0, 100.0), ink, 2.0)
+        s.end = to
+        c.followDrag(s)
+        return s.flip
+    }
+
+    @Test fun aDragDownAndRightDrawsTheChip() {
+        for (p in ShapePresets.all) assertEquals(p.key, Flip.NONE, dragged(p.key, Pt(180.0, 150.0)))
+    }
+
+    @Test fun aDragLeftOrUpTurnsWhatFacesAWay() {
+        assertEquals("[ dragged left is ]", Flip.X, dragged("math_square_bracket", Pt(40.0, 160.0)))
+        assertEquals("a bracket has no up or down", Flip.X, dragged("math_square_bracket", Pt(40.0, 20.0)))
+        assertEquals(Flip.Y, dragged("arrow_up", Pt(160.0, 20.0)))
+        assertEquals(Flip.X, dragged("arrow_left", Pt(20.0, 160.0)))
+        assertEquals(Flip.XY, dragged("right_triangle", Pt(20.0, 20.0)))
+        assertEquals(Flip.XY, dragged("callout_rect", Pt(20.0, 20.0)))
+        assertEquals("a triangle turns over", Flip.Y, dragged("triangle", Pt(20.0, 20.0)))
+        assertEquals("a parallelogram only leans the other way", Flip.X, dragged("parallelogram", Pt(20.0, 20.0)))
+        assertEquals("a cube mirrors but stays seen from above", Flip.X, dragged("solid_cube", Pt(20.0, 20.0)))
+    }
+
+    @Test fun uprightShapesStayUpright() {
+        for (key in listOf("heart", "star", "pentagon", "cloud", "burst", "flow_extract", "flow_merge", "flow_document", "solid_cone", "math_axes_2d", "rectangle", "line", "arrow")) {
+            assertEquals(key, Flip.NONE, dragged(key, Pt(160.0, 20.0)))
+        }
+        assertEquals(Flip.NONE, dragged("math_axes_2d", Pt(20.0, 20.0)))
+        assertEquals("a line follows the pen by its own ends", Flip.NONE, dragged("arrow", Pt(20.0, 20.0)))
     }
 
     @Test fun choosingAChipTakesItsHeadsAndCount() {
