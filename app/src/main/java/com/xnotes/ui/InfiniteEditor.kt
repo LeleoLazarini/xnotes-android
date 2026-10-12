@@ -98,6 +98,7 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         configFor = { configFor(it) },
         onWetStroke = { publishWetStroke(it) },
         onCommitStroke = { commitStroke(it) },
+        onScribbleErase = { stroke, taken -> commitScribbleErase(stroke, taken) },
         onEraseBegin = { EraseSession(document) },
         onEraseEnd = { commitErase(it) },
         onEraseLifted = { maybeSwitchBackAfterErase() },
@@ -1205,7 +1206,8 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         if (items.isEmpty()) return false
         heldItems = emptyList()
         handoverTail = emptyList()
-        for (item in items) pushItem(item)
+        // One erased while it was held (a scribble over ink still on the pad) must not come back.
+        for (item in items) if (document.holds(item)) pushItem(item)
         // Every handover tracks its own publication, whichever path settled: what the caller does
         // next is not what says when these triangles reached the glass.
         awaitingPublish = true
@@ -1437,6 +1439,22 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         markDirty()
         refresh()
         view.publish()
+    }
+
+    /**
+     * A scribble over ink: it joins the document and leaves again with what it took, as two undo
+     * steps, so one undo says "that was not an erase" and gives both back.
+     */
+    private fun commitScribbleErase(stroke: Stroke, taken: List<CanvasItem>) {
+        document.add(stroke)
+        history.push(AddCanvasItem(document, stroke))
+        val erase = EraseCanvasItems.capture(document, taken + stroke)
+        erase.redo()
+        history.push(erase)
+        markDirty()
+        refresh()
+        view.publish()
+        runCatching { view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) }
     }
 
     /** Pen up: the finished stroke joins the document, and the edit joins the undo stack. */

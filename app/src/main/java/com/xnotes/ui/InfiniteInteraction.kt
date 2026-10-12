@@ -29,7 +29,9 @@ import com.xnotes.core.model.Labelled
 import com.xnotes.core.model.Rgba
 import com.xnotes.core.model.ShapeItem
 import com.xnotes.core.model.Stroke
+import com.xnotes.core.model.TextItem
 import com.xnotes.core.stroke.Sample
+import com.xnotes.core.stroke.Scribble
 import com.xnotes.core.stroke.ShapeRecognizer
 import com.xnotes.core.stroke.StrokeSimplify
 import com.xnotes.core.tools.EraseMode
@@ -68,6 +70,8 @@ class InfiniteInteraction(
     private val onWetStroke: (Stroke?) -> Unit = {},
     /** Pen up on a finished stroke: add it to the document and push the undo command. */
     private val onCommitStroke: (Stroke) -> Unit = {},
+    /** Pen up on a scribble over ink: take what it touched off, the scribble with it. */
+    private val onScribbleErase: (Stroke, List<CanvasItem>) -> Unit = { _, _ -> },
     /** Begin an eraser drag; the host owns the document and the undo stack. */
     private val onEraseBegin: () -> EraseSession? = { null },
     /** The eraser drag ended: push its single undo command. */
@@ -802,7 +806,26 @@ class InfiniteInteraction(
         // frame can land between the two and blink.
         stroke.finished = true
         simplifyForCommit(stroke)
+        if (scribbleErase(stroke)) return
         onCommitStroke(stroke)
+    }
+
+    /** Scribble to erase: when [stroke] reads as a scribble over ink, erase that instead of committing it. */
+    private fun scribbleErase(stroke: Stroke): Boolean {
+        val eraser = configFor(Tool.ERASER)
+        if (!eraser.scribbleErase || wandEnabled || !stroke.tool.isStroke || stroke.tool == Tool.HIGHLIGHTER) return false
+        val dpPerUnit = viewport.zoom / devicePxPerDp().coerceAtLeast(1e-9)
+        val path = List(stroke.sampleCount) { Pt(stroke.xAt(it), stroke.yAt(it)) }
+        val passes = Scribble.passes(path, dpPerUnit) ?: return false
+        val radius = stroke.config.baseWidth / 2.0 + Scribble.TOUCH_DP / dpPerUnit
+        // Images, text and anything locked are spared, as the eraser spares them.
+        val candidates = itemsIn(Rect.bounding(path).outset(radius))
+            .filter { !it.locked && it !is ImageItem && it !is TextItem }
+        val taken = Scribble.taken(passes, radius, candidates) { c, x, y, r -> c.intersectsCircle(x, y, r) }
+        if (taken.isEmpty()) return false
+        onWetStroke(null)
+        onScribbleErase(stroke, taken)
+        return true
     }
 
     // --- selection ---
