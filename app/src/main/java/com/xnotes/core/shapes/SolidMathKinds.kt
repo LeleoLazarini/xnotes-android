@@ -1,5 +1,6 @@
 package com.xnotes.core.shapes
 
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.vector.VectorContour
@@ -32,6 +33,7 @@ private fun onEllipse(c: Pt, rx: Double, ry: Double, deg: Double) =
 internal class SolidKind(
     id: String,
     override val iconAspect: Double,
+    override val flips: Flip,
     private val knobAt: (Rect, Double) -> Pt,
     private val depthFrom: (Pt, Rect) -> Double,
     private val draw: (Rect, Double) -> List<ShapePath>,
@@ -48,7 +50,8 @@ internal class SolidKind(
             },
         ),
     )
-    override fun mirroredAdj(adj: DoubleArray): DoubleArray? = null
+    // Seen from above whichever side it shows, so a drag never turns it over.
+    override val dragFlips get() = flips.and(Flip.X)
 
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry {
         val d = depthOf(this, box, p.adj)
@@ -67,11 +70,12 @@ internal class NotationKind(
     override val staysInBox: Boolean = true,
     override val defaultAdj: DoubleArray = DoubleArray(0),
     override val knobs: List<KnobDef> = emptyList(),
+    override val flips: Flip = Flip.XY,
+    override val dragFlips: Flip = flips,
     private val corners: (Rect) -> List<Pt> = { emptyList() },
     private val draw: (Rect, ShapeParams) -> List<ShapePath>,
 ) : ShapeKind(id) {
     override val isClosed get() = closed
-    override fun mirroredAdj(adj: DoubleArray): DoubleArray? = null
     override fun build(box: Rect, p: ShapeParams): ShapeGeometry =
         ShapeGeometry(draw(box, p), corners(box), if (closed) boxConnections(box) else emptyList(), ShapeKind.inset(box, 0.1))
 }
@@ -79,7 +83,7 @@ internal class NotationKind(
 internal object SolidMathKinds {
 
     val CUBE: ShapeKind = SolidKind(
-        "solid_cube", 1.0,
+        "solid_cube", 1.0, flips = Flip.XY,
         knobAt = { b, d -> Pt(b.left + d, b.top) },
         depthFrom = { to, b -> to.x - b.left },
         draw = { b, d ->
@@ -111,7 +115,7 @@ internal object SolidMathKinds {
     )
 
     val CYLINDER: ShapeKind = SolidKind(
-        "solid_cylinder", 0.8,
+        "solid_cylinder", 0.8, flips = Flip.Y,
         knobAt = { b, d -> Pt(b.centerX, b.top + d) },
         depthFrom = { to, b -> to.y - b.top },
         draw = { b, d ->
@@ -136,7 +140,7 @@ internal object SolidMathKinds {
     )
 
     val CONE: ShapeKind = SolidKind(
-        "solid_cone", 0.85,
+        "solid_cone", 0.85, flips = Flip.Y,
         knobAt = { b, d -> Pt(b.centerX, b.bottom - d) },
         depthFrom = { to, b -> b.bottom - to.y },
         draw = { b, d ->
@@ -153,7 +157,7 @@ internal object SolidMathKinds {
     )
 
     val SPHERE: ShapeKind = SolidKind(
-        "solid_sphere", 1.0,
+        "solid_sphere", 1.0, flips = Flip.Y,
         knobAt = { b, d -> Pt(b.centerX, b.centerY + d / 2.0) },
         depthFrom = { to, b -> 2.0 * abs(to.y - b.centerY) },
         draw = { b, d ->
@@ -168,7 +172,7 @@ internal object SolidMathKinds {
     )
 
     val PYRAMID: ShapeKind = SolidKind(
-        "solid_pyramid", 1.0,
+        "solid_pyramid", 1.0, flips = Flip.XY,
         knobAt = { b, d -> Pt(b.left + d, b.bottom - d) },
         depthFrom = { to, b -> to.x - b.left },
         draw = { b, d ->
@@ -188,7 +192,7 @@ internal object SolidMathKinds {
     )
 
     val TETRAHEDRON: ShapeKind = SolidKind(
-        "solid_tetrahedron", 1.0,
+        "solid_tetrahedron", 1.0, flips = Flip.XY,
         knobAt = { b, d -> Pt(b.right, b.bottom - d) },
         depthFrom = { to, b -> b.bottom - to.y },
         draw = { b, d ->
@@ -207,7 +211,7 @@ internal object SolidMathKinds {
     )
 
     val TRI_PRISM: ShapeKind = SolidKind(
-        "solid_tri_prism", 1.2,
+        "solid_tri_prism", 1.2, flips = Flip.XY,
         knobAt = { b, d -> Pt(b.right, b.bottom - d) },
         depthFrom = { to, b -> b.bottom - to.y },
         draw = { b, d ->
@@ -229,7 +233,7 @@ internal object SolidMathKinds {
     )
 
     val HEX_PRISM: ShapeKind = SolidKind(
-        "solid_hex_prism", 0.8,
+        "solid_hex_prism", 0.8, flips = Flip.Y,
         knobAt = { b, d -> Pt(b.centerX, b.top + d) },
         depthFrom = { to, b -> to.y - b.top },
         draw = { b, d ->
@@ -265,7 +269,7 @@ internal object SolidMathKinds {
     )
 
     val FRUSTUM: ShapeKind = SolidKind(
-        "solid_frustum", 1.0,
+        "solid_frustum", 1.0, flips = Flip.Y,
         knobAt = { b, d -> Pt(b.centerX, b.bottom - d) },
         depthFrom = { to, b -> b.bottom - to.y },
         draw = { b, d ->
@@ -292,7 +296,7 @@ internal object SolidMathKinds {
     )
 
     val HEMISPHERE: ShapeKind = SolidKind(
-        "solid_hemisphere", 1.4,
+        "solid_hemisphere", 1.4, flips = Flip.Y,
         knobAt = { b, d -> Pt(b.centerX, b.bottom - d) },
         depthFrom = { to, b -> b.bottom - to.y },
         draw = { b, d ->
@@ -338,6 +342,7 @@ internal object SolidMathKinds {
 
     val AXES_2D: ShapeKind = NotationKind(
         "math_axes_2d", 1.0, defaultN = 5, nRange = 0..20, countKind = CountKind.TICKS, staysInBox = false,
+        dragFlips = Flip.NONE,
     ) { b, p ->
         val o = Pt(b.left + 0.12 * b.w, b.bottom - 0.12 * b.h)
         val tick = 0.025 * min(b.w, b.h)
@@ -353,7 +358,7 @@ internal object SolidMathKinds {
         ) + Head.OPEN.paths(yTip, Pt(0.0, -1.0), p.width) + Head.OPEN.paths(xTip, Pt(1.0, 0.0), p.width)
     }
 
-    val AXES_3D: ShapeKind = NotationKind("math_axes_3d", 1.0, staysInBox = false) { b, p ->
+    val AXES_3D: ShapeKind = NotationKind("math_axes_3d", 1.0, staysInBox = false, dragFlips = Flip.NONE) { b, p ->
         val o = Pt(b.left + 0.35 * b.w, b.bottom - 0.35 * b.h)
         val tips = listOf(Pt(o.x, b.top), Pt(b.right, o.y), Pt(b.left, b.bottom))
         listOf(ShapePath(tips.map { ShapePath.lines(listOf(o, it), false) }, PathRole.STROKE_ONLY)) +
@@ -362,6 +367,7 @@ internal object SolidMathKinds {
 
     val NUMBER_LINE: ShapeKind = NotationKind(
         "math_number_line", 3.0, defaultN = 9, nRange = 2..41, countKind = CountKind.TICKS, staysInBox = false,
+        flips = Flip.NONE,
     ) { b, p ->
         val y = b.centerY
         val inset = Head.length(p.width) * 1.5
@@ -375,7 +381,7 @@ internal object SolidMathKinds {
     }
 
     val GRID: ShapeKind = NotationKind(
-        "math_grid", 1.0, closed = true, defaultN = 4, nRange = 1..24, countKind = CountKind.CELLS,
+        "math_grid", 1.0, closed = true, defaultN = 4, nRange = 1..24, countKind = CountKind.CELLS, flips = Flip.NONE,
     ) { b, p ->
         val n = p.n.coerceIn(1, 24)
         val inner = (1 until n).flatMap { i ->
@@ -433,7 +439,7 @@ internal object SolidMathKinds {
         )
     }
 
-    val CURLY_BRACE: ShapeKind = NotationKind("math_curly_brace", 0.4) { b, _ ->
+    val CURLY_BRACE: ShapeKind = NotationKind("math_curly_brace", 0.4, flips = Flip.X) { b, _ ->
         fun at(x: Double, y: Double) = Pt(b.left + x * b.w, b.top + y * b.h)
         val c = VectorContour(
             at(1.0, 0.0),
@@ -451,13 +457,13 @@ internal object SolidMathKinds {
     }
 
     val SQUARE_BRACKET: ShapeKind = NotationKind(
-        "math_square_bracket", 0.4,
+        "math_square_bracket", 0.4, flips = Flip.X,
         corners = { b -> listOf(Pt(b.right, b.top), b.topLeft, Pt(b.left, b.bottom), Pt(b.right, b.bottom)) },
     ) { b, _ ->
         listOf(ShapePath.polyline(listOf(Pt(b.right, b.top), b.topLeft, Pt(b.left, b.bottom), Pt(b.right, b.bottom))))
     }
 
-    val ROUND_BRACKET: ShapeKind = NotationKind("math_round_bracket", 0.4) { b, _ ->
+    val ROUND_BRACKET: ShapeKind = NotationKind("math_round_bracket", 0.4, flips = Flip.X) { b, _ ->
         listOf(ShapePath(listOf(VectorContour(Pt(b.right, b.top), arcSegments(Pt(b.right, b.centerY), b.w, b.h / 2.0, -PI / 2.0, -PI), false)), PathRole.STROKE_ONLY))
     }
 

@@ -1,5 +1,6 @@
 package com.xnotes.format
 
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.infinite.CanvasBackground
@@ -279,7 +280,9 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
             j.endArray()
         }
         if (standIn != null || glyphs) {
-            if (!s.isFree) j.name("geom").value(s.shape.id)
+            // A mirrored shape names its kind under a key readers before flips skip, so they keep the stand-in.
+            if (!s.isFree) j.name(if (s.flip == Flip.NONE) "geom" else "flip_geom").value(s.shape.id)
+            if (s.flip != Flip.NONE) j.name("flip").value(s.flip.id)
             val f = s.box
             j.name("rect").beginArray().value(f.x).value(f.y).value(f.w).value(f.h).endArray()
             if (s.rotation != 0.0) j.name("angle").value(s.rotation)
@@ -633,6 +636,8 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
         var angle = 0.0
         var shape: String? = null
         var geom: String? = null
+        var flipGeom: String? = null
+        var flip: String? = null
         var path: String? = null
         var adj: DoubleArray? = null
         var n = 0
@@ -693,6 +698,8 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
                 "angle" -> s.angle = doubleOr(p, 0.0)
                 "shape" -> s.shape = stringOr(p, "")
                 "geom" -> s.geom = stringOrNull(p)
+                "flip_geom" -> s.flipGeom = stringOrNull(p)
+                "flip" -> s.flip = stringOrNull(p)
                 "path" -> s.path = stringOrNull(p)
                 "adj" -> s.adj = doublesOrNull(p)
                 "n" -> s.n = intOr(p, 0)
@@ -769,11 +776,13 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
         val shape = buildDrawnShape(s)
         // The real geometry behind a stand-in polygon; or else an old file's baked turn.
         val frame = s.rect
-        if (frame != null && (s.geom != null || s.angle != 0.0 || s.path != null)) {
-            shape.restoreFrame(ShapeKind.fromIdOrNull(s.geom), frame, s.angle, FreePath.fromSvg(s.path))
+        val geom = s.geom ?: s.flipGeom
+        if (frame != null && (geom != null || s.angle != 0.0 || s.path != null)) {
+            shape.restoreFrame(ShapeKind.fromIdOrNull(geom), frame, s.angle, FreePath.fromSvg(s.path))
         } else {
             shape.unbake()
         }
+        if (!shape.isFree && !shape.shape.isEndpointShape) shape.flip = Flip.fromId(s.flip)
         if (s.n > 0) shape.n = s.n
         s.adj?.let { shape.adj = it }
         s.headStart?.let { shape.headStart = Head.fromId(it) }

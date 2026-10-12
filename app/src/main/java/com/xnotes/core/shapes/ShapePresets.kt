@@ -1,5 +1,6 @@
 package com.xnotes.core.shapes
 
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 
 /** A chip in the shape picker: a kind, with its own point count, knob values and heads. */
@@ -12,6 +13,8 @@ class ShapePreset(
     val headEnd: Head = kind.defaultHeadEnd,
     /** For a free kind, the outline its chip shows, normalized to the icon's box. */
     val iconPath: List<com.xnotes.core.vector.VectorContour>? = null,
+    /** The flips a drag toward the left or upward gives what this chip draws. */
+    val dragFlips: Flip = kind.dragFlips,
 ) {
     /** True when the picker offers a minus/plus for this chip's point or side count. */
     val counted: Boolean get() = kind.nRange != null
@@ -88,7 +91,8 @@ object ShapePresets {
             ShapePreset("flow_stored_data", FlowchartKinds.STORED_DATA),
             ShapePreset("flow_sort", FlowchartKinds.SORT),
             ShapePreset("flow_merge", FlowchartKinds.MERGE),
-            ShapePreset("flow_extract", ShapeKind.TRIANGLE),
+            // Upside down it would be Merge.
+            ShapePreset("flow_extract", ShapeKind.TRIANGLE, dragFlips = Flip.NONE),
             ShapePreset("flow_summing", FlowchartKinds.SUMMING),
             ShapePreset("flow_or", FlowchartKinds.OR),
         ),

@@ -3,6 +3,7 @@ package com.xnotes.format
 import com.xnotes.core.FakeImageCodec
 import com.xnotes.core.FakeTextMeasurer
 import com.xnotes.core.geometry.Affine
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.infinite.CanvasBackground
@@ -587,6 +588,27 @@ class CanvasCodecTest {
     private fun withoutNewFields(manifest: String) =
         manifest.replace(Regex(",\"geom\":\"[a-z0-9_]+\""), "")
             .replace(Regex(",\"rect\":\\[[^\\]]*\\],\"angle\":[-0-9.eE]+"), "")
+
+    @Test fun aFlippedShapeRoundTripsAndOlderReadersKeepItsOutline() {
+        val doc = InfiniteDocument()
+        val s = ShapeItem(ShapeKind.RIGHT_TRIANGLE, Pt(10.0, 20.0), Pt(110.0, 120.0), ink, 2.0).also { it.flip = Flip.X }
+        s.applyTransform(Affine.rotateAbout(s.box.center, 0.5))
+        doc.add(s)
+        doc.add(ShapeItem(ShapeKind.RECTANGLE, Pt(0.0, 0.0), Pt(10.0, 10.0), ink, 2.0))
+        val text = manifestText(doc)
+        assertTrue(text.contains("\"flip_geom\":\"right_triangle\""))
+        assertTrue(text.contains("\"flip\":\"x\""))
+        assertFalse("never under the key older readers rebuild unflipped", text.contains("\"geom\""))
+        val back = roundTrip(doc).items[0] as ShapeItem
+        assertEquals(ShapeKind.RIGHT_TRIANGLE, back.shape)
+        assertEquals(Flip.X, back.flip)
+        assertEquals(0.5, back.rotation, 1e-12)
+        assertEquals(Flip.NONE, (roundTrip(doc).items[1] as ShapeItem).flip)
+        // A reader from before flips skips both keys and keeps the stand-in, which faces the right way.
+        val old = readManifest(text.replace(Regex(",\"flip_geom\":\"[a-z0-9_]+\""), "").replace(Regex(",\"flip\":\"[a-z]+\""), "")).items[0] as ShapeItem
+        assertEquals(ShapeKind.POLYGON, old.shape)
+        assertSameCorners(s.vertexDots().map { it.at }, old.vertices()!!)
+    }
 
     @Test fun aTurnedShapeRoundTripsAsItself() {
         for (kind in listOf(ShapeKind.RECTANGLE, ShapeKind.ELLIPSE, ShapeKind.CIRCLE, ShapeKind.TRIANGLE)) {

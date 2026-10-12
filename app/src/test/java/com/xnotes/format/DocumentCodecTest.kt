@@ -4,6 +4,7 @@ import com.xnotes.core.FakeImageCodec
 import com.xnotes.core.model.ImageData
 import com.xnotes.core.FakeTextMeasurer
 import com.xnotes.core.geometry.Affine
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.Bookmark
@@ -882,6 +883,26 @@ class DocumentCodecTest {
         assertEquals(oval.rotation, back[1].rotation, 1e-12)
         assertEquals(oval.box.centerX, back[1].box.centerX, 1e-9)
         assertEquals(Rgba(1, 2, 3, 64), back[1].fillRgba)
+    }
+
+    @Test fun aFlippedShapeRoundTripsInANote() {
+        val doc = Document(dpi = 150)
+        val page = Page(1240.0, 1754.0)
+        val bent = ShapeItem(com.xnotes.core.shapes.ArrowKinds.BENT, Pt(10.0, 20.0), Pt(110.0, 90.0), Rgba(1, 2, 3, 255), 2.0)
+        bent.flip = Flip.XY
+        bent.applyTransform(Affine.rotateAbout(bent.box.center, -0.3))
+        page.items.add(bent)
+        doc.pages.add(page)
+        val out = ByteArrayOutputStream()
+        codec.write(doc, out)
+        val text = manifestOf(out.toByteArray())
+        assertTrue(text.contains("\"flip_geom\":\"arrow_bent\""))
+        assertTrue(text.contains("\"flip\":\"xy\""))
+        val back = roundTrip(doc).pages[0].items.single() as ShapeItem
+        assertEquals(com.xnotes.core.shapes.ArrowKinds.BENT, back.shape)
+        assertEquals(Flip.XY, back.flip)
+        assertEquals(-0.3, back.rotation, 1e-12)
+        assertEquals(bent.box.centerX, back.box.centerX, 1e-9)
     }
 
     @Test fun aConnectorGluesToATextBoxAndAShapeOnItsOwnPage() {

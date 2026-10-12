@@ -1,6 +1,7 @@
 package com.xnotes.core.model
 
 import com.xnotes.core.geometry.Affine
+import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Obb
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
@@ -36,11 +37,11 @@ import kotlin.math.sqrt
 
 /**
  * An editable geometric shape (spec 02 §5.4). Its [shape] kind builds the outline inside the box
- * spanned by [start]/[end], and [rotation] turns the result about the box centre, so a turned
- * shape keeps its kind and its own frame. Line and arrow are drawn from their two ends instead;
- * polygon, polyline and curve carry their own outline in [path]. Closed shapes are stroked and
- * optionally filled. Shapes erase like ink: whole on contact in STROKE mode, and cut into outline
- * fragments by the AREA eraser.
+ * spanned by [start]/[end], [flip] mirrors it there, and [rotation] turns the result about the box
+ * centre, so a turned or mirrored shape keeps its kind and its own frame. Line and arrow are drawn
+ * from their two ends instead; polygon, polyline and curve carry their own outline in [path].
+ * Closed shapes are stroked and optionally filled. Shapes erase like ink: whole on contact in
+ * STROKE mode, and cut into outline fragments by the AREA eraser.
  */
 class ShapeItem(
     var shape: ShapeKind,
@@ -73,6 +74,9 @@ class ShapeItem(
     override val kind = KIND
     override val resizable = true
     override var locked = false
+
+    /** How the kind's drawing is mirrored inside the box, before [rotation] turns it; always none for line, arrow and free outlines. */
+    var flip: Flip = Flip.NONE
 
     /** The typed label: centred in a closed kind's text rect and turning with it, or upright on an open kind's line; null for none. */
     override var label: ShapeLabel? = null
@@ -131,11 +135,14 @@ class ShapeItem(
         val g = if (shape.isEndpointShape) {
             ShapeGeometry(listOf(ShapePath.polyline(listOf(start, end))), textRect = Rect.fromPoints(start, end))
         } else {
-            shape.build(box, ShapeParams(adj, n, path, strokeWidth))
+            kindGeometry()
         }
         if (shape.isClosed || !hasHeads()) return g
         return ShapeGeometry(Head.attach(g.paths, headStart, headEnd, strokeWidth), g.corners, g.connections, g.textRect)
     }
+
+    /** What the kind builds in the box, mirrored by [flip]; the unturned frame, no heads. */
+    private fun kindGeometry(): ShapeGeometry = shape.build(box, ShapeParams(adj, n, path, strokeWidth)).flipped(flip, box)
 
     /** True when either end of an open shape carries a head. */
     fun hasHeads(): Boolean = shape.isOpen && (headStart != Head.NONE || headEnd != Head.NONE)
@@ -311,7 +318,7 @@ class ShapeItem(
 
     /** Where the kind's knobs sit on the page; none for a free outline, a line or an arrow. */
     fun knobDots(): List<Pt> =
-        if (shape.isEndpointShape) emptyList() else shape.knobs.map { toPage(it.position(box, adj, n)) }
+        if (shape.isEndpointShape) emptyList() else shape.knobs.map { toPage(flip.map(it.position(box, adj, n), box)) }
 
     /** True when page point [p] is within [reach] of any knob, vertex dot or edge dot. */
     fun dotNear(p: Pt, reach: Double): Boolean =
@@ -323,12 +330,14 @@ class ShapeItem(
     fun dragKnob(index: Int, to: Pt) {
         val knob = shape.knobs.getOrNull(index) ?: return
         val reframe = knob.reframe
+        // Knobs work in the kind's own drawing, so the pointer is mirrored back into it first.
+        val at = flip.map(toLocal(to), box)
         if (reframe == null) {
-            adj = knob.drag(toLocal(to), box, adj, n)
+            adj = knob.drag(at, box, adj, n)
             return
         }
         // The new box shares the old one's centre, so the turn about it carries on unchanged.
-        val b = reframe(toLocal(to), box)
+        val b = flip.map(reframe(at, box), box)
         val ltr = start.x <= end.x
         val down = start.y <= end.y
         start = Pt(if (ltr) b.left else b.right, if (down) b.top else b.bottom)
@@ -342,7 +351,7 @@ class ShapeItem(
         val contours = when {
             shape.isEndpointShape -> listOf(FreePath.lines(listOf(start, end), closed = false))
             isFree -> FreePath.place(path.orEmpty(), box)
-            else -> shape.build(box, ShapeParams(adj, n, path, strokeWidth)).paths
+            else -> kindGeometry().paths
                 .filter { it.role == PathRole.OUTLINE || it.role == PathRole.STROKE_ONLY }.flatMap { it.contours }
         }
         return contours.map(VertexEdit::canonical)
@@ -498,7 +507,7 @@ class ShapeItem(
         }
     }
 
-    override fun snapshotGeometry(): GeometrySnapshot = ShapeSnapshot(shape, start, end, path, rotation, adj.copyOf(), n, labelAt)
+    override fun snapshotGeometry(): GeometrySnapshot = ShapeSnapshot(shape, start, end, path, rotation, adj.copyOf(), n, labelAt, flip)
 
     override fun restoreGeometry(snap: GeometrySnapshot) {
         if (snap !is ShapeSnapshot) return
@@ -510,15 +519,16 @@ class ShapeItem(
         adj = snap.adj.copyOf()
         n = snap.n
         labelAt = snap.labelAt
+        flip = snap.flip
     }
 
     /**
      * Bake a transform into the shape, keeping its kind wherever the result is still that kind. A
      * line/arrow moves its two endpoints. A box kind whose axes stay square to each other (any
-     * scale along them, any turn) gets a new box and [rotation]; an ellipse sheared by a stretch
-     * across its axes is still an ellipse, refound from the map's singular values; any other
-     * sheared kind becomes a free outline of its own curves. Free outlines map exactly. The
-     * outline keeps its width: a shape is redrawn, not magnified.
+     * scale along them, any turn, any mirror) gets a new box, [rotation] and [flip]; an ellipse
+     * sheared by a stretch across its axes is still an ellipse, refound from the map's singular
+     * values; any other sheared kind becomes a free outline of its own curves. Free outlines map
+     * exactly. The outline keeps its width: a shape is redrawn, not magnified.
      */
     override fun applyTransform(t: Affine) {
         if (shape.isEndpointShape) {
@@ -533,14 +543,20 @@ class ShapeItem(
         val ux = Pt(t.a * cs + t.c * sn, t.b * cs + t.d * sn)
         val uy = Pt(-t.a * sn + t.c * cs, -t.b * sn + t.d * cs)
         val square = abs(ux.x * uy.x + ux.y * uy.y) <= 1e-9 * ux.length() * uy.length()
-        // A flip keeps the frame only for a kind whose knobs can draw it mirrored.
-        val mirrored = if (square && t.determinant < 0.0) shape.mirroredAdj(adj) else adj
+        val mirrors = t.determinant < 0.0
         when {
-            isFree -> refit(FreePath.map(FreePath.place(path.orEmpty(), b)) { t.apply(toPage(it)) }, atan2(ux.y, ux.x))
-            square && mirrored != null -> {
-                // The turn is read off the height axis, so a flip mirrors left to right only.
-                adj = mirrored
-                setFrame(t.apply(b.center), ux.length() * b.w, uy.length() * b.h, atan2(uy.y, uy.x) - PI / 2.0)
+            isFree -> refit(FreePath.map(FreePath.place(path.orEmpty(), b)) { t.apply(toPage(it)) }, uprightTurn(ux, mirrors))
+            square -> {
+                // A mirror is the frame flipped left to right or upside down, then turned; of the
+                // two, the one that leaves the frame (and so its label) nearer upright.
+                var turn = atan2(uy.y, uy.x) - PI / 2.0
+                var across = Flip.X
+                if (mirrors && abs(normalizeTurn(turn)) > PI / 2.0 + TURN_SNAP) {
+                    turn = atan2(ux.y, ux.x)
+                    across = Flip.Y
+                }
+                if (mirrors) flip = flip.toggled(across.and(shape.flips))
+                setFrame(t.apply(b.center), ux.length() * b.w, uy.length() * b.h, turn)
             }
             !square && (shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE) -> {
                 // The ellipse is the unit circle under A = M diag(rx, ry); its axes are A's singular pairs.
@@ -562,10 +578,16 @@ class ShapeItem(
                 shape = if (shape.isClosed) ShapeKind.POLYGON else ShapeKind.POLYLINE
                 adj = shape.defaultAdj.copyOf()
                 n = shape.defaultN
-                refit(FreePath.map(outline) { t.apply(toPage(it)) }, atan2(ux.y, ux.x))
+                refit(FreePath.map(outline) { t.apply(toPage(it)) }, uprightTurn(ux, mirrors))
             }
         }
         if (shape == ShapeKind.CIRCLE && abs(box.w - box.h) > 1e-9 * max(box.w, box.h)) shape = ShapeKind.ELLIPSE
+    }
+
+    /** The turn of a frame whose width axis lands on [ux]; a [mirrored] outline takes whichever way along it is nearer upright. */
+    private fun uprightTurn(ux: Pt, mirrored: Boolean): Double {
+        val a = atan2(ux.y, ux.x)
+        return if (mirrored && abs(normalizeTurn(a)) > PI / 2.0 + TURN_SNAP) a - PI else a
     }
 
     /** Make the unturned box [w] x [h] about [centre], turned by [turn], snapping a quarter turn upright. */
@@ -589,9 +611,10 @@ class ShapeItem(
         rotation = a
     }
 
-    /** Re-derive the box and the normalized [path] from page-space [contours], in a frame turned by [turn]. */
+    /** Re-derive the box and the normalized [path] from page-space [contours], in a frame turned by [turn]; they are as drawn, so nothing is mirrored. */
     private fun refit(contours: List<VectorContour>, turn: Double) {
         if (contours.isEmpty()) return
+        flip = Flip.NONE
         var a = normalizeTurn(turn)
         val quarters = round(a / (PI / 2.0))
         // The bounds read the same either way, but a label turns with its frame.
@@ -614,7 +637,7 @@ class ShapeItem(
      */
     fun legacyOutline(): List<Pt>? {
         if (shape.isEndpointShape) return null
-        val plain = shape.isLegacy && rotation == 0.0 && hasDefaultParams() &&
+        val plain = shape.isLegacy && rotation == 0.0 && flip == Flip.NONE && hasDefaultParams() &&
             (!isFree || path?.let(FreePath::isVertexList) != false)
         if (plain) return null
         if (shape == ShapeKind.ELLIPSE || shape == ShapeKind.CIRCLE) return ellipsePolygon(LEGACY_ELLIPSE_POINTS).map(::toPage)
@@ -793,11 +816,12 @@ private class ShapeSnapshot(
     val adj: DoubleArray,
     val n: Int,
     val labelAt: Double,
+    val flip: Flip,
 ) : GeometrySnapshot {
     // Value equality, so a drag that changed nothing records nothing.
     override fun equals(other: Any?): Boolean = other is ShapeSnapshot && shape == other.shape &&
         start == other.start && end == other.end && path === other.path && rotation == other.rotation &&
-        adj.contentEquals(other.adj) && n == other.n && labelAt == other.labelAt
+        adj.contentEquals(other.adj) && n == other.n && labelAt == other.labelAt && flip == other.flip
 
     override fun hashCode(): Int = start.hashCode() * 31 + end.hashCode()
 }

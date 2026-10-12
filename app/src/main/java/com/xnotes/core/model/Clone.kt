@@ -17,6 +17,7 @@ fun CanvasItem.deepCopy(measurer: TextMeasurer): CanvasItem = when (this) {
             shape, start, end, strokeRgba, strokeWidth, fillRgba, neon, neonStrength, path,
             dashed, dashLength, dashGap, rotation, adj.copyOf(), n, headStart, headEnd,
         ).also {
+            it.flip = flip
             it.label = label
             it.labelAt = labelAt
         }
