@@ -118,6 +118,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -290,6 +291,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
      *  touched, so a failed encode can never truncate a good note. Lives under filesDir (not the
      *  reclaimable cacheDir). */
     private val saveTmpDir = tempDir("savetmp")
+
+    /** Where a batch export renders each document before it joins the zip; one file at a time. */
+    private val batchDir = tempDir("batchpdf")
 
     /** The sticker library: encoded image files kept under filesDir across sessions (never purged).
      *  Only [java.io.File] handles are held in memory; thumbnails and inserts decode from disk. */
@@ -527,6 +531,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         private set
     /** Flipped by the import dialog's Cancel so the in-flight stream-copy aborts at its next buffer. */
     private val importCancelled = java.util.concurrent.atomic.AtomicBoolean(false)
+    /** How far an export of explorer picks has got; drives its dialog, null while none runs. */
+    var batchExport by mutableStateOf<com.xnotes.platform.PdfBatch.Progress?>(null)
+        private set
+    /** The running batch export's own cancel flag, so a later batch never un-cancels an earlier one. */
+    private var batchCancel: java.util.concurrent.atomic.AtomicBoolean? = null
+    /** Holds a batch export back until the one before it has cleaned up, so two never render at once. */
+    private val batchLock = kotlinx.coroutines.sync.Mutex()
     /** True while a tapped note is being read off-thread; drives the "Opening note…" dialog. */
     var opening by mutableStateOf(false)
         private set
@@ -5385,6 +5396,71 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             )
         } finally {
             deleteCanvasImageTemps(doc) // transient doc loaded just for export; drop its extracts
+        }
+    }
+
+    /**
+     * Exports explorer picks under [treeUri] as PDFs into [dest], a file the user just created: the
+     * one picked document as itself unless [zip], else a zip of every document the picks hold, each
+     * picked folder keeping its tree. Documents are loaded and written one at a time, and
+     * [batchExport] follows along for the dialog. A cancel, from the dialog or from the caller's scope
+     * going away, discards [dest].
+     */
+    suspend fun exportPdfsAsync(treeUri: String, picked: List<BrowseEntry>, dest: String, zip: Boolean): com.xnotes.platform.PdfBatch.Result {
+        val cancel = java.util.concurrent.atomic.AtomicBoolean(false)
+        batchCancel = cancel
+        batchExport = com.xnotes.platform.PdfBatch.Progress.GATHERING
+        try {
+            return batchLock.withLock {
+                withContext(Dispatchers.IO) {
+                    val job = coroutineContext[kotlinx.coroutines.Job]
+                    val stop = { cancel.get() || job?.isActive == false }
+                    val batch = com.xnotes.platform.PdfBatch(batchDir, ::exportFileToPdf, stop) { if (!cancel.get()) batchExport = it }
+                    val target = exportDestination(dest)
+                    val lone = picked.singleOrNull()?.takeIf { !zip && !it.isDir }
+                    if (lone != null) {
+                        batch.single(lone.documentUri, lone.name, target)
+                    } else {
+                        batch.zip(com.xnotes.core.util.ExportZip.plan(picked.map { exportNode(treeUri, it, stop) }), target)
+                    }
+                }
+            }
+        } finally {
+            if (batchCancel === cancel) {
+                batchCancel = null
+                batchExport = null
+            }
+        }
+    }
+
+    /** Stops the running batch export (the dialog's Cancel); it cleans up behind the dialog, which goes at once. */
+    fun cancelBatchExport() {
+        batchCancel?.set(true)
+        batchExport = null
+    }
+
+    /** [e] as a batch export sees it: a folder carries everything under it, as the explorer lists it. IO. */
+    private fun exportNode(treeUri: String, e: BrowseEntry, stop: () -> Boolean, seen: MutableSet<String> = HashSet()): com.xnotes.core.util.ExportZip.Node {
+        val key = documentKey(e.documentUri)
+        val children = if (e.isDir && seen.add(key) && !stop()) {
+            runCatching { browseChildren(treeUri, browseDocId(e.documentUri)) }.getOrDefault(emptyList())
+                .map { exportNode(treeUri, it, stop, seen) }
+        } else {
+            emptyList()
+        }
+        return com.xnotes.core.util.ExportZip.Node(e.name, key, e.documentUri, e.isDir, children)
+    }
+
+    /** The file a batch export was asked to fill; deleted when the export doesn't keep it, or at least emptied. */
+    private fun exportDestination(uri: String) = object : com.xnotes.platform.PdfBatch.Destination {
+        private val u = android.net.Uri.parse(uri)
+
+        override fun open(): OutputStream =
+            appContext.contentResolver.openOutputStream(u) ?: throw java.io.FileNotFoundException(uri)
+
+        override fun discard() {
+            val gone = runCatching { android.provider.DocumentsContract.deleteDocument(appContext.contentResolver, u) }.getOrDefault(false)
+            if (!gone) runCatching { appContext.contentResolver.openOutputStream(u, "wt")?.close() }
         }
     }
 

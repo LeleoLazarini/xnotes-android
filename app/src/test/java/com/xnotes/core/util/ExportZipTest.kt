@@ -13,9 +13,9 @@ class ExportZipTest {
     private fun dir(path: String, vararg children: Node) =
         Node(path.substringAfterLast('/'), path, "uri:$path", isDir = true, children = children.toList())
 
-    private fun pdf(path: String, source: String) = Entry(path, "uri:$source")
+    private fun pdf(path: String, source: String) = Entry(path, "uri:$source", source.substringAfterLast('/'))
 
-    private fun folder(path: String) = Entry(path, null)
+    private fun folder(path: String) = Entry(path, null, path.trimEnd('/').substringAfterLast('/'))
 
     @Test
     fun `picked documents land at the top as PDFs`() {
@@ -101,7 +101,12 @@ class ExportZipTest {
             ),
         )
         assertEquals(
-            listOf(Entry("_/", null), Entry("_/tab_here.pdf", "s3"), Entry("_.pdf", "s4"), Entry("a_b_c.pdf", "s1")),
+            listOf(
+                Entry("_/", null, ".."),
+                Entry("_/tab_here.pdf", "s3", "tab\there.xnote"),
+                Entry("_.pdf", "s4", ".xnote"),
+                Entry("a_b_c.pdf", "s1", "a/b\\c.xnote"),
+            ),
             plan,
         )
     }

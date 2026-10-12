@@ -611,7 +611,7 @@ private fun EditorScreen(
             val ok = runCatching {
                 java.io.FileOutputStream(temp).use { fo ->
                     // Abort the (otherwise uninterruptible) PdfBox save the moment Cancel is tapped.
-                    val o = CancellableOutputStream(fo) { cancel.get() }
+                    val o = com.xnotes.platform.CancellableOutputStream(fo) { cancel.get() }
                     render(o, { done, total -> if (!cancel.get()) exportProgress = ExportProgress(done, total, counting) }, { cancel.get() })
                 }
             }.isSuccess
@@ -1308,24 +1308,6 @@ private fun SplitDivider(
  */
 private fun <T : android.view.View> detached(view: T): T =
     view.also { (it.parent as? android.view.ViewGroup)?.removeView(it) }
-
-/**
- * Wraps a PDF export's output stream and throws the instant [cancelled] turns true, so PdfBox's
- * otherwise-uninterruptible `save()` (which writes the whole document in one call) aborts promptly
- * when the user taps Cancel, instead of running to completion on a background thread.
- */
-private class CancellableOutputStream(
-    private val out: java.io.OutputStream,
-    private val cancelled: () -> Boolean,
-) : java.io.OutputStream() {
-    override fun write(b: Int) { if (cancelled()) throw java.io.InterruptedIOException(); out.write(b) }
-    override fun write(b: ByteArray, off: Int, len: Int) {
-        if (cancelled()) throw java.io.InterruptedIOException()
-        out.write(b, off, len)
-    }
-    override fun flush() { out.flush() }
-    override fun close() { out.close() }
-}
 
 /**
  * "Exporting to PDF…" dialog shown while a (possibly large) note is flattened to a PDF off the main
