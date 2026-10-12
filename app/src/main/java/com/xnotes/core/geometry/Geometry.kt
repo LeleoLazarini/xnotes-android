@@ -55,6 +55,22 @@ object Geometry {
         return hypot(p.x - (a.x + t * abx), p.y - (a.y + t * aby))
     }
 
+    /** Shortest distance between the segments [a]–[b] and [c]–[d]; 0 when they cross. */
+    fun distanceSegmentToSegment(a: Pt, b: Pt, c: Pt, d: Pt): Double {
+        val abc = cross(a, b, c)
+        val abd = cross(a, b, d)
+        val cda = cross(c, d, a)
+        val cdb = cross(c, d, b)
+        if (((abc > 0.0 && abd < 0.0) || (abc < 0.0 && abd > 0.0)) && ((cda > 0.0 && cdb < 0.0) || (cda < 0.0 && cdb > 0.0))) return 0.0
+        return minOf(
+            minOf(distancePointToSegment(a, c, d), distancePointToSegment(b, c, d)),
+            minOf(distancePointToSegment(c, a, b), distancePointToSegment(d, a, b)),
+        )
+    }
+
+    /** Which side of the line [a]->[b] point [p] falls on: positive one way, negative the other. */
+    private fun cross(a: Pt, b: Pt, p: Pt): Double = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)
+
     /** Dot product of two vectors. */
     fun dot(a: Pt, b: Pt): Double = a.x * b.x + a.y * b.y
 

@@ -44,7 +44,7 @@ interface CanvasItem {
     /** Does a page-local point hit the item? (click-select) */
     fun contains(p: Pt): Boolean
 
-    /** A representative page-local point (lasso membership). */
+    /** A representative page-local point. */
     fun centroid(): Pt
 
     /** Does the eraser circle (page-local) touch the item? */
