@@ -518,6 +518,56 @@ class CanvasSelectionTest {
         assertEquals(Pt(300.0, 180.0), c.end.at)
     }
 
+    @Test fun aMirrorFlipsEverythingSelectedAboutItsBoxInOneUndoStep() {
+        val a = ShapeItem(ShapeKind.RIGHT_TRIANGLE, Pt(0.0, 0.0), Pt(100.0, 60.0), Rgba(1, 2, 3, 255))
+        val b = rect(300.0, 100.0, 400.0, 160.0)
+        val c = joining(a, b)
+        val ink = line(0.0, 200.0)
+        val doc = docOf(a, b, c, ink)
+        val sel = CanvasSelection(doc)
+        sel.select(listOf(a, ink))
+        val box = sel.box!!
+        val was = ink.samples.map { it.pos }
+        val start = c.start.at
+        val cmd = sel.mirror(upsideDown = false)!!
+        assertEquals(com.xnotes.core.geometry.Flip.X, a.flip)
+        assertEquals(ink.samples.map { it.pos }, was.map { Pt(2 * box.center.x - it.x, it.y) })
+        assertSame("still glued to the mirrored shape", a, c.start.target)
+        assertTrue(c.start.at.distanceTo(Pt(2 * box.center.x - start.x, start.y)) < 1e-9)
+        assertEquals(Glue.point(a, c.start.point)!!.at, c.start.at)
+        assertEquals("what it leads to stays put", Pt(300.0, 130.0), c.end.at)
+        cmd.undo()
+        assertEquals(com.xnotes.core.geometry.Flip.NONE, a.flip)
+        assertEquals(was, ink.samples.map { it.pos })
+        assertEquals(start, c.start.at)
+    }
+
+    @Test fun aMirroredBoxTurnsTheOtherWay() {
+        val items = listOf(line(0.0, 0.0), line(0.0, 80.0))
+        val doc = docOf(*items.toTypedArray())
+        val turned = CanvasSelection(doc)
+        turned.select(items)
+        turned.beginTransform()
+        turned.rotateLive(Pt(200.0, 200.0))
+        val angle = turned.box!!.angle
+        turned.mirror(upsideDown = true)
+        assertEquals(-angle, turned.box!!.angle, 1e-12)
+        val lone = ShapeItem(ShapeKind.RIGHT_TRIANGLE, Pt(0.0, 0.0), Pt(100.0, 60.0), Rgba(1, 2, 3, 255))
+        val one = CanvasSelection(docOf(lone))
+        one.select(listOf(lone))
+        one.mirror(upsideDown = true)
+        assertEquals(com.xnotes.core.geometry.Flip.Y, lone.flip)
+        assertEquals("a lone shape is boxed by its own frame", lone.frameObb(), one.box)
+    }
+
+    @Test fun textNeverMirrors() {
+        assertTrue(line(0.0, 0.0).mirrorable)
+        assertTrue(box(0.0, 0.0).mirrorable)
+        assertTrue(rect(0.0, 0.0, 10.0, 10.0).mirrorable)
+        assertTrue(!com.xnotes.core.model.TextItem(Pt.ZERO, text = "a", measurer = com.xnotes.core.FakeTextMeasurer()).mirrorable)
+        assertTrue(!ShapeItem(ShapeKind.GLYPHS, Pt(0.0, 0.0), Pt(10.0, 10.0), Rgba(1, 2, 3, 255)).mirrorable)
+    }
+
     @Test fun aLoneConnectorDraggedByItsLineLetsGoAndUndoGluesItBack() {
         val a = rect(0.0, 0.0, 100.0, 60.0)
         val b = rect(300.0, 100.0, 400.0, 160.0)

@@ -311,6 +311,20 @@ class CanvasSelection(private val doc: InfiniteDocument) {
         return OnCanvas(doc, cmds.singleOrNull() ?: CompositeCommand(cmds), moved + shaped)
     }
 
+    /**
+     * Mirror everything selected about the box's centre, left to right or [upsideDown], with the
+     * connectors glued to it, and the box with them; the undoable edit, or null when nothing is selected.
+     */
+    fun mirror(upsideDown: Boolean): Command? {
+        val b = box ?: return null
+        val c = b.center
+        beginTransform(rigid = true)
+        applyLive(if (upsideDown) Affine.scaleAbout(c, 1.0, -1.0) else Affine.scaleAbout(c, -1.0, 1.0))
+        val command = buildCommand(movedOnly = false)
+        box = if (isFramedShape) boxOf(items) else b.copy(angle = -b.angle)
+        return command
+    }
+
     /** True when [item] is still on the canvas, so glue to it counts. */
     fun holds(item: CanvasItem): Boolean = doc.holds(item)
 

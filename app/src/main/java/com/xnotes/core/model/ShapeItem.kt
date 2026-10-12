@@ -75,6 +75,9 @@ class ShapeItem(
     override val resizable = true
     override var locked = false
 
+    /** Drawn text is words, which a mirror would turn backwards. */
+    override val mirrorable: Boolean get() = shape != ShapeKind.GLYPHS
+
     /** How the kind's drawing is mirrored inside the box, before [rotation] turns it; always none for line, arrow and free outlines. */
     var flip: Flip = Flip.NONE
 

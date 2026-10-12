@@ -618,6 +618,8 @@
     <string name="lock">Lock</string>
     <string name="shape_label">Label</string>
     <string name="connector_reroute">Re-route</string>
+    <string name="mirror_left_right">Mirror left-right</string>
+    <string name="mirror_upside_down">Mirror upside down</string>
     <string name="title_change_style">Change style</string>
     <string name="caption_thickness">Thickness</string>
     <string name="change_style_hint">Applies to the selected strokes and shapes.</string>

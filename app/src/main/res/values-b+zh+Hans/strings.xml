@@ -587,6 +587,8 @@
     <string name="lock">锁定</string>
     <string name="shape_label">标签</string>
     <string name="connector_reroute">重新布线</string>
+    <string name="mirror_left_right">左右镜像</string>
+    <string name="mirror_upside_down">上下镜像</string>
     <string name="title_change_style">更改样式</string>
     <string name="caption_thickness">粗细</string>
     <string name="change_style_hint">应用于所选笔迹和形状。</string>

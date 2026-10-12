@@ -671,6 +671,16 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
         publishOverlay()
     }
 
+    override fun canMirrorSelection(): Boolean = !selection.isEmpty && selection.items.all { it.mirrorable }
+
+    override fun mirrorSelection(upsideDown: Boolean) {
+        if (!canMirrorSelection()) return
+        selection.mirror(upsideDown)?.let { history.push(it) }
+        markDirty()
+        refresh()
+        publishOverlay()
+    }
+
     override fun labelSelection() {
         val shape = selection.items.singleOrNull() as? Labelled ?: return
         if (shape.takesLabel && !shape.locked) startLabelEdit(shape)

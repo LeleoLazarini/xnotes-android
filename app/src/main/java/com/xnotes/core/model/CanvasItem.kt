@@ -20,6 +20,9 @@ interface CanvasItem {
     /** Whether the item exposes resize handles (images, text boxes, shapes do). */
     val resizable: Boolean
 
+    /** False for text, which a mirror would turn backwards, so a selection holding any is not mirrored. */
+    val mirrorable: Boolean get() = true
+
     /**
      * Pinned in place: it cannot be selected, moved or erased until it is unlocked. A held finger
      * over a locked item offers to unlock it rather than picking it up, which is the only way back.

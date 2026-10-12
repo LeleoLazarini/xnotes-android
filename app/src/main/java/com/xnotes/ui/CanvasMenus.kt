@@ -117,6 +117,12 @@ interface SelectionMenuHost : SwatchHost {
 
     /** Plan that connector's route afresh round what is in its way, as one undo step. */
     fun rerouteSelection()
+
+    /** True when the selection can be mirrored: it holds no text, which would read backwards. */
+    fun canMirrorSelection(): Boolean
+
+    /** Mirror the selection about its own centre, left to right or [upsideDown], as one undo step. */
+    fun mirrorSelection(upsideDown: Boolean)
 }
 
 /**
@@ -187,6 +193,17 @@ fun SelectionMenu(host: SelectionMenuHost) {
                             onClick = { overflowOpen = false; host.rerouteSelection() },
                         )
                     }
+                    val mirrors = host.canMirrorSelection()
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.mirror_left_right)) },
+                        enabled = mirrors,
+                        onClick = { overflowOpen = false; host.mirrorSelection(upsideDown = false) },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.mirror_upside_down)) },
+                        enabled = mirrors,
+                        onClick = { overflowOpen = false; host.mirrorSelection(upsideDown = true) },
+                    )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.lock)) },
                         onClick = { overflowOpen = false; host.lockSelection() },

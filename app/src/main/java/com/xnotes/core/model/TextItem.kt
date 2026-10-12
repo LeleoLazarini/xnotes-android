@@ -28,6 +28,7 @@ class TextItem(
 ) : CanvasItem, Resizable {
 
     override val kind = KIND
+    override val mirrorable = false
     override val resizable = true
     override var locked = false
 

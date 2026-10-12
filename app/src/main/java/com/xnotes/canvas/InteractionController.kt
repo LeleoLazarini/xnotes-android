@@ -2812,6 +2812,38 @@ class InteractionController(
         requestRender()
     }
 
+    /** True when the selection can be mirrored: it holds no text, which would read backwards. */
+    fun canMirrorSelection(): Boolean = selection.isNotEmpty() && selection.all { it.item.mirrorable }
+
+    /** Mirror the selection about its box's centre, left to right or [upsideDown] on screen, as one undo step. */
+    fun mirrorSelection(upsideDown: Boolean) {
+        if (!canMirrorSelection()) return
+        val box = selObb ?: return
+        val world = if (upsideDown) Affine.scaleAbout(box.center, 1.0, -1.0) else Affine.scaleAbout(box.center, -1.0, 1.0)
+        val members = selection.toList()
+        val before = members.map { it.item.snapshotGeometry() }
+        beginFollow(rigid = true, pin = true)
+        for (sel in members) {
+            if (state.pageRects.getOrNull(sel.pageIndex) == null) continue
+            sel.item.applyTransform(state.affineToPageSpace(sel.pageIndex, world))
+        }
+        for ((pi, f) in follows) {
+            if (state.pageRects.getOrNull(pi) == null) continue
+            f.follow(state.affineToPageSpace(pi, world))
+        }
+        for ((_, f) in follows) f.settle()
+        val tx = TransformItems(members.map { it.item }, before, members.map { it.item.snapshotGeometry() })
+        val cmds = listOfNotNull(tx, followCommand(), reassignSelectionPages())
+        history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
+        endFollow()
+        state.document.dirty = true
+        // Members stay lifted, so only the box needs to follow: mirrored about its own centre.
+        selObb = if ((selection.singleOrNull()?.item as? ShapeItem)?.frameObb() != null) selectionBox() else box.copy(angle = -box.angle)
+        onContentChanged()
+        refreshSelectionMenu()
+        requestRender()
+    }
+
     /** A lone connector's own chrome: its ends (solid when glued), middle segments, waypoints and stretch middles. */
     private fun drawConnectorChrome(r: Renderer) {
         if (mode == PointerMode.MOVE) return
