@@ -158,6 +158,9 @@ data class BrowseEntry(
 /** Every note and canvas under a folder, and the names of the folders they sit in, by document id. */
 class TreeFiles(val files: List<BrowseEntry>, val folderNames: Map<String, String>)
 
+/** The document an export of [picked] writes as a plain PDF; null when it takes a zip, for several items or any folder. */
+fun lonePdf(picked: List<BrowseEntry>): BrowseEntry? = picked.singleOrNull()?.takeIf { !it.isDir }
+
 /**
  * A deleted note, canvas or folder waiting in Trash. [entry] is the item where it now lies; [path] names the
  * folders it was deleted from, below the top folder, so it can go back even on another device.
@@ -5400,24 +5403,23 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     /**
-     * Exports explorer picks under [treeUri] as PDFs into [dest], a file the user just created: the
-     * one picked document as itself unless [zip], else a zip of every document the picks hold, each
-     * picked folder keeping its tree. Documents are loaded and written one at a time, and
-     * [batchExport] follows along for the dialog. A cancel, from the dialog or from the caller's scope
-     * going away, discards [dest].
+     * Exports explorer picks under [treeUri] as PDFs into [dest], a file the user just created: a [lonePdf] as itself, else a
+     * zip of every document the picks hold. A cancel, from the dialog or the caller's scope going away, discards [dest].
      */
-    suspend fun exportPdfsAsync(treeUri: String, picked: List<BrowseEntry>, dest: String, zip: Boolean): com.xnotes.platform.PdfBatch.Result {
+    suspend fun exportPdfsAsync(treeUri: String, picked: List<BrowseEntry>, dest: String): com.xnotes.platform.PdfBatch.Result {
         val cancel = java.util.concurrent.atomic.AtomicBoolean(false)
         batchCancel = cancel
-        batchExport = com.xnotes.platform.PdfBatch.Progress.GATHERING
+        batchExport = lonePdf(picked)?.let { com.xnotes.platform.PdfBatch.Progress(0, 1, it.name, 0, 0) }
+            ?: com.xnotes.platform.PdfBatch.Progress.GATHERING
         try {
             return batchLock.withLock {
                 withContext(Dispatchers.IO) {
                     val job = coroutineContext[kotlinx.coroutines.Job]
                     val stop = { cancel.get() || job?.isActive == false }
-                    val batch = com.xnotes.platform.PdfBatch(batchDir, ::exportFileToPdf, stop) { if (!cancel.get()) batchExport = it }
+                    // Under the flag's lock, so a tick racing the dialog's Cancel can't bring the dialog back.
+                    val batch = com.xnotes.platform.PdfBatch(batchDir, ::exportFileToPdf, stop) { p -> synchronized(cancel) { if (!cancel.get()) batchExport = p } }
                     val target = exportDestination(dest)
-                    val lone = picked.singleOrNull()?.takeIf { !zip && !it.isDir }
+                    val lone = lonePdf(picked)
                     if (lone != null) {
                         batch.single(lone.documentUri, lone.name, target)
                     } else {
@@ -5435,8 +5437,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     /** Stops the running batch export (the dialog's Cancel); it cleans up behind the dialog, which goes at once. */
     fun cancelBatchExport() {
-        batchCancel?.set(true)
-        batchExport = null
+        val cancel = batchCancel ?: run { batchExport = null; return }
+        synchronized(cancel) {
+            cancel.set(true)
+            batchExport = null
+        }
     }
 
     /** [e] as a batch export sees it: a folder carries everything under it, as the explorer lists it. IO. */
@@ -5451,16 +5456,26 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         return com.xnotes.core.util.ExportZip.Node(e.name, key, e.documentUri, e.isDir, children)
     }
 
-    /** The file a batch export was asked to fill; deleted when the export doesn't keep it, or at least emptied. */
+    /** The file a batch export was asked to fill; deleted when the export doesn't keep it, or at least emptied. IO. */
     private fun exportDestination(uri: String) = object : com.xnotes.platform.PdfBatch.Destination {
         private val u = android.net.Uri.parse(uri)
+        private val resolver = appContext.contentResolver
 
-        override fun open(): OutputStream =
-            appContext.contentResolver.openOutputStream(u) ?: throw java.io.FileNotFoundException(uri)
+        // The picker can hand back an existing file the user chose to overwrite; untouched, it stays as it was.
+        private val existed = runCatching {
+            resolver.query(u, arrayOf(android.provider.OpenableColumns.SIZE), null, null, null)?.use { c -> c.moveToFirst() && c.getLong(0) > 0 }
+        }.getOrNull() == true
+        private var opened = false
+
+        override fun open(): OutputStream {
+            opened = true
+            return resolver.openOutputStream(u) ?: throw java.io.FileNotFoundException(uri)
+        }
 
         override fun discard() {
-            val gone = runCatching { android.provider.DocumentsContract.deleteDocument(appContext.contentResolver, u) }.getOrDefault(false)
-            if (!gone) runCatching { appContext.contentResolver.openOutputStream(u, "wt")?.close() }
+            if (existed && !opened) return
+            val gone = runCatching { android.provider.DocumentsContract.deleteDocument(resolver, u) }.getOrDefault(false)
+            if (!gone) runCatching { resolver.openOutputStream(u, "wt")?.close() }
         }
     }
 

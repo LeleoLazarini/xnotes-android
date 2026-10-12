@@ -428,6 +428,7 @@
     <string name="share">Share</string>
     <string name="save_copy_ellipsis">Save a copy…</string>
     <string name="export_pdf">Export to PDF</string>
+    <string name="export_pdf_action">Export PDF</string>
     <string name="sort_descending">Descending</string>
     <string name="sort_ascending">Ascending</string>
     <string name="folder">Folder</string>
@@ -512,6 +513,7 @@
 
     <!-- Messages, sharing and export -->
     <string name="exporting_pdf">Exporting to PDF…</string>
+    <string name="exporting_pdfs">Exporting PDFs…</string>
     <string name="may_take_moment">This may take a moment.</string>
     <string name="saving_notes">Saving your notes…</string>
     <string name="opening_note">Opening note…</string>
@@ -520,6 +522,12 @@
     <string name="discard">Discard</string>
     <string name="err_save_note">Could not save the note.</string>
     <string name="exported_pdf">Exported to PDF.</string>
+    <string name="exported_some_pdfs">Exported %1$d of %2$d PDFs.</string>
+    <string name="no_notes_to_export">No notes to export.</string>
+    <plurals name="exported_pdfs">
+        <item quantity="one">Exported %d PDF.</item>
+        <item quantity="other">Exported %d PDFs.</item>
+    </plurals>
     <string name="err_export_pdf">Could not export to PDF.</string>
     <string name="err_save_copy">Could not save a copy.</string>
     <string name="err_save_image">Could not save the image.</string>
@@ -538,6 +546,7 @@
     <string name="preparing">Preparing…</string>
     <string name="export_page_progress">page %1$d / %2$d</string>
     <string name="export_item_progress">item %1$d / %2$d</string>
+    <string name="export_writing_short">writing…</string>
     <!-- What a screen reader says for the handwriting and for each image in an exported PDF -->
     <string name="pdf_alt_drawing">Handwritten notes and drawings</string>
     <string name="pdf_alt_image">Image</string>

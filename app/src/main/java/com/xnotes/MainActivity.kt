@@ -370,6 +370,28 @@ private fun EditorScreen(
         }
     }
 
+    // Explorer picks waiting on their destination, chosen first so a big zip streams straight to it rather than through the cache.
+    var pendingPdfs by remember { mutableStateOf<PendingPdfs?>(null) }
+    fun exportPicked(uri: Uri?) {
+        val pending = pendingPdfs; pendingPdfs = null
+        val root = editor.browseRoot
+        if (uri == null || pending == null || root == null) return
+        pending.onStarted()
+        scope.launch {
+            val r = editor.exportPdfsAsync(root, pending.picked, uri.toString())
+            when {
+                r.cancelled -> null
+                r.found == 0 -> context.getString(R.string.no_notes_to_export)
+                !r.kept -> context.getString(R.string.err_export_pdf)
+                com.xnotes.ui.lonePdf(pending.picked) != null -> context.getString(R.string.exported_pdf)
+                r.written < r.found -> context.getString(R.string.exported_some_pdfs, r.written, r.found)
+                else -> context.resources.getQuantityString(R.plurals.exported_pdfs, r.written, r.written)
+            }?.let { editor.message = it }
+        }
+    }
+    val exportPdfLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { exportPicked(it) }
+    val exportZipLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { exportPicked(it) }
+
     // Save a copy of an explorer file (a note or a canvas) elsewhere.
     val saveCopyLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -826,6 +848,12 @@ private fun EditorScreen(
                 onOpenBeside = { uri ->
                     editor.currentUri?.takeIf { !editor.isSameDocument(it, uri) }?.let { first -> { guardedAll { openSplit(first, uri) } } }
                 },
+                onExportPdfs = { picked, name, onStarted ->
+                    pendingPdfs = PendingPdfs(picked, onStarted)
+                    val lone = com.xnotes.ui.lonePdf(picked)
+                    if (lone != null) exportPdfLauncher.launch("${com.xnotes.core.util.DocumentKind.stripSuffix(lone.name)}.pdf")
+                    else exportZipLauncher.launch("$name.zip")
+                },
             )
 
             // TOP LAYER: the open panes (toolbar + canvas each), pushed over backstage. Back acts on
@@ -936,6 +964,7 @@ private fun EditorScreen(
             exportProgress = null   // hide at once; the job then discards the half-written temp
         })
     }
+    editor.batchExport?.let { p -> PdfBatchExportDialog(p) { editor.cancelBatchExport() } }
     // Either pane may be importing: a PDF inserted into its note.
     val importer = editor.takeIf { it.importing } ?: editor.secondary?.takeIf { it.importing }
     if (importer != null) {
@@ -980,6 +1009,9 @@ private class PendingPages(val editor: Editor, val pages: List<Int>)
 
 /** A side-panel "Insert PDF" waiting on the picker: the pane, and the page its pages go after. */
 private class PendingPdfInsert(val editor: Editor, val after: Int)
+
+/** Explorer picks waiting on the file their PDFs go to; [onStarted] runs once one is chosen. */
+private class PendingPdfs(val picked: List<com.xnotes.ui.BrowseEntry>, val onStarted: () -> Unit)
 
 /**
  * A running PDF export's progress: [done] of [total], and what those are. [counting] exists because
@@ -1495,6 +1527,82 @@ private fun PdfImportBatchDialog(done: Int, total: Int, onCancel: () -> Unit) {
                 stringResource(R.string.import_progress, done, total),
                 color = palette.textDim.toComposeColor(),
                 fontSize = 13.sp,
+            )
+            Spacer(Modifier.height(14.dp))
+            androidx.compose.material3.TextButton(onClick = onCancel) {
+                Text(stringResource(R.string.cancel), color = palette.accent.toComposeColor())
+            }
+        }
+    }
+}
+
+/**
+ * Progress of an export of explorer picks, styled like [PdfExportDialog]. It keeps the screen on, since a sleeping device
+ * stalls a long batch, and ignores taps beside it, so a stray one can't throw the export away.
+ */
+@Composable
+private fun PdfBatchExportDialog(p: com.xnotes.platform.PdfBatch.Progress, onCancel: () -> Unit) {
+    val palette = LocalPalette.current
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onCancel,
+        properties = androidx.compose.ui.window.DialogProperties(dismissOnClickOutside = false),
+    ) {
+        val view = androidx.compose.ui.platform.LocalView.current
+        androidx.compose.runtime.DisposableEffect(view) {
+            view.keepScreenOn = true
+            onDispose { view.keepScreenOn = false }
+        }
+        Column(
+            modifier = Modifier
+                .width(288.dp)
+                .clip(MaterialTheme.shapes.large)
+                .background(palette.surface.toComposeColor())
+                .border(1.dp, palette.border.toComposeColor(), MaterialTheme.shapes.large)
+                .padding(horizontal = 32.dp, vertical = 26.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(modifier = Modifier.size(72.dp), contentAlignment = Alignment.Center) {
+                if (p.count == 0) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        modifier = Modifier.fillMaxSize(),
+                        color = palette.accent.toComposeColor(),
+                        strokeWidth = 4.dp,
+                    )
+                } else {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        progress = { p.fraction },
+                        modifier = Modifier.fillMaxSize(),
+                        color = palette.accent.toComposeColor(),
+                        trackColor = palette.border.toComposeColor(),
+                        strokeWidth = 4.dp,
+                    )
+                    Text(
+                        if (p.count > 1) "${p.index + 1}/${p.count}" else "${(p.fraction * 100).roundToInt()}%",
+                        color = palette.text.toComposeColor(),
+                        fontSize = 15.sp,
+                    )
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+            Text(
+                stringResource(if (p.count == 1) R.string.exporting_pdf else R.string.exporting_pdfs),
+                color = palette.text.toComposeColor(),
+                fontSize = 15.sp,
+            )
+            Spacer(Modifier.height(4.dp))
+            val canvas = com.xnotes.core.util.DocumentKind.ofName(p.name) == com.xnotes.core.util.DocumentKind.CANVAS
+            val step = when {
+                p.total < 0 || (p.total > 0 && p.done >= p.total) -> stringResource(R.string.export_writing_short)
+                p.total > 0 -> stringResource(if (canvas) R.string.export_item_progress else R.string.export_page_progress, p.done + 1, p.total)
+                else -> null
+            }
+            Text(
+                if (p.count == 0) stringResource(R.string.preparing)
+                else listOfNotNull(com.xnotes.core.util.DocumentKind.stripSuffix(p.name), step).joinToString(" · "),
+                color = palette.textDim.toComposeColor(),
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
             )
             Spacer(Modifier.height(14.dp))
             androidx.compose.material3.TextButton(onClick = onCancel) {

@@ -2,6 +2,7 @@ package com.xnotes.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -56,7 +57,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -203,6 +204,8 @@ fun Backstage(
     onShareFiles: (List<String>) -> Unit = {},
     /** Opens a file beside the note last open; null when there's no note to pair it with. */
     onOpenBeside: (String) -> (() -> Unit)? = { null },
+    /** Picked items are to be exported as PDFs, zipped under the given name; the callback runs once a destination is chosen. */
+    onExportPdfs: (List<BrowseEntry>, String, () -> Unit) -> Unit = { _, _, _ -> },
 ) {
     // Below this width the sidebar becomes a slide-over drawer instead of a persistent pane.
     val compact = LocalConfiguration.current.screenWidthDp < COMPACT_WIDTH_DP
@@ -217,6 +220,7 @@ fun Backstage(
         exportFilePdf = onExportFilePdf,
         openSplit = onOpenSplit,
         openBeside = onOpenBeside,
+        exportPdfs = onExportPdfs,
     )
     // The backstage is the root of the stack — ordinary base content, not a dialog. The activity
     // window already runs edge-to-edge with the system bars hidden (MainActivity.applyFullscreen).
@@ -794,6 +798,8 @@ private class ExplorerCalls(
     val openSplit: (String, String) -> Unit,
     /** Opens a file beside the note last open, or null when there is none to pair it with. */
     val openBeside: (String) -> (() -> Unit)?,
+    /** Exports picked items as PDFs, zipped under the given name; the callback runs once a destination is chosen. */
+    val exportPdfs: (List<BrowseEntry>, String, () -> Unit) -> Unit,
 )
 
 @Composable
@@ -806,29 +812,43 @@ private fun HomePane(
     onShowSidebar: () -> Unit,
     link: ExplorerLink,
 ) {
-    val palette = LocalPalette.current
     val focusManager = LocalFocusManager.current
     // A tap on empty space anywhere in the pane drops focus from the search field, dismissing it
     // (children like tiles and buttons consume their own taps, so this only fires "outside").
     Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { focusManager.clearFocus() } }) {
         ExplorerSection(editor, calls, createMode, onCreateMode, sidebarOpen, onShowSidebar, link)
-        // A round quick-create button: the same things as the ⋮ menu's New block, landed in the current
-        // folder. Only with a folder granted, else there's nowhere to create.
-        if (editor.browseRoot != null) {
-            var createMenuOpen by remember { mutableStateOf(false) }
-            Box(Modifier.align(Alignment.BottomEnd).padding(20.dp)) {
-                Tooltip(stringResource(R.string.create_new)) {
-                    FloatingActionButton(
-                        onClick = { createMenuOpen = true },
-                        shape = CircleShape,
-                    ) {
-                        Icon(XnotesIcons.edit, stringResource(R.string.create_new), modifier = Modifier.size(24.dp))
+    }
+}
+
+/** The explorer's quick-create button, the ⋮ menu's New block; while items are picked it stretches into an Export PDF pill. */
+@Composable
+private fun CreateButton(
+    exporting: Boolean,
+    onCreateMode: (CreateMode) -> Unit,
+    onImportPdf: () -> Unit,
+    onExport: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val createLabel = stringResource(R.string.create_new)
+    val exportLabel = stringResource(R.string.export_pdf_action)
+    Box(modifier) {
+        // One button throughout, so the pill grows out of the circle instead of replacing it.
+        Tooltip(if (exporting) exportLabel else createLabel) {
+            ExtendedFloatingActionButton(
+                text = { Text(exportLabel) },
+                icon = {
+                    Crossfade(exporting, label = "createButtonIcon") { e ->
+                        Icon(if (e) XnotesIcons.pdfFile else XnotesIcons.edit, if (e) exportLabel else createLabel, Modifier.size(24.dp))
                     }
-                }
-                DropdownMenu(expanded = createMenuOpen, onDismissRequest = { createMenuOpen = false }) {
-                    NewItemMenuItems({ createMenuOpen = false }, onCreateMode, calls.importPdf)
-                }
-            }
+                },
+                onClick = { if (exporting) onExport() else menuOpen = true },
+                expanded = exporting,
+                shape = CircleShape,
+            )
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            NewItemMenuItems({ menuOpen = false }, onCreateMode, onImportPdf)
         }
     }
 }
@@ -1697,6 +1717,18 @@ private fun ExplorerSection(
                 }
             }
         }
+        CreateButton(
+            exporting = selection.isNotEmpty(),
+            onCreateMode = onCreateMode,
+            onImportPdf = calls.importPdf,
+            onExport = {
+                val picked = selection.toList()
+                // A lone folder zips under its own name, anything else under the folder it was picked in.
+                val name = picked.singleOrNull()?.takeIf { it.isDir }?.name ?: stack.lastOrNull()?.second ?: rootName ?: context.getString(R.string.folder)
+                calls.exportPdfs(picked, name) { selection.clear() }
+            },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
+        )
     }
 
     // A multi-file pick gets no name prompt: it imports straight into the folder on screen, one file
