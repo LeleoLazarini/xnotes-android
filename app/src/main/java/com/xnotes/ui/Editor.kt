@@ -5645,6 +5645,41 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         controller.setToolConfig(tool, config.copy(rgba = controller.inkColor))
     }
 
+    // --- pens ---
+
+    /** Bumped when the saved pens change, so an open pen menu lists them again. */
+    var pensVersion by mutableStateOf(0)
+        private set
+
+    /** The built-in pens, then the user's own. */
+    val pens: List<com.xnotes.core.tools.PenPreset>
+        get() = com.xnotes.core.tools.BuiltInPens.all + settings.userPens
+
+    /** The pen the armed tool is drawing as right now, if it is one of [pens]. */
+    fun activePen(): com.xnotes.core.tools.PenPreset? =
+        if (!tool.isStroke) null else controller.configFor(tool).let { c -> pens.firstOrNull { it.matches(tool, c) } }
+
+    /** Arm [pen]: its tool with its style, keeping the toolbar ink unless the pen has its own colour. */
+    fun applyPen(pen: com.xnotes.core.tools.PenPreset) {
+        updateToolConfig(pen.tool, pen.config)
+        selectTool(pen.tool)
+    }
+
+    /** Keep the armed pen's current style under [name], listed after the built-in pens. */
+    fun saveCurrentPen(name: String) {
+        if (!tool.isStroke || name.isBlank()) return
+        val pen = com.xnotes.core.tools.PenPreset("u" + System.currentTimeMillis(), name.trim(), tool, controller.configFor(tool))
+        settings = settings.copy(userPens = settings.userPens + pen)
+        pensVersion++
+        saveSettingsSoon()
+    }
+
+    fun removeUserPen(id: String) {
+        settings = settings.copy(userPens = settings.userPens.filterNot { it.id == id })
+        pensVersion++
+        saveSettingsSoon()
+    }
+
     val recentColors: List<Rgba> get() = settings.recentColors
 
     // --- history ---

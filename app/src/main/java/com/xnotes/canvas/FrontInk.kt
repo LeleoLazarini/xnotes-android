@@ -202,6 +202,8 @@ class FrontInk(
         // Turned off for this device, so there is no pad to consult and nothing to time against it.
         if (!pad.frontBuffering) return
         if (ItemMesher.passFor(stroke) != InkPass.OPAQUE) return
+        // The pad draws plain triangles; textured ink would turn plain under the pen and change at lift.
+        if (stroke.tool == com.xnotes.core.tools.Tool.BRUSH) return
         // A rotated view is a rotation, and the ink shader has room for a scroll and a zoom.
         if (state.rotationDeg != 0) return
         val page = state.document.pages.getOrNull(pageIndex) ?: return

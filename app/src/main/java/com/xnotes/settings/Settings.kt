@@ -11,6 +11,7 @@ import com.xnotes.core.text.FlowMargins
 import com.xnotes.core.text.TableBorders
 import com.xnotes.core.text.TableDefaults
 import com.xnotes.core.text.TableStyle
+import com.xnotes.core.tools.Brush
 import com.xnotes.core.tools.EraseMode
 import com.xnotes.core.tools.InkPalette
 import com.xnotes.core.tools.MarkupMode
@@ -85,6 +86,8 @@ data class Settings(
     val prefs: Preferences = Preferences(),
     /** One-shot flag: the first-run stylus check (which may auto-enable finger-draw) has run. */
     val fingerDrawAutoChecked: Boolean = false,
+    /** The pens the user saved, after the built-in ones in the pen menu. */
+    val userPens: List<com.xnotes.core.tools.PenPreset> = emptyList(),
 ) {
     fun configFor(tool: Tool): ToolConfig = tools[tool] ?: ToolDefaults.configFor(tool)
 
@@ -124,6 +127,7 @@ data class Settings(
             .put("prefs", prefs.toJson())
             .put("view_defaults", com.xnotes.platform.ViewSettingsJson.write(JSONObject(), viewDefaults))
             .put("finger_draw_auto_checked", fingerDrawAutoChecked)
+            .put("user_pens", JSONArray().apply { userPens.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("tool", it.tool.id).put("config", toolConfigJson(it.config))) } })
     }
 
     companion object {
@@ -179,7 +183,18 @@ data class Settings(
                 newTable = tableDefaults(o.optJSONObject("new_table")),
                 prefs = Preferences.fromJson(o.optJSONObject("prefs")),
                 fingerDrawAutoChecked = o.optBoolean("finger_draw_auto_checked", false),
+                userPens = userPens(o.optJSONArray("user_pens")),
             )
+        }
+
+        private fun userPens(a: JSONArray?): List<com.xnotes.core.tools.PenPreset> {
+            if (a == null) return emptyList()
+            return (0 until a.length()).mapNotNull { i ->
+                val o = a.optJSONObject(i) ?: return@mapNotNull null
+                val tool = Tool.fromId(o.optString("tool"))?.takeIf { it.isStroke } ?: return@mapNotNull null
+                val config = o.optJSONObject("config")?.let { toolConfig(it, tool) } ?: return@mapNotNull null
+                com.xnotes.core.tools.PenPreset(o.optString("id", "u$i"), o.optString("name", ""), tool, config)
+            }
         }
 
         private fun recentDocs(a: JSONArray?): List<RecentDoc> {
@@ -347,6 +362,7 @@ data class Settings(
             .put("scale", c.scale)
             .put("highlighter_alpha", c.highlighterAlpha)
             .put("highlighter_inverse", c.highlighterInverse)
+            .put("brush", c.brush.id)
             .put("markup_mode", c.markupMode.id)
             .put("markup_intensity", c.markupIntensity)
             .put("rgba", rgbaArr(c.rgba))
@@ -376,6 +392,7 @@ data class Settings(
                 scale = o.optBoolean("scale", d.scale),
                 highlighterAlpha = o.optDouble("highlighter_alpha", d.highlighterAlpha),
                 highlighterInverse = o.optBoolean("highlighter_inverse", d.highlighterInverse),
+                brush = Brush.fromId(o.optString("brush")) ?: d.brush,
                 markupMode = if (o.has("markup_mode")) MarkupMode.fromId(o.optString("markup_mode")) else d.markupMode,
                 markupIntensity = o.optDouble("markup_intensity", d.markupIntensity)
                     .coerceIn(ToolConfig.MARKUP_INTENSITY_MIN, 1.0),

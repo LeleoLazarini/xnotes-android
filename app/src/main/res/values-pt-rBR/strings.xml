@@ -997,4 +997,8 @@
     <string name="post_it_pick_colour">Escolha a cor</string>
     <string name="paper_plain">Liso (sem pauta)</string>
     <string name="dark_theme">Tema escuro</string>
+    <string name="tool_brush">Caneta com textura</string>
+    <string name="my_pens">Minhas canetas</string>
+    <string name="save_pen">Salvar como minha caneta…</string>
+    <string name="pen_name_hint">Minha caneta azul</string>
 </resources>

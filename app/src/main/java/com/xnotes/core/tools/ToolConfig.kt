@@ -92,6 +92,8 @@ data class ToolConfig(
     val eraseMarkups: Boolean = true,
     /** Eraser: a pen scribbled over ink erases what it touches. Only used by [Tool.ERASER]. */
     val scribbleErase: Boolean = true,
+    /** What the textured pen lays down. Only used by [Tool.BRUSH]. */
+    val brush: Brush = Brush.PENCIL,
 ) {
     companion object {
         const val DEFAULT_MARKUP_INTENSITY = 0.5
@@ -116,13 +118,14 @@ object ToolDefaults {
         Tool.SPEED -> ToolConfig(baseWidth = 4.0, pressureEnabled = true, pressureMinFactor = 0.35, directionStrength = 0.0, speedStrength = 0.8)
         Tool.TAPER -> ToolConfig(baseWidth = 4.0, pressureEnabled = true, pressureMinFactor = 0.45, directionStrength = 0.0, taperEnabled = true, taperMinFactor = DEFAULT_TAPER_TIP)
         Tool.HIGHLIGHTER -> ToolConfig(baseWidth = 16.0, pressureEnabled = false, pressureMinFactor = 1.0, directionStrength = 0.0, highlighterAlpha = 0.50)
+        Tool.BRUSH -> ToolConfig(baseWidth = 2.6, pressureEnabled = true, pressureMinFactor = 0.6, directionStrength = 0.0, rgba = Rgba(55, 55, 60), brush = Brush.PENCIL)
         Tool.ERASER -> ToolConfig(baseWidth = 24.0, pressureEnabled = false, pressureMinFactor = 1.0, directionStrength = 0.0)
         Tool.LASSO -> ToolConfig(baseWidth = 2.0, pressureEnabled = false, pressureMinFactor = 1.0, directionStrength = 0.0)
         else -> ToolConfig()
     }
 
     /** Tools whose config is persisted in settings (spec 09 §2). */
-    val persistedTools = listOf(Tool.PEN, Tool.DASHED, Tool.CALLIGRAPHY, Tool.SPEED, Tool.TAPER, Tool.HIGHLIGHTER, Tool.ERASER, Tool.SELECT, Tool.LASSO, Tool.MARKUP)
+    val persistedTools = listOf(Tool.PEN, Tool.DASHED, Tool.CALLIGRAPHY, Tool.SPEED, Tool.TAPER, Tool.HIGHLIGHTER, Tool.BRUSH, Tool.ERASER, Tool.SELECT, Tool.LASSO, Tool.MARKUP)
 }
 
 /**

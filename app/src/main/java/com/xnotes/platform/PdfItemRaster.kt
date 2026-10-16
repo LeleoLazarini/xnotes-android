@@ -34,7 +34,8 @@ internal object PdfItemRaster {
 
     /** Items whose look can't be reproduced as plain vector and so are rasterized in place. */
     fun needsRaster(item: CanvasItem): Boolean = when (item) {
-        is Stroke -> item.tool == Tool.HIGHLIGHTER ||
+        // Textured ink has no vector form, so it exports exactly as it paints on screen.
+        is Stroke -> item.tool == Tool.HIGHLIGHTER || item.tool == Tool.BRUSH ||
             (item.config.neon && item.tool != Tool.HIGHLIGHTER) ||
             item.renderColor.a < 255
         // A shape's fill and outline are single paths, so PDF transparency draws them as on screen.

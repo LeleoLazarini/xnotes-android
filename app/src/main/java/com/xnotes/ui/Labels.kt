@@ -33,6 +33,7 @@ val Tool.labelRes: Int
         Tool.SPEED -> R.string.tool_speed
         Tool.TAPER -> R.string.tool_taper
         Tool.HIGHLIGHTER -> R.string.tool_highlighter
+        Tool.BRUSH -> R.string.tool_brush
         Tool.ERASER -> R.string.tool_eraser
         Tool.PAN -> R.string.tool_pan
         Tool.SELECT -> R.string.tool_select

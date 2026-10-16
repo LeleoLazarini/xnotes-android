@@ -20,6 +20,7 @@ import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.RasterSurface
 import com.xnotes.core.pal.Renderer
 import com.xnotes.core.pal.TextFlags
+import com.xnotes.core.tools.Brush
 import com.xnotes.core.vector.VectorContour
 import com.xnotes.core.vector.VectorSeg
 
@@ -33,6 +34,7 @@ import com.xnotes.core.vector.VectorSeg
 class AndroidRenderer(private val canvas: Canvas) : Renderer {
 
     private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    private val grainPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { style = Paint.Style.FILL }
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeJoin = Paint.Join.ROUND
@@ -157,8 +159,40 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
 
     override fun fillDiskRibbon(centers: FloatArray, radii: FloatArray, from: Int, count: Int, color: Rgba) {
         if (count <= 0) return
-        val end = from + count
         fillPaint.color = color.toArgb()
+        canvas.drawPath(ribbonPath(centers, radii, from, count), fillPaint)
+    }
+
+    // Each run of equal coverage is its own ribbon filled through that level's grain. The runs
+    // share their boundary point, and the levels nest (a denser level covers every grain of a
+    // lighter one), so where two runs overlap the ink is just the denser grain: no seams.
+    override fun fillGrainRibbon(centers: FloatArray, radii: FloatArray, from: Int, count: Int, color: Rgba, grain: Brush, levels: ByteArray) {
+        if (count <= 0) return
+        val end = from + count
+        grainPaint.color = color.toArgb()
+        var a = from
+        while (a < end) {
+            val level = levels[a].toInt()
+            var b = a
+            while (b + 1 < end && levels[b + 1].toInt() == level) b++
+            val runEnd = minOf(b + 2, end) // one point past the run, so neighbouring runs overlap
+            grainPaint.shader = GrainTextures.shader(grain, level)
+            canvas.drawPath(ribbonPath(centers, radii, a, runEnd - a), grainPaint)
+            a = b + 1
+        }
+        grainPaint.shader = null
+    }
+
+    override fun fillDots(xy: FloatArray, radii: FloatArray, n: Int, color: Rgba) {
+        if (n <= 0) return
+        fillPaint.color = color.toArgb()
+        val path = Path()
+        for (i in 0 until n) path.addCircle(xy[2 * i], xy[2 * i + 1], radii[i], Path.Direction.CW)
+        canvas.drawPath(path, fillPaint)
+    }
+
+    private fun ribbonPath(centers: FloatArray, radii: FloatArray, from: Int, count: Int): Path {
+        val end = from + count
         val path = Path().apply { fillType = Path.FillType.WINDING }
         for (i in from until end - 1) {
             val x0 = centers[2 * i]
@@ -199,7 +233,7 @@ class AndroidRenderer(private val canvas: Canvas) : Renderer {
             val r = radii[i]
             if (r > 0f) path.addCircle(centers[2 * i], centers[2 * i + 1], r, Path.Direction.CW)
         }
-        canvas.drawPath(path, fillPaint)
+        return path
     }
 
     // The blur radius is a page-space length: the canvas scale grows it with zoom,

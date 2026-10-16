@@ -43,7 +43,7 @@ import com.xnotes.ui.theme.toComposeColor
  * and tapping it again while armed opens the group's list (plus that tool's settings).
  */
 internal enum class ToolGroup(val tools: List<Tool>) {
-    PENS(listOf(Tool.PEN, Tool.CALLIGRAPHY, Tool.TAPER, Tool.SPEED, Tool.DASHED)),
+    PENS(listOf(Tool.PEN, Tool.CALLIGRAPHY, Tool.TAPER, Tool.SPEED, Tool.DASHED, Tool.BRUSH)),
     SELECTION(listOf(Tool.LASSO, Tool.SELECT, Tool.PAN, Tool.SCREENSHOT)),
     INSERT(listOf(Tool.SHAPE, Tool.TEXT, Tool.TEXT_BOX, Tool.MARKUP)),
 }
@@ -157,6 +157,7 @@ private fun ToolGroupButton(
     LaunchedEffect(armed) { armed?.let { lastInGroup[group] = it } }
     val current = armed ?: lastInGroup[group] ?: group.tools.first()
     var menuOpen by remember { mutableStateOf(false) }
+    var savingPen by remember { mutableStateOf(false) }
     Box {
         ToolbarIcon(
             toolIcons[current] ?: return@Box,
@@ -174,7 +175,9 @@ private fun ToolGroupButton(
             }
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            group.tools.forEach { t ->
+            if (group == ToolGroup.PENS) {
+                PenMenuItems(editor, toolIcons) { menuOpen = false; setConfigForTool(null) }
+            } else group.tools.forEach { t ->
                 if (t == Tool.MARKUP && !editor.hasPdf) return@forEach
                 GroupMenuItem(stringResource(t.labelRes), toolIcons[t], active = t == armed) {
                     menuOpen = false
@@ -188,10 +191,65 @@ private fun ToolGroupButton(
                     menuOpen = false
                     setConfigForTool(armed)
                 }
+                if (group == ToolGroup.PENS) GroupMenuItem(stringResource(R.string.save_pen), XnotesIcons.save) {
+                    menuOpen = false
+                    savingPen = true
+                }
             }
         }
         if (configForTool != null && configForTool in group.tools) ToolConfigFor(editor, configForTool) { setConfigForTool(null) }
+        if (savingPen) SavePenDialog(onSave = { editor.saveCurrentPen(it); savingPen = false }, onDismiss = { savingPen = false })
     }
+}
+
+/**
+ * The pen menu: every built-in pen, then the user's own (each removable), drawn in its own
+ * colour when it has one. A pen arms its tool with its style in one tap.
+ */
+@Composable
+private fun PenMenuItems(editor: Editor, toolIcons: Map<Tool, ImageVector>, onPicked: () -> Unit) {
+    val palette = LocalPalette.current
+    editor.pensVersion // re-list when a pen is saved or removed while the menu is open
+    val active = editor.activePen()
+    var shownMine = false
+    editor.pens.forEach { pen ->
+        if (!pen.builtIn && !shownMine) {
+            shownMine = true
+            MenuDivider()
+            Text(stringResource(R.string.my_pens), color = palette.textDim.toComposeColor(), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp))
+        }
+        val on = pen.id == active?.id
+        val ink = pen.config.colorOverride?.toComposeColor() ?: palette.textDim.toComposeColor()
+        DropdownMenuItem(
+            text = { Text(pen.name, color = (if (on) palette.selectionForeground else palette.text).toComposeColor()) },
+            leadingIcon = toolIcons[pen.tool]?.let { { Icon(it, contentDescription = null, tint = ink, modifier = Modifier.size(20.dp)) } },
+            trailingIcon = if (pen.builtIn) null else { {
+                Icon(XnotesIcons.close, contentDescription = stringResource(R.string.delete), tint = palette.textDim.toComposeColor(), modifier = Modifier.size(18.dp).clickable { editor.removeUserPen(pen.id) })
+            } },
+            modifier = if (on) Modifier.background(palette.selectionBackground.toComposeColor()) else Modifier,
+            onClick = { editor.applyPen(pen); onPicked() },
+        )
+    }
+}
+
+/** Names the armed pen's current style to keep it in the pen menu. */
+@Composable
+private fun SavePenDialog(onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.save_pen)) },
+        text = {
+            androidx.compose.material3.OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                placeholder = { Text(stringResource(R.string.pen_name_hint)) },
+            )
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { if (name.isNotBlank()) onSave(name) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.save)) } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 /** "+": shapes, text, images, stickers and the drawing aids, in one menu. */
@@ -297,7 +355,7 @@ private fun PageCounterButton(editor: Editor) {
     }
 }
 
-private enum class MorePopup { MARGINS, VIEW, ZOOM }
+private enum class MorePopup { MARGINS, VIEW, ZOOM, TRANSCRIBE }
 
 /** Everything used now and then: margins, view, zoom and fit, side panel, full screen, rename. */
 @Composable
@@ -323,17 +381,21 @@ private fun MoreMenu(editor: Editor, onRename: () -> Unit, onToggleFullscreen: (
             ) { menuOpen = false; editor.toggleZoomLock() }
             MenuDivider()
             GroupMenuItem(stringResource(R.string.toolbar_fullscreen), XnotesIcons.fullscreen) { menuOpen = false; onToggleFullscreen() }
+            // Temporary: checks this device's speech recognition before meeting mode is built on it.
+            GroupMenuItem("Teste de transcrição", XnotesIcons.info) { menuOpen = false; popup = MorePopup.TRANSCRIBE }
             // One tap between light and dark; System and OLED stay in Preferences.
             val dark = LocalPalette.current.isDark
             GroupMenuItem(stringResource(R.string.dark_theme), XnotesIcons.palette, active = dark) {
                 menuOpen = false
-                editor.applyHomePreferences(editor.preferences.copy(uiAppearance = if (dark) "light" else "dark"))
+                // The full apply: it rebuilds the chrome palette as well as the page, so menus turn too.
+                editor.applyPreferences(editor.preferences.copy(uiAppearance = if (dark) "light" else "dark"))
             }
         }
         when (popup) {
             MorePopup.MARGINS -> MarginsPopup(editor) { popup = null }
             MorePopup.VIEW -> ViewMenuPopup(editor) { popup = null }
             MorePopup.ZOOM -> ZoomMenuPopup(editor) { popup = null }
+            MorePopup.TRANSCRIBE -> TranscriptionTestDialog { popup = null }
             null -> Unit
         }
     }

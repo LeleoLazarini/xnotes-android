@@ -999,4 +999,8 @@
     <string name="post_it_pick_colour">Pick a colour</string>
     <string name="paper_plain">Plain (no ruling)</string>
     <string name="dark_theme">Dark theme</string>
+    <string name="tool_brush">Textured pen</string>
+    <string name="my_pens">My pens</string>
+    <string name="save_pen">Save as my pen…</string>
+    <string name="pen_name_hint">My blue pen</string>
 </resources>

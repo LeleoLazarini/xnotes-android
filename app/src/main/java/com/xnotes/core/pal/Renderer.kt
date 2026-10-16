@@ -6,8 +6,12 @@ import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
 import com.xnotes.core.model.ImageData
 import com.xnotes.core.model.Rgba
+import com.xnotes.core.tools.Brush
 import com.xnotes.core.vector.PathFlattener
 import com.xnotes.core.vector.VectorContour
+
+/** How many coverage steps a grain brush has, from barely touching to fully pressed. */
+const val GRAIN_LEVELS = 8
 
 /** Polygon fill rule (spec 01 §1). Both are required. */
 enum class FillRule { NONZERO, EVEN_ODD }
@@ -170,6 +174,19 @@ interface Renderer {
             if (q.size >= 3) fillPolygon(q, color, FillRule.NONZERO)
         }
         for (i in from until end) if (radii[i] > 0f) fillCircle(pt(i), radii[i].toDouble(), color)
+    }
+
+    /**
+     * A textured run of the ribbon (the [from]..[from]+[count] points): filled with [grain]'s paper
+     * grain, point i showing [levels][i] of [GRAIN_LEVELS] coverage steps. Targets without textures
+     * fill it plain; the PDF never gets here, because textured ink exports as a raster.
+     */
+    fun fillGrainRibbon(centers: FloatArray, radii: FloatArray, from: Int, count: Int, color: Rgba, grain: Brush, levels: ByteArray) =
+        fillDiskRibbon(centers, radii, from, count, color)
+
+    /** [n] filled dots, dot i at (xy[2i], xy[2i+1]) of radius [radii][i], in one call so a spray stays cheap. */
+    fun fillDots(xy: FloatArray, radii: FloatArray, n: Int, color: Rgba) {
+        for (i in 0 until n) fillCircle(Pt(xy[2 * i].toDouble(), xy[2 * i + 1].toDouble()), radii[i].toDouble(), color)
     }
 
     // --- outlines (cosmetic for chrome, page-space for shapes) ---

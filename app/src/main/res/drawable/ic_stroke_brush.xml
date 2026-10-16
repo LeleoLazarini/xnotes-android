@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- XNotes — textured pen. A pencil on the diagonal: body, sharpened wood cone, graphite tip. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <path
+        android:fillColor="#FF000000"
+        android:fillType="evenOdd"
+        android:pathData="M71,8 L92,29 L40,81 L19,60 Z M75,16 L84,25 L80,29 L71,20 Z M19,60 L40,81 L12,90 Q8,91 9,87 Z M15,76 L10,90 L24,85 Z" />
+</vector>

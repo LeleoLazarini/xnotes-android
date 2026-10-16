@@ -12,6 +12,7 @@ import com.xnotes.core.stroke.Sample
 import com.xnotes.core.stroke.StrokeEngine
 import com.xnotes.core.stroke.StrokeGeometry
 import com.xnotes.core.stroke.WetRibbon
+import com.xnotes.core.tools.Brush
 import com.xnotes.core.tools.Tool
 import com.xnotes.core.tools.ToolConfig
 
@@ -356,6 +357,7 @@ class Stroke(
         val g = geometry()
         val color = renderColor
         when {
+            tool == Tool.BRUSH -> paintBrush(r, g.centerline, g.halfWidths, 0, g.pointCount, color, g)
             // The dashed pen draws its (uniform-width) centreline as a dashed, round-capped
             // line rather than a solid ribbon; the full ribbon geometry is still used for
             // bounds/hit-testing/erasing, so the whole line stays selectable through the gaps.
@@ -409,6 +411,10 @@ class Stroke(
         if (count <= 0) return
         val color = renderColor
         val centers = ribbon.centerlineArray()
+        if (tool == Tool.BRUSH) {
+            paintBrush(r, centers, ribbon.halfWidthArray(), from, count, color, null)
+            return
+        }
         if (tool == Tool.DASHED && ribbon.pointCount >= 2) {
             r.strokePolyline(
                 centers, from, count,
@@ -431,7 +437,7 @@ class Stroke(
      *  layers composited at an alpha, and translucent ink compounds where it overlaps itself, so
      *  neither survives being painted in two runs; both keep the plain every-frame redraw. */
     val wetCacheable: Boolean
-        get() = !config.neon && renderColor.a >= 255
+        get() = !config.neon && renderColor.a >= 255 && !(tool == Tool.BRUSH && config.brush == Brush.WATERCOLOR)
 
     /**
      * The dashed pen: a constant-width, round-capped dashed line traced down the smoothed
@@ -475,9 +481,120 @@ class Stroke(
             .coerceAtLeast(NEON_BLOOM_WIDE_MIN)
     }
 
-    override fun paintBounds(): Rect =
-        if (config.neon && tool != Tool.HIGHLIGHTER) bounds().outset(neonGlowRadius() * 2 + 4)
-        else bounds()
+    override fun paintBounds(): Rect = when {
+        config.neon && tool != Tool.HIGHLIGHTER -> bounds().outset(neonGlowRadius() * 2 + 4)
+        // The spray scatters past the ribbon it is hit-tested by.
+        tool == Tool.BRUSH && config.brush == Brush.SPRAY -> bounds().outset(config.baseWidth * SPRAY_REACH + 2)
+        else -> bounds()
+    }
+
+    /**
+     * The textured pen over the [count] centreline points from [from]. [g] is the whole settled
+     * geometry when painting the committed stroke, or null for a run of the live ribbon (only the
+     * watercolour edge needs the rails, and watercolour never paints in runs: see [wetCacheable]).
+     */
+    private fun paintBrush(r: Renderer, centers: FloatArray, radii: FloatArray, from: Int, count: Int, color: Rgba, g: StrokeGeometry?) {
+        when (config.brush) {
+            Brush.PENCIL, Brush.CRAYON, Brush.CHALK ->
+                r.fillGrainRibbon(centers, radii, from, count, color, config.brush, grainLevels(from + count))
+            Brush.WATERCOLOR -> {
+                // A wash: one translucent layer, multiplied so crossing washes mix like pigment,
+                // with the pigment pooling slightly darker at the edge where it dried.
+                r.saveLayerBlended(paintBounds().outset(2.0), WATERCOLOR_ALPHA, BlendMode.MULTIPLY)
+                r.fillDiskRibbon(centers, radii, from, count, color.withAlpha(255))
+                if (g != null && g.hasRails) {
+                    val edge = Pen(
+                        color = darken(color.withAlpha(255), WATERCOLOR_EDGE_DARKEN),
+                        width = (config.baseWidth * WATERCOLOR_EDGE_WIDTH).coerceAtLeast(0.6),
+                        cosmetic = false,
+                    )
+                    r.strokePolyline(g.leftRail, edge)
+                    r.strokePolyline(g.rightRail, edge)
+                }
+                r.restore()
+            }
+            Brush.SPRAY -> paintSpray(r, centers, radii, from, count, color)
+            Brush.RAINBOW -> paintRainbow(r, centers, radii, from, count)
+        }
+    }
+
+    /** Coverage step per point: how far into the paper's tooth the pressure reaches. */
+    private fun grainLevels(n: Int): ByteArray {
+        val out = ByteArray(n)
+        val last = sampleCount - 1
+        val top = com.xnotes.core.pal.GRAIN_LEVELS - 1
+        for (i in 0 until n) {
+            val p = if (config.pressureEnabled && last >= 0) pAt(minOf(i, last)).coerceIn(0.0, 1.0) else GRAIN_FLAT_PRESSURE
+            out[i] = (Math.pow(p, GRAIN_PRESSURE_CURVE) * top + 0.5).toInt().coerceIn(0, top).toByte()
+        }
+        return out
+    }
+
+    /** Seeds the per-stroke randomness from where it began, so a repaint scatters the same dots. */
+    private fun brushSeed(): Long =
+        if (sampleCount == 0) 0L else java.lang.Double.doubleToLongBits(xAt(0)) * 31 + java.lang.Double.doubleToLongBits(yAt(0))
+
+    /**
+     * Airbrush: fine dots scattered around each segment, thicker near the line. Every segment
+     * draws from its own seeded generator, so the live run and the committed stroke agree dot
+     * for dot, and pressure thickens the cloud.
+     */
+    private fun paintSpray(r: Renderer, centers: FloatArray, radii: FloatArray, from: Int, count: Int, color: Rgba) {
+        if (count <= 0) return
+        val end = from + count
+        val seed = brushSeed()
+        val xy = FloatArray(SPRAY_MAX_DOTS * 2)
+        val rad = FloatArray(SPRAY_MAX_DOTS)
+        var n = 0
+        val last = sampleCount - 1
+        val dotR = (config.baseWidth * SPRAY_DOT_FACTOR).coerceAtLeast(SPRAY_DOT_MIN)
+        for (i in from until maxOf(from + 1, end - 1)) {
+            val j = minOf(i + 1, end - 1)
+            val x0 = centers[2 * i]
+            val y0 = centers[2 * i + 1]
+            val x1 = centers[2 * j]
+            val y1 = centers[2 * j + 1]
+            val reach = radii[i].coerceAtLeast(0.5f) * SPRAY_REACH.toFloat()
+            val len = kotlin.math.hypot(x1 - x0, y1 - y0)
+            val p = if (config.pressureEnabled && last >= 0) pAt(minOf(i, last)) else 0.7
+            val dots = ((len / reach + 1f) * SPRAY_DOTS_PER_REACH * (0.35 + p)).toInt().coerceIn(1, SPRAY_MAX_DOTS / 4)
+            val rnd = java.util.Random(seed xor (i.toLong() * SPRAY_SEED_MIX))
+            for (k in 0 until dots) {
+                if (n == SPRAY_MAX_DOTS) {
+                    r.fillDots(xy, rad, n, color)
+                    n = 0
+                }
+                val t = rnd.nextFloat()
+                val ang = rnd.nextFloat() * (2 * Math.PI).toFloat()
+                // Squaring the uniform draw packs dots toward the line, as a real nozzle does.
+                val u = rnd.nextFloat()
+                val d = reach * u * u
+                xy[2 * n] = x0 + (x1 - x0) * t + kotlin.math.cos(ang) * d
+                xy[2 * n + 1] = y0 + (y1 - y0) * t + kotlin.math.sin(ang) * d
+                rad[n] = (dotR * (0.55 + 0.9 * rnd.nextFloat())).toFloat()
+                n++
+            }
+        }
+        r.fillDots(xy, rad, n, color)
+    }
+
+    /** The hue turns with the distance drawn, starting from a hue the stroke's start picks. */
+    private fun paintRainbow(r: Renderer, centers: FloatArray, radii: FloatArray, from: Int, count: Int) {
+        if (count <= 0) return
+        val end = from + count
+        fun seg(i: Int) = kotlin.math.hypot((centers[2 * i] - centers[2 * i - 2]).toDouble(), (centers[2 * i + 1] - centers[2 * i - 1]).toDouble())
+        val hue0 = ((brushSeed() ushr 11) % 360).toDouble()
+        var dist = 0.0
+        for (i in 1..from) dist += seg(i)
+        var a = from
+        while (true) {
+            val b = minOf(a + RAINBOW_CHUNK, end - 1)
+            r.fillDiskRibbon(centers, radii, a, b - a + 1, hueColor(hue0 + dist / RAINBOW_PERIOD * 360.0))
+            for (i in a + 1..b) dist += seg(i)
+            if (b >= end - 1) break
+            a = b
+        }
+    }
 
     private fun paintNeon(r: Renderer, g: StrokeGeometry, color: Rgba) {
         val s = config.neonStrength.coerceIn(0.0, 1.0)
@@ -742,6 +859,52 @@ class Stroke(
 
         /** First allocation for a live stroke; grows by doubling from here. */
         private const val INITIAL_CAPACITY = 32
+
+        /** Grain brushes: pressure → coverage is eased so a normal touch already reads as pencil. */
+        private const val GRAIN_PRESSURE_CURVE = 0.8
+        /** Coverage a grain brush uses with pressure turned off. */
+        private const val GRAIN_FLAT_PRESSURE = 0.7
+
+        private const val WATERCOLOR_ALPHA = 0.42
+        private const val WATERCOLOR_EDGE_DARKEN = 0.25
+        private const val WATERCOLOR_EDGE_WIDTH = 0.07
+
+        /** How far past the ribbon's radius the spray scatters. */
+        internal const val SPRAY_REACH = 1.8
+        private const val SPRAY_DOT_FACTOR = 0.07
+        private const val SPRAY_DOT_MIN = 0.35
+        private const val SPRAY_DOTS_PER_REACH = 6.0
+        private const val SPRAY_MAX_DOTS = 2048
+        private const val SPRAY_SEED_MIX = -7046029254386353131L
+
+        /** Points per colour band, and page px for a full turn of the hue wheel. */
+        private const val RAINBOW_CHUNK = 3
+        private const val RAINBOW_PERIOD = 420.0
+
+        /** [c] lerped a fraction [t] toward black (alpha preserved). */
+        internal fun darken(c: Rgba, t: Double): Rgba {
+            val f = 1.0 - t.coerceIn(0.0, 1.0)
+            return Rgba((c.r * f).toInt(), (c.g * f).toInt(), (c.b * f).toInt(), c.a)
+        }
+
+        /** A bright, saturated colour at [hue] degrees. */
+        internal fun hueColor(hue: Double): Rgba {
+            val h = ((hue % 360.0) + 360.0) % 360.0 / 60.0
+            val s = 0.85
+            val v = 0.95
+            val c = v * s
+            val x = c * (1 - kotlin.math.abs(h % 2 - 1))
+            val (r1, g1, b1) = when (h.toInt()) {
+                0 -> Triple(c, x, 0.0)
+                1 -> Triple(x, c, 0.0)
+                2 -> Triple(0.0, c, x)
+                3 -> Triple(0.0, x, c)
+                4 -> Triple(x, 0.0, c)
+                else -> Triple(c, 0.0, x)
+            }
+            val m = v - c
+            return Rgba(((r1 + m) * 255).toInt(), ((g1 + m) * 255).toInt(), ((b1 + m) * 255).toInt())
+        }
 
         /** [c] lerped a fraction [t] toward white (alpha preserved). */
         internal fun lighten(c: Rgba, t: Double): Rgba {

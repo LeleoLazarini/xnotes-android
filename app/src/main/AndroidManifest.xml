@@ -7,7 +7,14 @@
 
     <!-- The apps that act on selected text ("Translate", "Search"), listed in a PDF text
          selection's menu; Android 11 and later hide them from apps that do not ask. -->
+    <!-- Meeting mode: records the room and transcribes it with the device speech recogniser. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
     <queries>
+        <!-- The speech recogniser service, which Android 11 and later hide from apps that do not ask. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />

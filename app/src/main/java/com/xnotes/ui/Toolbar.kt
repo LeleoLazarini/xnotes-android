@@ -104,6 +104,7 @@ fun Toolbar(
         Tool.SPEED to ImageVector.vectorResource(R.drawable.ic_stroke_speed),
         Tool.TAPER to ImageVector.vectorResource(R.drawable.ic_stroke_taper),
         Tool.HIGHLIGHTER to ImageVector.vectorResource(R.drawable.ic_stroke_highlighter),
+        Tool.BRUSH to ImageVector.vectorResource(R.drawable.ic_stroke_brush),
         Tool.ERASER to XnotesIcons.eraser,
         Tool.PAN to XnotesIcons.pan,
         Tool.SELECT to XnotesIcons.select,
