@@ -22,6 +22,6 @@ enum class CornerStyle(val id: String, val scale: Float) {
     SOFT("soft", 1.75f);
 
     companion object {
-        fun fromId(id: String): CornerStyle = entries.find { it.id == id } ?: ROUNDED
+        fun fromId(id: String): CornerStyle = entries.find { it.id == id } ?: SOFT
     }
 }

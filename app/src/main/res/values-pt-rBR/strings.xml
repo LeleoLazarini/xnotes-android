@@ -996,4 +996,5 @@
     <string name="post_it">Post-it</string>
     <string name="post_it_pick_colour">Escolha a cor</string>
     <string name="paper_plain">Liso (sem pauta)</string>
+    <string name="dark_theme">Tema escuro</string>
 </resources>

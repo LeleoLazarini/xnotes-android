@@ -12,14 +12,14 @@ import org.json.JSONObject
  */
 data class Preferences(
     val uiAppearance: String = "system", // "system" (follows OS dark/light) | "dark" | "light" | "oled"
-    val materialMode: MaterialColourMode = MaterialColourMode.DUAL,
+    val materialMode: MaterialColourMode = MaterialColourMode.SINGLE,
     val materialSingleSeed: Rgba = DEFAULT_MATERIAL_SINGLE,
     val materialDualSeed: Rgba = DEFAULT_MATERIAL_DUAL,
     val materialStyle: MaterialStyle = MaterialStyle.TONAL_SPOT,
     /** Material contrast level, -1 (reduced) .. 0 (standard) .. 1 (high). */
     val materialContrast: Double = 0.0,
     val materialSurfaceSeed: Rgba = DEFAULT_MATERIAL_SURFACE,
-    val cornerStyle: CornerStyle = CornerStyle.ROUNDED,
+    val cornerStyle: CornerStyle = CornerStyle.SOFT,
     val toolbarLook: ToolbarLook = ToolbarLook(),
     val hideWindowDecoration: Boolean = false,
     val pageColor: Rgba? = null, // null ⇒ follow theme paper
@@ -156,7 +156,8 @@ data class Preferences(
         .put("max_cache_resolution", maxCacheResolution)
         .put("disable_front_buffering", disableFrontBuffering)
         .apply {
-            if (materialMode != MaterialColourMode.SYSTEM) put("material_mode", materialMode.id)
+            // Always written: an absent key now means the clean single-accent default, not System.
+            put("material_mode", materialMode.id)
             if (materialSingleSeed != DEFAULT_MATERIAL_SINGLE) put("material_single_seed", Rgba.toHex(materialSingleSeed))
             if (materialDualSeed != DEFAULT_MATERIAL_DUAL) put("material_dual_seed", Rgba.toHex(materialDualSeed))
             // Keep the active colours readable by versions with a shared accent seed.
@@ -170,10 +171,10 @@ data class Preferences(
             if (materialMode == MaterialColourMode.DUAL || materialSurfaceSeed != DEFAULT_MATERIAL_SURFACE) {
                 put("material_surface_seed", Rgba.toHex(materialSurfaceSeed))
             }
-            if (cornerStyle != CornerStyle.ROUNDED) put("corner_style", cornerStyle.id)
+            put("corner_style", cornerStyle.id)
             if (toolbarLook.position != ToolbarPosition.TOP) put("toolbar_position", toolbarLook.position.id)
             if (toolbarLook.size != ToolbarSize.REGULAR) put("toolbar_size", toolbarLook.size.id)
-            if (toolbarLook.floating) put("toolbar_floating", true)
+            put("toolbar_floating", toolbarLook.floating)
             if (!toolbarLook.grouped) put("toolbar_grouped", false)
             startFullscreen?.let { put("start_fullscreen", it) }
             codeThemePath?.let { put("code_theme_path", it) }
@@ -199,7 +200,8 @@ data class Preferences(
 
     companion object {
         val DEFAULT_ACCENT = Rgba(0, 230, 118, 255)
-        val DEFAULT_MATERIAL_SINGLE = Rgba(244, 67, 54, 255)
+        /** Ink blue: a calm accent that leaves the coloured inks to stand out on the page. */
+        val DEFAULT_MATERIAL_SINGLE = Rgba(37, 99, 235, 255)
         val DEFAULT_MATERIAL_DUAL = Rgba(154, 124, 66, 255)
         val DEFAULT_MATERIAL_SURFACE = Rgba(61, 117, 230, 255)
 
@@ -227,7 +229,7 @@ data class Preferences(
             val materialMode = MaterialColourMode.fromId(o.optString("material_mode")) ?: when {
                 legacyDual -> MaterialColourMode.DUAL
                 legacySeed != null -> MaterialColourMode.SINGLE
-                else -> MaterialColourMode.SYSTEM
+                else -> MaterialColourMode.SINGLE
             }
             val legacyDualAccent = legacySeed ?: Rgba.fromHex(o.optString("accent_color")) ?: DEFAULT_ACCENT
             return Preferences(
@@ -245,7 +247,7 @@ data class Preferences(
                 toolbarLook = ToolbarLook(
                     position = ToolbarPosition.fromId(o.optString("toolbar_position")),
                     size = ToolbarSize.fromId(o.optString("toolbar_size")),
-                    floating = o.optBoolean("toolbar_floating", false),
+                    floating = o.optBoolean("toolbar_floating", true),
                     grouped = o.optBoolean("toolbar_grouped", true),
                 ),
                 hideWindowDecoration = o.optBoolean("hide_window_decoration", false),

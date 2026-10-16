@@ -464,7 +464,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     var palette by mutableStateOf(state.palette)
         private set
     /** How round the chrome is, [Preferences.cornerStyle]. */
-    var cornerStyle by mutableStateOf(CornerStyle.ROUNDED)
+    var cornerStyle by mutableStateOf(CornerStyle.SOFT)
         private set
     /** How the toolbar is drawn, [Preferences.toolbarLook]. */
     var toolbarLook by mutableStateOf(ToolbarLook())

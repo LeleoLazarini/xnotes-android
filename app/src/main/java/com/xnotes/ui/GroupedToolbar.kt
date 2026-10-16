@@ -323,6 +323,12 @@ private fun MoreMenu(editor: Editor, onRename: () -> Unit, onToggleFullscreen: (
             ) { menuOpen = false; editor.toggleZoomLock() }
             MenuDivider()
             GroupMenuItem(stringResource(R.string.toolbar_fullscreen), XnotesIcons.fullscreen) { menuOpen = false; onToggleFullscreen() }
+            // One tap between light and dark; System and OLED stay in Preferences.
+            val dark = LocalPalette.current.isDark
+            GroupMenuItem(stringResource(R.string.dark_theme), XnotesIcons.palette, active = dark) {
+                menuOpen = false
+                editor.applyHomePreferences(editor.preferences.copy(uiAppearance = if (dark) "light" else "dark"))
+            }
         }
         when (popup) {
             MorePopup.MARGINS -> MarginsPopup(editor) { popup = null }
