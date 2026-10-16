@@ -6,6 +6,8 @@ data class ToolbarLook(
     val size: ToolbarSize = ToolbarSize.REGULAR,
     /** A rounded pill over the canvas instead of a strip along the pane's edge. */
     val floating: Boolean = false,
+    /** The paged bar folds related tools into a few group buttons instead of one button each. */
+    val grouped: Boolean = true,
 )
 
 /** Which edge of its pane the toolbar runs along. */

@@ -301,13 +301,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     /** The sticker library: encoded image files kept under filesDir across sessions (never purged).
      *  Only [java.io.File] handles are held in memory; thumbnails and inserts decode from disk. */
     // The directory keeps its old "stamps" name so libraries saved before the rename still load.
-    private val stickerDir = java.io.File(appContext.filesDir, "stamps").apply { mkdirs() }
+    private val stickerDir = java.io.File(appContext.filesDir, "stamps").apply { mkdirs(); seedBundledStickers(this) }
 
     /** Sticker files, oldest first (names embed the add time so a plain name sort is stable). */
     var stickers: List<java.io.File> by mutableStateOf(listStickers())
         private set
 
-    private fun listStickers(): List<java.io.File> = stickerDir.listFiles()?.sortedBy { it.name }.orEmpty()
+    // Dot files (the seeding marker) are bookkeeping, not stickers.
+    private fun listStickers(): List<java.io.File> = stickerDir.listFiles()?.filter { it.isFile && !it.name.startsWith(".") }?.sortedBy { it.name }.orEmpty()
 
     /** Re-read the library into both panes: they browse one shared directory, so a sticker added
      *  or removed on one toolbar has to show up on the other. */
@@ -2074,7 +2075,56 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             refreshStickers()
             return
         }
-        insertImage(bytes)
+        // Lands where the user is looking, not at the middle of a long page.
+        insertImageAt(bytes, visibleCenter())
+    }
+
+    /** The content point at the middle of the viewport. */
+    private fun visibleCenter(): Pt = state.viewportToContent(Pt(state.viewportW / 2.0, state.viewportH / 2.0))
+
+    /**
+     * Drop a sticky note of [fill] in the middle of what is on screen and start typing into it. It is
+     * a rounded square shape with a label, so moving, resizing, recolouring and undo come for free.
+     */
+    fun insertPostIt(fill: Rgba) {
+        val c = visibleCenter()
+        val pi = (state.pageIndexAtContent(c) ?: state.currentPageIndex()).coerceIn(0, state.document.pages.lastIndex)
+        val page = state.document.pages[pi]
+        val side = minOf(page.width, page.height) * POST_IT_SHARE
+        val local = state.toPageSpace(pi, c)
+        val cover = state.footprint(page)
+        val x = (local.x - side / 2).coerceIn(cover.left, cover.right - side)
+        val y = (local.y - side / 2).coerceIn(cover.top, cover.bottom - side)
+        val ink = Rgba((fill.r * 0.45).toInt(), (fill.g * 0.45).toInt(), (fill.b * 0.45).toInt())
+        val item = com.xnotes.core.model.ShapeItem(
+            com.xnotes.core.shapes.ShapeKind.ROUNDED_RECT,
+            Pt(x, y),
+            Pt(x + side, y + side),
+            strokeRgba = ink,
+            strokeWidth = 1.5,
+            fillRgba = fill,
+            adj = doubleArrayOf(0.04),
+        )
+        page.items.add(item); state.appendToCache(page, item); history.push(AddItem(page, item))
+        state.document.dirty = true; refreshContent(); view.requestRender()
+        controller.editLabelOf(item, pi)
+    }
+
+    /**
+     * Copy the stickers that ship with the app into the library once, on first run. A marker file
+     * keeps ones the user removed from coming back.
+     */
+    private fun seedBundledStickers(dir: java.io.File) {
+        val marker = java.io.File(dir, ".seeded-v1")
+        if (marker.exists()) return
+        runCatching {
+            val names = appContext.assets.list(BUNDLED_STICKERS).orEmpty().sorted()
+            names.forEachIndexed { i, name ->
+                val out = java.io.File(dir, "stamp-0000-%03d-%s".format(i, name))
+                appContext.assets.open("$BUNDLED_STICKERS/$name").use { input -> out.outputStream().use { input.copyTo(it) } }
+            }
+            marker.writeText("1")
+        }
     }
 
     fun pasteImage() {
@@ -3796,9 +3846,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     /** Creates a blank `.xnote` under [parentDocId]; returns its URI, or null. IO — call off-thread. */
-    fun createBlankNoteFile(treeUri: String, parentDocId: String, rawName: String): String? {
+    fun createBlankNoteFile(treeUri: String, parentDocId: String, rawName: String, template: String? = null): String? {
         val name = uniqueDocumentName(treeUri, parentDocId, rawName, com.xnotes.core.util.DocumentKind.NOTE)
         val blank = blankDocument().also { stampNewNoteDefaults(it) }
+        // A paper picked in the New note dialog overrides the saved default for this note only.
+        if (template != null) {
+            blank.style = blank.style.withTemplate(template, PageTemplates.NONE)
+            TemplateLibrary.embed(blank, template)
+        }
         return createNoteFile(treeUri, parentDocId, name) { codec.write(blank, it) }
     }
 
@@ -7394,3 +7449,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         }
     }
 }
+
+/** Where the bundled sticker pack lives in assets. */
+private const val BUNDLED_STICKERS = "stickers"
+
+/** A new sticky note's side, as a share of the page's shorter side (about 63 mm on A4). */
+private const val POST_IT_SHARE = 0.3

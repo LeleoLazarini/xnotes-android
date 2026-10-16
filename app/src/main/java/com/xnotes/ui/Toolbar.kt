@@ -117,6 +117,24 @@ fun Toolbar(
     var configForTool by remember { mutableStateOf<Tool?>(null) }
     var switcherIndex by remember { mutableStateOf<Int?>(null) }
     var renaming by remember { mutableStateOf(false) }
+    if (LocalToolbarLook.current.grouped) {
+        ToolbarFrame(armed = glideKeyFor(editor.tool), trailing = onClosePane?.let { { ClosePaneButton(it) } }) {
+            GroupedBarContent(
+                editor = editor,
+                toolIcons = toolIcons,
+                configForTool = configForTool,
+                setConfigForTool = { configForTool = it },
+                switcherIndex = switcherIndex,
+                setSwitcherIndex = { switcherIndex = it },
+                onRename = { renaming = true },
+                onOpenBackstage = onOpenBackstage,
+                onInsertImage = onInsertImage,
+                onAddStickers = onAddStickers,
+                onToggleFullscreen = onToggleFullscreen,
+                onImportTemplate = onImportTemplate,
+            )
+        }
+    } else
     // Pinned outside the scrolling strip so closing a split pane is always one tap away.
     ToolbarFrame(armed = editor.tool, trailing = onClosePane?.let { { ClosePaneButton(it) } }) {
         // The bar is driven by the user-customisable layout; separators sit between non-empty
@@ -274,7 +292,7 @@ private fun ToolbarItemView(
 
 /** A stroke/edit tool button: arms the tool, and re-clicking an armed config tool opens its popup. */
 @Composable
-private fun ToolButton(
+internal fun ToolButton(
     editor: Editor,
     tool: Tool,
     icon: ImageVector?,
@@ -351,11 +369,11 @@ private fun RenameDialog(initial: String, onConfirm: (String) -> Unit, onDismiss
 
 /** Opens the page-styles popup (paper colour + ruling) for the document and the current page. */
 @Composable
-private fun StylesButton(editor: Editor, onImportTemplate: () -> Unit) {
+internal fun StylesButton(editor: Editor, onImportTemplate: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     PrewarmTemplateThumbs(editor, open)
     Box {
-        ToolbarIcon(XnotesIcons.sliders, stringResource(R.string.toolbar_styles)) { open = true }
+        ToolbarIcon(XnotesIcons.page, stringResource(R.string.toolbar_styles)) { open = true }
         if (open) StylesPopup(editor, onImportTemplate) { open = false }
     }
 }
@@ -481,6 +499,7 @@ internal fun ToolbarIcon(
     glideKey: Any? = null,
     hint: String? = null,
     shortcut: String? = null,
+    grouped: Boolean = false,
     onClick: () -> Unit,
 ) {
     val palette = LocalPalette.current
@@ -504,7 +523,11 @@ internal fun ToolbarIcon(
     val press by animateFloatAsState(if (pressed) 0.85f else 1f, spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessMedium), label = "toolPress")
     Tooltip(contentDescription, hint = hint, shortcut = shortcut) {
         Box(
-            Modifier.size(bar.button).clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick),
+            Modifier
+                .size(bar.button)
+                .clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
+                // A small corner wedge marks a button that opens a group of tools.
+                .then(if (grouped) Modifier.drawBehind { drawGroupWedge(tint.copy(alpha = 0.6f)) } else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             Box(
@@ -577,7 +600,7 @@ private fun Rule() {
 
 /** "3 / 12" along the bar; down a side rail, where that is too wide, the two numbers stack. */
 @Composable
-private fun PageCounter(current: Int, count: Int, modifier: Modifier) {
+internal fun PageCounter(current: Int, count: Int, modifier: Modifier) {
     if (!LocalBar.current.vertical) {
         Label("$current / $count", modifier)
         return
@@ -610,7 +633,7 @@ private fun ImageMenu(editor: Editor, onInsertImage: () -> Unit, onAddStickers: 
  * [Editor.stickers]); each tile decodes its own small preview off the main thread.
  */
 @Composable
-private fun StickersMenu(editor: Editor, onAddStickers: () -> Unit, onDismiss: () -> Unit) {
+internal fun StickersMenu(editor: Editor, onAddStickers: () -> Unit, onDismiss: () -> Unit) {
     val palette = LocalPalette.current
     DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
         DropdownMenuItem(
@@ -628,14 +651,14 @@ private fun StickersMenu(editor: Editor, onAddStickers: () -> Unit, onDismiss: (
         } else {
             // Both dimensions must be fixed: the menu measures its content by intrinsics, which a
             // lazy grid cannot answer (it crashes) — a fixed size short-circuits the query.
-            val rows = ((editor.stickers.size + 2) / 3).coerceAtMost(3)
+            val rows = ((editor.stickers.size + 3) / 4).coerceAtMost(4)
             LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
+                columns = GridCells.Fixed(4),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier
                     .padding(horizontal = 10.dp, vertical = 4.dp)
-                    .width(72.dp * 3 + 6.dp * 2)
+                    .width(72.dp * 4 + 6.dp * 3)
                     .height(72.dp * rows + 6.dp * (rows - 1)),
             ) {
                 items(editor.stickers, key = { it.name }) { file ->

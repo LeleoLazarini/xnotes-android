@@ -128,6 +128,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import com.xnotes.R
+import com.xnotes.core.model.PageTemplates
 import com.xnotes.core.model.Rgba
 import com.xnotes.platform.PdfOpenError
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -1537,6 +1538,7 @@ private fun ExplorerSection(
                     EmptyPane(empty.text, empty.art, if (!empty.offersCreate) null else { {
                         PrimaryButton(XnotesIcons.edit, stringResource(R.string.new_note_menu)) { onCreateMode(CreateMode.FILE) }
                         PrimaryButton(XnotesIcons.canvas, stringResource(R.string.new_canvas_menu)) { onCreateMode(CreateMode.CANVAS) }
+                        PrimaryButton(XnotesIcons.newFolder, stringResource(R.string.new_folder_menu)) { onCreateMode(CreateMode.FOLDER) }
                         PrimaryButton(XnotesIcons.importDoc, stringResource(R.string.import_pdf), onClick = calls.importPdf)
                     } })
                 }
@@ -1656,6 +1658,11 @@ private fun ExplorerSection(
                         LayoutSwitcher(switcherLayouts, layout, liftNow) { setView(view.copy(layout = it)); columnsPick = null }
                     }
                     Spacer(Modifier.width(4.dp))
+                    // New folder sits in plain view rather than only inside the create menus.
+                    Box(Modifier.floatingBacking(liftNow, CircleShape, floatFill, floatEdge)) {
+                        ExplorerIcon(XnotesIcons.newFolder, stringResource(R.string.new_folder_menu)) { onCreateMode(CreateMode.FOLDER) }
+                    }
+                    Spacer(Modifier.width(4.dp))
                     var optionsOpen by remember { mutableStateOf(false) }
                     Box(Modifier.floatingBacking(liftNow, CircleShape, floatFill, floatEdge)) {
                         ExplorerIcon(XnotesIcons.sliders, stringResource(R.string.view_options)) { optionsOpen = true }
@@ -1746,6 +1753,8 @@ private fun ExplorerSection(
     val pendingImport = editor.pendingImport
     // Clear any stale error when a fresh name dialog opens for a new operation.
     LaunchedEffect(createMode, pendingImport) { fieldError = null }
+    // The paper a new note starts on: the saved default until one is picked in the dialog.
+    var newNotePaper by remember(createMode) { mutableStateOf(editor.newNoteStyle.template ?: PageTemplates.NONE) }
     // Name entry for a new note, new folder, or a pending PDF import. Hidden while an import is
     // actually being written, so only the "Importing…" dialog shows.
     if ((createMode != CreateMode.NONE || pendingImport != null) && !editor.importing) {
@@ -1768,6 +1777,7 @@ private fun ExplorerSection(
             placeholder = if (isFolder) stringResource(R.string.folder_name) else null,
             allowEmpty = !isFolder, // a folder needs a name; a blank note name becomes "untitled_N"
             error = fieldError,
+            extra = if (pendingImport == null && createMode == CreateMode.FILE) { { NewNotePaperPicker(editor, newNotePaper) { newNotePaper = it } } } else null,
             onConfirm = { n ->
                 when {
                     pendingImport != null -> scope.launch {
@@ -1792,7 +1802,7 @@ private fun ExplorerSection(
                     }
                     else -> scope.launch {
                         // Just create the note in the explorer — it opens only when the user taps it.
-                        val uri = withContext(Dispatchers.IO) { editor.createBlankNoteFile(root, currentDocId, n) }
+                        val uri = withContext(Dispatchers.IO) { editor.createBlankNoteFile(root, currentDocId, n, newNotePaper) }
                         if (uri != null) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_note)
                     }
                 }
@@ -2139,6 +2149,7 @@ private fun NameDialog(
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit,
     onRemove: (() -> Unit)? = null,
+    extra: (@Composable () -> Unit)? = null,
 ) {
     val palette = LocalPalette.current
     var text by remember { mutableStateOf(TextFieldValue(initial, selection = TextRange(0, initial.length))) }
@@ -2151,7 +2162,7 @@ private fun NameDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        text = {
+        text = { Column {
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it },
@@ -2172,7 +2183,8 @@ private fun NameDialog(
                         }
                     },
             )
-        },
+            extra?.invoke()
+        } },
         confirmButton = {
             TextButton(onClick = { confirm() }, enabled = allowEmpty || text.text.isNotBlank()) { Text(confirmLabel) }
         },
@@ -2183,6 +2195,44 @@ private fun NameDialog(
             }
         },
     )
+}
+
+/** The paper grid in the New note dialog: plain, or any template in the library. */
+@Composable
+private fun NewNotePaperPicker(editor: Editor, selected: String, onSelect: (String) -> Unit) {
+    val palette = LocalPalette.current
+    val choices = remember(TemplateLibraryUi.version) { editor.templateChoices() }
+    val look = TemplateLook.of(editor.newNoteStyle, null, palette.paper)
+    Spacer(Modifier.height(12.dp))
+    Text(stringResource(R.string.caption_template), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
+    Spacer(Modifier.height(6.dp))
+    val plain = selected == PageTemplates.NONE
+    Text(
+        stringResource(R.string.paper_plain),
+        color = (if (plain) palette.selectionForeground else palette.text).toComposeColor(),
+        fontSize = 13.sp,
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.small)
+            .background((if (plain) palette.selectionBackground else palette.surface).toComposeColor())
+            .clickable { onSelect(PageTemplates.NONE) }
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    )
+    Spacer(Modifier.height(8.dp))
+    Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
+        TemplateStrip(
+            entries = choices,
+            selected = selected,
+            pageMm = 210.0 to 297.0,
+            ink = look.ink,
+            accent = look.accent,
+            paper = look.paper,
+            onSelect = onSelect,
+            onImport = {},
+            onRemove = {},
+            onKeep = {},
+            showImport = false,
+        )
+    }
 }
 
 private const val PRESS_FILL_MS = 120L

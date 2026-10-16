@@ -687,6 +687,13 @@
 
     <!-- Tooltips -->
     <string name="tip_tap_for_settings">Tap for settings</string>
+    <string name="tip_tap_for_group">Tap for more tools</string>
+    <string name="tool_settings">Tool settings…</string>
+    <string name="group_insert">Insert</string>
+    <string name="more_options">More</string>
+    <string name="pref_toolbar_grouping">Tool layout</string>
+    <string name="toolbar_grouped">Grouped</string>
+    <string name="toolbar_classic">One button per tool</string>
     <string name="tip_hold_for_language">Hold to choose the language</string>
 
     <!-- Tables -->
@@ -988,4 +995,7 @@
     <string name="toolbar_size_compact">Compact</string>
     <string name="toolbar_size_regular">Regular</string>
     <string name="toolbar_size_comfortable">Comfortable</string>
+    <string name="post_it">Sticky note</string>
+    <string name="post_it_pick_colour">Pick a colour</string>
+    <string name="paper_plain">Plain (no ruling)</string>
 </resources>

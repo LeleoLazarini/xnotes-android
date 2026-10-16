@@ -232,7 +232,7 @@ fun StylesPopup(editor: Editor, onImportTemplate: () -> Unit = {}, onDismiss: ()
     DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
         if (customizing && shown != null) {
             TemplateCustomizer(editor, shown, shownKey, tab, style, lower, look, ::apply) { customizing = false }
-        } else Column(Modifier.width(286.dp).padding(horizontal = 14.dp, vertical = 8.dp)) {
+        } else Column(Modifier.width(372.dp).padding(horizontal = 14.dp, vertical = 8.dp)) {
             PopupTitle(stringResource(R.string.title_styles))
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 ModeChip(stringResource(R.string.all_pages), tab == 0) { tab = 0 }
@@ -287,7 +287,7 @@ fun StylesPopup(editor: Editor, onImportTemplate: () -> Unit = {}, onDismiss: ()
                 Spacer(Modifier.size(6.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        shown.name,
+                        localizedTemplateName(shown.name),
                         color = LocalPalette.current.text.toComposeColor(),
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp,

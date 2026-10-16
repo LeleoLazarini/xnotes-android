@@ -1,0 +1,334 @@
+package com.xnotes.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.sp
+import com.xnotes.core.model.Rgba
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import com.xnotes.R
+import com.xnotes.core.tools.Tool
+import com.xnotes.ui.icons.XnotesIcons
+import com.xnotes.ui.theme.LocalPalette
+import com.xnotes.ui.theme.toComposeColor
+
+/**
+ * The grouped paged bar: related tools fold into one button each, so the whole bar fits a tablet
+ * without scrolling. A group button shows the group's last-used tool; tapping it arms that tool,
+ * and tapping it again while armed opens the group's list (plus that tool's settings).
+ */
+internal enum class ToolGroup(val tools: List<Tool>) {
+    PENS(listOf(Tool.PEN, Tool.CALLIGRAPHY, Tool.TAPER, Tool.SPEED, Tool.DASHED)),
+    SELECTION(listOf(Tool.LASSO, Tool.SELECT, Tool.PAN, Tool.SCREENSHOT)),
+    INSERT(listOf(Tool.SHAPE, Tool.TEXT, Tool.TEXT_BOX, Tool.MARKUP)),
+}
+
+/** The last tool used in each group, for the whole session, so switching notes keeps it. */
+private val lastInGroup = mutableStateMapOf<ToolGroup, Tool>()
+
+private fun groupOf(tool: Tool): ToolGroup? = ToolGroup.entries.firstOrNull { tool in it.tools }
+
+/** What the bar's gliding circle follows: the group button for a grouped tool, else the tool. */
+internal fun glideKeyFor(tool: Tool): Any = groupOf(tool) ?: tool
+
+private fun configurable(tool: Tool) =
+    tool.isStroke || tool == Tool.SHAPE || tool == Tool.ERASER || tool == Tool.SELECT || tool == Tool.TEXT || tool == Tool.MARKUP
+
+/** A small filled triangle in the button's lower-right corner. */
+internal fun DrawScope.drawGroupWedge(color: Color) {
+    val s = 5.dp.toPx()
+    val inset = 5.dp.toPx()
+    val right = size.width - inset
+    val bottom = size.height - inset
+    val path = Path().apply {
+        moveTo(right, bottom - s)
+        lineTo(right, bottom)
+        lineTo(right - s, bottom)
+        close()
+    }
+    drawPath(path, color)
+}
+
+@Composable
+internal fun GroupedBarContent(
+    editor: Editor,
+    toolIcons: Map<Tool, ImageVector>,
+    configForTool: Tool?,
+    setConfigForTool: (Tool?) -> Unit,
+    switcherIndex: Int?,
+    setSwitcherIndex: (Int?) -> Unit,
+    onRename: () -> Unit,
+    onOpenBackstage: () -> Unit,
+    onInsertImage: () -> Unit,
+    onAddStickers: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+    onImportTemplate: () -> Unit,
+) {
+    ToolbarIcon(XnotesIcons.prev, stringResource(R.string.toolbar_home)) { onOpenBackstage() }
+    Separator()
+    ToolGroupButton(editor, ToolGroup.PENS, toolIcons, configForTool, setConfigForTool)
+    ToolButton(editor, Tool.HIGHLIGHTER, toolIcons[Tool.HIGHLIGHTER], configForTool, setConfigForTool)
+    ToolButton(editor, Tool.ERASER, toolIcons[Tool.ERASER], configForTool, setConfigForTool)
+    ToolGroupButton(editor, ToolGroup.SELECTION, toolIcons, configForTool, setConfigForTool)
+    Separator()
+    editor.toolbarColors.take(editor.toolbarColorCount).forEachIndexed { i, color ->
+        Box {
+            Swatch(
+                color = color.toComposeColor(),
+                active = i == editor.activeColorIndex,
+                onClick = { if (i == editor.activeColorIndex) setSwitcherIndex(i) else editor.pickColor(i) },
+            )
+            if (switcherIndex == i) ColorSwitcherPopup(editor, i) { setSwitcherIndex(null) }
+        }
+    }
+    Separator()
+    InsertGroupButton(editor, toolIcons, configForTool, setConfigForTool, onInsertImage, onAddStickers)
+    PostItButton(editor)
+    StylesButton(editor, onImportTemplate)
+    PageCounterButton(editor)
+    Separator()
+    ToolbarIcon(XnotesIcons.undo, stringResource(R.string.undo), enabled = editor.canUndo, shortcut = Keys.UNDO) { editor.undo() }
+    ToolbarIcon(XnotesIcons.redo, stringResource(R.string.redo), enabled = editor.canRedo, shortcut = Keys.REDO) { editor.redo() }
+    MoreMenu(editor, onRename, onToggleFullscreen)
+}
+
+/** Opens the settings popup for [tool], the same one its own button opens on the classic bar. */
+@Composable
+private fun ToolConfigFor(editor: Editor, tool: Tool, onDismiss: () -> Unit) {
+    when (tool) {
+        Tool.SHAPE -> ShapeConfigPopup(editor, onDismiss)
+        Tool.ERASER -> EraserConfigPopup(editor, onDismiss)
+        Tool.SELECT -> SelectConfigPopup(editor, onDismiss)
+        Tool.TEXT -> TextToolConfigPopup(editor, onDismiss)
+        Tool.MARKUP -> MarkupToolPopup(editor, onDismiss)
+        else -> ToolConfigPopup(editor, tool, onDismiss)
+    }
+}
+
+@Composable
+private fun GroupMenuItem(label: String, icon: ImageVector?, active: Boolean = false, onClick: () -> Unit) {
+    val palette = LocalPalette.current
+    val tint = (if (active) palette.selectionForeground else palette.textDim).toComposeColor()
+    DropdownMenuItem(
+        text = { Text(label, color = if (active) tint else palette.text.toComposeColor()) },
+        leadingIcon = icon?.let { { Icon(it, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp)) } },
+        modifier = if (active) Modifier.clip(MaterialTheme.shapes.small) else Modifier,
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun MenuDivider() = HorizontalDivider(color = LocalPalette.current.border.toComposeColor())
+
+@Composable
+private fun ToolGroupButton(
+    editor: Editor,
+    group: ToolGroup,
+    toolIcons: Map<Tool, ImageVector>,
+    configForTool: Tool?,
+    setConfigForTool: (Tool?) -> Unit,
+) {
+    val armed = editor.tool.takeIf { it in group.tools }
+    LaunchedEffect(armed) { armed?.let { lastInGroup[group] = it } }
+    val current = armed ?: lastInGroup[group] ?: group.tools.first()
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        ToolbarIcon(
+            toolIcons[current] ?: return@Box,
+            stringResource(current.labelRes),
+            active = armed != null,
+            glideKey = group,
+            hint = if (armed != null) stringResource(R.string.tip_tap_for_group) else null,
+            grouped = true,
+        ) {
+            if (armed == null) {
+                editor.selectTool(current)
+                setConfigForTool(null)
+            } else {
+                menuOpen = true
+            }
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            group.tools.forEach { t ->
+                if (t == Tool.MARKUP && !editor.hasPdf) return@forEach
+                GroupMenuItem(stringResource(t.labelRes), toolIcons[t], active = t == armed) {
+                    menuOpen = false
+                    editor.selectTool(t)
+                    setConfigForTool(null)
+                }
+            }
+            if (armed != null && configurable(armed)) {
+                MenuDivider()
+                GroupMenuItem(stringResource(R.string.tool_settings), XnotesIcons.sliders) {
+                    menuOpen = false
+                    setConfigForTool(armed)
+                }
+            }
+        }
+        if (configForTool != null && configForTool in group.tools) ToolConfigFor(editor, configForTool) { setConfigForTool(null) }
+    }
+}
+
+/** "+": shapes, text, images, stickers and the drawing aids, in one menu. */
+@Composable
+private fun InsertGroupButton(
+    editor: Editor,
+    toolIcons: Map<Tool, ImageVector>,
+    configForTool: Tool?,
+    setConfigForTool: (Tool?) -> Unit,
+    onInsertImage: () -> Unit,
+    onAddStickers: () -> Unit,
+) {
+    val group = ToolGroup.INSERT
+    val armed = editor.tool.takeIf { it in group.tools }
+    var menuOpen by remember { mutableStateOf(false) }
+    var stickersOpen by remember { mutableStateOf(false) }
+    Box {
+        ToolbarIcon(
+            armed?.let { toolIcons[it] } ?: XnotesIcons.plus,
+            stringResource(R.string.group_insert),
+            active = armed != null,
+            glideKey = group,
+            grouped = true,
+        ) { menuOpen = true }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            group.tools.forEach { t ->
+                if (t == Tool.MARKUP && !editor.hasPdf) return@forEach
+                GroupMenuItem(stringResource(t.labelRes), toolIcons[t], active = t == armed) {
+                    menuOpen = false
+                    editor.selectTool(t)
+                    setConfigForTool(null)
+                }
+            }
+            MenuDivider()
+            GroupMenuItem(stringResource(R.string.stickers), XnotesIcons.heart) { menuOpen = false; stickersOpen = true }
+            GroupMenuItem(stringResource(R.string.insert_image_ellipsis), XnotesIcons.image) { menuOpen = false; onInsertImage() }
+            GroupMenuItem(stringResource(R.string.paste_image), XnotesIcons.paste) { menuOpen = false; editor.pasteImage() }
+            MenuDivider()
+            GroupMenuItem(stringResource(R.string.tool_ruler), XnotesIcons.ruler, active = editor.rulerVisible) { menuOpen = false; editor.toggleRuler() }
+            GroupMenuItem(stringResource(R.string.tool_wand), XnotesIcons.magicWand, active = editor.wandEnabled) { menuOpen = false; editor.toggleWand() }
+            if (armed != null && configurable(armed)) {
+                MenuDivider()
+                GroupMenuItem(stringResource(R.string.tool_settings), XnotesIcons.sliders) { menuOpen = false; setConfigForTool(armed) }
+            }
+        }
+        if (stickersOpen) StickersMenu(editor, onAddStickers) { stickersOpen = false }
+        if (configForTool != null && configForTool in group.tools) ToolConfigFor(editor, configForTool) { setConfigForTool(null) }
+    }
+}
+
+/** The six sticky-note colours, pastel so ink and text stay readable on them. */
+private val POST_IT_COLORS = listOf(
+    Rgba(255, 241, 118), // amarelo
+    Rgba(255, 204, 128), // laranja
+    Rgba(248, 187, 208), // rosa
+    Rgba(209, 196, 233), // lilás
+    Rgba(179, 229, 252), // azul
+    Rgba(200, 230, 201), // verde
+)
+
+/** Drops a sticky note in the chosen colour where the user is looking and starts typing in it. */
+@Composable
+private fun PostItButton(editor: Editor) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        ToolbarIcon(XnotesIcons.note, stringResource(R.string.post_it), grouped = true) { open = true }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            Text(
+                stringResource(R.string.post_it_pick_colour),
+                color = LocalPalette.current.textDim.toComposeColor(),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+            )
+            Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                POST_IT_COLORS.forEach { c ->
+                    Box(
+                        Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(c.toComposeColor())
+                            .border(1.dp, LocalPalette.current.border.toComposeColor(), RoundedCornerShape(6.dp))
+                            .clickable { open = false; editor.insertPostIt(c) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** "3 / 12", tapping it jumps to a page. */
+@Composable
+private fun PageCounterButton(editor: Editor) {
+    var jumpOpen by remember { mutableStateOf(false) }
+    Box {
+        Tooltip(stringResource(R.string.title_go_to_page)) {
+            PageCounter(
+                editor.pageIndex + 1,
+                editor.pageCount,
+                Modifier.clip(MaterialTheme.shapes.extraSmall).clickable { jumpOpen = true },
+            )
+        }
+        if (jumpOpen) PageJumpPopup(editor) { jumpOpen = false }
+    }
+}
+
+private enum class MorePopup { MARGINS, VIEW, ZOOM }
+
+/** Everything used now and then: margins, view, zoom and fit, side panel, full screen, rename. */
+@Composable
+private fun MoreMenu(editor: Editor, onRename: () -> Unit, onToggleFullscreen: () -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var popup by remember { mutableStateOf<MorePopup?>(null) }
+    Box {
+        ToolbarIcon(XnotesIcons.more, stringResource(R.string.more_options), grouped = true) { menuOpen = true }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            GroupMenuItem(stringResource(R.string.rename_note), XnotesIcons.edit) { menuOpen = false; onRename() }
+            GroupMenuItem(stringResource(R.string.side_panel), XnotesIcons.sidebar, active = editor.sidebarVisible) { menuOpen = false; editor.toggleSidebar() }
+            MenuDivider()
+            GroupMenuItem(stringResource(R.string.toolbar_margins), XnotesIcons.margins) { menuOpen = false; popup = MorePopup.MARGINS }
+            GroupMenuItem(stringResource(R.string.toolbar_view), XnotesIcons.view) { menuOpen = false; popup = MorePopup.VIEW }
+            MenuDivider()
+            GroupMenuItem(stringResource(R.string.title_zoom) + " (${editor.zoomPercent}%)", XnotesIcons.zoomIn) { menuOpen = false; popup = MorePopup.ZOOM }
+            GroupMenuItem(stringResource(R.string.fit_page), XnotesIcons.fit) { menuOpen = false; editor.fitPage() }
+            GroupMenuItem(stringResource(R.string.fit_width), XnotesIcons.fit) { menuOpen = false; editor.fitWidth() }
+            GroupMenuItem(
+                stringResource(if (editor.zoomLocked) R.string.unlock_zoom else R.string.lock_zoom),
+                if (editor.zoomLocked) XnotesIcons.lock else XnotesIcons.unlock,
+                active = editor.zoomLocked,
+            ) { menuOpen = false; editor.toggleZoomLock() }
+            MenuDivider()
+            GroupMenuItem(stringResource(R.string.toolbar_fullscreen), XnotesIcons.fullscreen) { menuOpen = false; onToggleFullscreen() }
+        }
+        when (popup) {
+            MorePopup.MARGINS -> MarginsPopup(editor) { popup = null }
+            MorePopup.VIEW -> ViewMenuPopup(editor) { popup = null }
+            MorePopup.ZOOM -> ZoomMenuPopup(editor) { popup = null }
+            null -> Unit
+        }
+    }
+}

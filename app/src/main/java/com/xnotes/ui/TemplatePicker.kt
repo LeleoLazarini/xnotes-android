@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -75,7 +76,7 @@ private val TILE_W = 62.dp
  * ending in an Import tile. A long press on an imported template offers to remove it, and on one
  * only this note carries, to add it to the library.
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 internal fun TemplateStrip(
     entries: List<TemplateLibrary.Entry>,
@@ -88,13 +89,15 @@ internal fun TemplateStrip(
     onImport: () -> Unit,
     onRemove: (String) -> Unit,
     onKeep: (String) -> Unit,
+    showImport: Boolean = true,
 ) {
     val palette = LocalPalette.current
     val aspect = (pageMm.second / pageMm.first).coerceIn(0.5, 2.0)
     val thumbH = THUMB_W * aspect.toFloat()
     val wPx = thumbPx(THUMB_W)
-    // Not a LazyRow: the popup measures its content's intrinsic size, which lazy lists refuse.
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // A wrapping grid, so every paper shows at once. Not a lazy grid: the popup measures its
+    // content's intrinsic size, which lazy layouts refuse.
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (e in entries) key(e.key) {
             var menu by remember { mutableStateOf(false) }
             Column(
@@ -122,7 +125,7 @@ internal fun TemplateStrip(
                 }
                 Spacer(Modifier.height(3.dp))
                 Text(
-                    e.template.name,
+                    localizedTemplateName(e.template.name),
                     color = palette.text.toComposeColor(),
                     fontSize = 9.sp,
                     maxLines = 1,
@@ -138,7 +141,7 @@ internal fun TemplateStrip(
                 }
             }
         }
-        Column(
+        if (showImport) Column(
             Modifier
                 .width(TILE_W)
                 .clip(MaterialTheme.shapes.extraSmall)
@@ -279,3 +282,18 @@ internal fun PrewarmTemplateThumbs(editor: Editor, popupOpen: Boolean) {
 
 /** Lets a just-opened note draw its first pages before thumbnails take the CPU. */
 private const val PREWARM_DELAY_MS = 600L
+
+/** Portuguese names for the bundled papers; the template files carry English ones. */
+private val PT_TEMPLATE_NAMES = mapOf(
+    "Dots" to "Pontilhado", "Grid" to "Quadriculado", "Lines" to "Pautado",
+    "Calligraphy guide" to "Guia de caligrafia", "Cornell notes" to "Cornell", "Daily planner" to "Agenda diária",
+    "Dot grid" to "Pontos", "Engineering paper" to "Engenharia", "Guitar tablature" to "Tablatura",
+    "Hexagon grid" to "Hexagonal", "Isometric grid" to "Isométrico", "Isometric dots" to "Pontos isométricos",
+    "Musical staves" to "Pauta musical", "Two-point perspective" to "Perspectiva", "Pleading paper" to "Jurídico",
+    "Polar grid" to "Polar", "Handwriting practice" to "Caligrafia infantil", "Ruled with margin" to "Pautado com margem",
+    "Semi-log paper" to "Semilog", "Seyes" to "Seyès", "Storyboard" to "Storyboard", "Checklist" to "Lista de tarefas",
+    "Weekly planner" to "Agenda semanal",
+)
+
+internal fun localizedTemplateName(name: String): String =
+    if (java.util.Locale.getDefault().language == "pt") PT_TEMPLATE_NAMES[name] ?: name else name

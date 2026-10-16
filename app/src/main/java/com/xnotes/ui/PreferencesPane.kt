@@ -564,6 +564,11 @@ fun PreferencesPane(
                 Chip(stringResource(R.string.toolbar_docked), !look.floating) { updateHome(prefs.copy(toolbarLook = look.copy(floating = false))) }
                 Chip(stringResource(R.string.toolbar_floating), look.floating) { updateHome(prefs.copy(toolbarLook = look.copy(floating = true))) }
             }
+            FieldLabel(stringResource(R.string.pref_toolbar_grouping))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Chip(stringResource(R.string.toolbar_grouped), look.grouped) { updateHome(prefs.copy(toolbarLook = look.copy(grouped = true))) }
+                Chip(stringResource(R.string.toolbar_classic), !look.grouped) { updateHome(prefs.copy(toolbarLook = look.copy(grouped = false))) }
+            }
             FieldLabel(stringResource(R.string.pref_toolbar_position))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for ((position, label) in listOf(

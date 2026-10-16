@@ -2939,6 +2939,11 @@ class InteractionController(
         if (shape.takesLabel && !shape.locked) startLabelEdit(shape, sel.pageIndex)
     }
 
+    /** Type straight into the label of [shape] on page [pi], as a just-inserted sticky note wants. */
+    fun editLabelOf(shape: Labelled, pi: Int) {
+        if (shape.takesLabel && !shape.locked) startLabelEdit(shape, pi)
+    }
+
     /**
      * Open the overlay on [shape]'s label, giving it one in the text box defaults if it has none.
      * The shape is lifted out of the cache and drawn live without its words while the field shows them.
