@@ -1001,4 +1001,10 @@
     <string name="my_pens">Minhas canetas</string>
     <string name="save_pen">Salvar como minha caneta…</string>
     <string name="pen_name_hint">Minha caneta azul</string>
+    <string name="kit_pens">Canetas</string>
+    <string name="kit_pencils">Lápis</string>
+    <string name="kit_markers">Canetões</string>
+    <string name="kit_highlighters">Marca-textos</string>
+    <string name="kit_chalks">Gizes</string>
+    <string name="kit_brushes">Pincéis e efeitos</string>
 </resources>

@@ -32,7 +32,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.xnotes.R
+import com.xnotes.core.tools.PenFamily
 import com.xnotes.core.tools.Tool
+import androidx.compose.ui.res.vectorResource
 import com.xnotes.ui.icons.XnotesIcons
 import com.xnotes.ui.theme.LocalPalette
 import com.xnotes.ui.theme.toComposeColor
@@ -55,6 +57,9 @@ private fun groupOf(tool: Tool): ToolGroup? = ToolGroup.entries.firstOrNull { to
 
 /** What the bar's gliding circle follows: the group button for a grouped tool, else the tool. */
 internal fun glideKeyFor(tool: Tool): Any = groupOf(tool) ?: tool
+
+/** The grouped bar's circle: on an ink tool it sits under that pen's kit drawer. */
+internal fun glideKeyFor(editor: Editor): Any = editor.activeFamily() ?: glideKeyFor(editor.tool)
 
 private fun configurable(tool: Tool) =
     tool.isStroke || tool == Tool.SHAPE || tool == Tool.ERASER || tool == Tool.SELECT || tool == Tool.TEXT || tool == Tool.MARKUP
@@ -91,8 +96,7 @@ internal fun GroupedBarContent(
 ) {
     ToolbarIcon(XnotesIcons.prev, stringResource(R.string.toolbar_home)) { onOpenBackstage() }
     Separator()
-    ToolGroupButton(editor, ToolGroup.PENS, toolIcons, configForTool, setConfigForTool)
-    ToolButton(editor, Tool.HIGHLIGHTER, toolIcons[Tool.HIGHLIGHTER], configForTool, setConfigForTool)
+    PenFamily.entries.forEach { FamilyButton(editor, it, toolIcons, configForTool, setConfigForTool) }
     ToolButton(editor, Tool.ERASER, toolIcons[Tool.ERASER], configForTool, setConfigForTool)
     ToolGroupButton(editor, ToolGroup.SELECTION, toolIcons, configForTool, setConfigForTool)
     Separator()
@@ -115,6 +119,121 @@ internal fun GroupedBarContent(
     ToolbarIcon(XnotesIcons.undo, stringResource(R.string.undo), enabled = editor.canUndo, shortcut = Keys.UNDO) { editor.undo() }
     ToolbarIcon(XnotesIcons.redo, stringResource(R.string.redo), enabled = editor.canRedo, shortcut = Keys.REDO) { editor.redo() }
     MoreMenu(editor, onRename, onToggleFullscreen)
+}
+
+/** The kit drawer's toolbar picture and name. */
+@Composable
+private fun familyIcon(f: PenFamily): ImageVector = ImageVector.vectorResource(
+    when (f) {
+        PenFamily.PEN -> R.drawable.ic_kit_pen
+        PenFamily.PENCIL -> R.drawable.ic_kit_pencil
+        PenFamily.MARKER -> R.drawable.ic_kit_marker
+        PenFamily.HIGHLIGHTER -> R.drawable.ic_kit_highlighter
+        PenFamily.CHALK -> R.drawable.ic_kit_chalk
+        PenFamily.BRUSH -> R.drawable.ic_kit_brush
+    },
+)
+
+private fun familyLabel(f: PenFamily): Int = when (f) {
+    PenFamily.PEN -> R.string.kit_pens
+    PenFamily.PENCIL -> R.string.kit_pencils
+    PenFamily.MARKER -> R.string.kit_markers
+    PenFamily.HIGHLIGHTER -> R.string.kit_highlighters
+    PenFamily.CHALK -> R.string.kit_chalks
+    PenFamily.BRUSH -> R.string.kit_brushes
+}
+
+/** The pen each drawer re-arms on a single tap: the last one picked from it this session. */
+private val lastPenInFamily = mutableStateMapOf<PenFamily, String>()
+
+/**
+ * One drawer of the material kit. A tap arms the drawer's last pen; tapping the armed drawer
+ * opens its pens, the user's own in that drawer, and the pen's settings.
+ */
+@Composable
+private fun FamilyButton(
+    editor: Editor,
+    family: PenFamily,
+    toolIcons: Map<Tool, ImageVector>,
+    configForTool: Tool?,
+    setConfigForTool: (Tool?) -> Unit,
+) {
+    editor.pensVersion
+    val armedHere = editor.activeFamily() == family
+    val pens = editor.pens.filter { it.family == family }
+    val current = pens.firstOrNull { it.id == lastPenInFamily[family] } ?: pens.firstOrNull() ?: return
+    val active = editor.activePen()
+    LaunchedEffect(active?.id) { active?.takeIf { it.family == family }?.let { lastPenInFamily[family] = it.id } }
+    var menuOpen by remember { mutableStateOf(false) }
+    var savingPen by remember { mutableStateOf(false) }
+    val palette = LocalPalette.current
+    Box {
+        ToolbarIcon(
+            familyIcon(family),
+            stringResource(familyLabel(family)),
+            active = armedHere,
+            glideKey = family,
+            hint = if (armedHere) stringResource(R.string.tip_tap_for_group) else null,
+            grouped = true,
+        ) {
+            if (!armedHere) {
+                editor.applyPen(current)
+                setConfigForTool(null)
+            } else {
+                menuOpen = true
+            }
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            Text(
+                stringResource(familyLabel(family)),
+                color = palette.textDim.toComposeColor(),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+            )
+            var shownMine = false
+            pens.forEach { pen ->
+                if (!pen.builtIn && !shownMine) {
+                    shownMine = true
+                    MenuDivider()
+                    Text(stringResource(R.string.my_pens), color = palette.textDim.toComposeColor(), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp))
+                }
+                val on = pen.id == active?.id
+                val ink = pen.config.colorOverride?.toComposeColor() ?: palette.textDim.toComposeColor()
+                DropdownMenuItem(
+                    text = { Text(pen.name, color = (if (on) palette.selectionForeground else palette.text).toComposeColor()) },
+                    leadingIcon = { Icon(familyIcon(family), contentDescription = null, tint = ink, modifier = Modifier.size(20.dp)) },
+                    trailingIcon = if (pen.builtIn) null else { {
+                        Icon(
+                            XnotesIcons.close,
+                            contentDescription = stringResource(R.string.delete),
+                            tint = palette.textDim.toComposeColor(),
+                            modifier = Modifier.size(18.dp).clickable { editor.removeUserPen(pen.id) },
+                        )
+                    } },
+                    modifier = if (on) Modifier.background(palette.selectionBackground.toComposeColor()) else Modifier,
+                    onClick = {
+                        menuOpen = false
+                        lastPenInFamily[family] = pen.id
+                        editor.applyPen(pen)
+                        setConfigForTool(null)
+                    },
+                )
+            }
+            if (armedHere) {
+                MenuDivider()
+                GroupMenuItem(stringResource(R.string.tool_settings), XnotesIcons.sliders) {
+                    menuOpen = false
+                    setConfigForTool(editor.tool)
+                }
+                GroupMenuItem(stringResource(R.string.save_pen), XnotesIcons.save) {
+                    menuOpen = false
+                    savingPen = true
+                }
+            }
+        }
+        if (armedHere && configForTool != null && configForTool == editor.tool) ToolConfigFor(editor, configForTool) { setConfigForTool(null) }
+        if (savingPen) SavePenDialog(onSave = { editor.saveCurrentPen(it); savingPen = false }, onDismiss = { savingPen = false })
+    }
 }
 
 /** Opens the settings popup for [tool], the same one its own button opens on the classic bar. */

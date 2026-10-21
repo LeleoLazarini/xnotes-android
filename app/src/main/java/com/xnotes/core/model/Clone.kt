@@ -20,6 +20,7 @@ fun CanvasItem.deepCopy(measurer: TextMeasurer): CanvasItem = when (this) {
             it.flip = flip
             it.label = label
             it.labelAt = labelAt
+            it.stickyNote = stickyNote
         }
     is ConnectorItem ->
         ConnectorItem(routing, start, end, strokeRgba, strokeWidth, headStart, headEnd, dashed, dashLength, dashGap, neon, neonStrength).also {

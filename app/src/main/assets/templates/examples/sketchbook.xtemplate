@@ -1,0 +1,26 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.sketchbook",
+  "name": "Sketchbook",
+  "description": "Caderno de desenho: folha livre com moldura fina e um pequeno carimbo no canto inferior para título, autor e data.",
+  "license": "MIT",
+  "tags": ["drawing"],
+  "params": {
+    "margem": { "type": "length", "default": "10mm", "min": "5mm", "max": "25mm", "label": "Margem" }
+  },
+  "items": [
+    { "type": "group", "inset": "margem", "children": [
+      { "type": "rect", "strokeWidth": "0.4mm" },
+      { "type": "group", "x": "100% - 80mm", "y": "100% - 18mm", "w": "80mm", "h": "18mm", "children": [
+        { "type": "rect", "strokeWidth": "0.3mm" },
+        { "type": "hline", "y": "50%" },
+        { "type": "vline", "x": "62%", "y1": "50%", "y2": "100%" },
+        { "type": "group", "size": "2.2mm", "fill": "accent", "baseline": "top", "children": [
+          { "type": "text", "text": "Título", "x": "1.5mm", "y": "1.2mm" },
+          { "type": "text", "text": "Autor", "x": "1.5mm", "y": "50% + 1.2mm" },
+          { "type": "text", "text": "Data", "x": "62% + 1.5mm", "y": "50% + 1.2mm" }
+        ]}
+      ]}
+    ]}
+  ]
+}

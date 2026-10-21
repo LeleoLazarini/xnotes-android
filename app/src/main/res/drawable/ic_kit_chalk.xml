@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- XNotes kit drawer: stick of chalk. Drawn upright with the tip down, then turned 45 degrees. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <group android:rotation="45" android:pivotX="50" android:pivotY="50">
+        <path android:fillColor="#FF000000" android:fillType="evenOdd" android:pathData="M40,10 Q40,4 46,4 L54,4 Q60,4 60,10 L60,80 Q60,92 50,94 Q40,92 40,80 Z M40,30 L60,30 L60,32 L40,32 Z M40,56 L60,56 L60,58 L40,58 Z" />
+    </group>
+    <path android:fillColor="#FF000000" android:fillAlpha="0.55" android:pathData="M12,86 m-3,0 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0 M22,94 m-2.4,0 a2.4,2.4 0 1,0 4.8,0 a2.4,2.4 0 1,0 -4.8,0 M8,74 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+</vector>

@@ -1,0 +1,67 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.meeting-minutes",
+  "name": "Meeting minutes",
+  "description": "Ata de reunião: cabeçalho com reunião, data, local, horário e participantes; seções de pauta, anotações e decisões; tabela de próximos passos com ação, responsável e prazo.",
+  "license": "MIT",
+  "tags": ["planner", "work"],
+  "params": {
+    "linha": { "type": "length", "default": "7mm", "min": "5mm", "max": "10mm", "label": "Espaço entre linhas", "role": "spacing" }
+  },
+  "items": [
+    { "type": "group", "inset": "12mm", "children": [
+      { "type": "text", "text": "Ata de reunião", "x": 0, "y": "7mm", "size": "5.5mm", "weight": "bold", "fill": "accent" },
+      { "type": "group", "size": "3mm", "children": [
+        { "type": "text", "text": "Reunião", "x": 0, "y": "19mm", "fill": "accent" },
+        { "type": "hline", "y": "19.5mm", "x1": "28mm", "x2": "62%" },
+        { "type": "text", "text": "Data", "x": "65%", "y": "19mm", "fill": "accent" },
+        { "type": "hline", "y": "19.5mm", "x1": "65% + 16mm", "x2": "100%" },
+        { "type": "text", "text": "Local", "x": 0, "y": "27mm", "fill": "accent" },
+        { "type": "hline", "y": "27.5mm", "x1": "28mm", "x2": "62%" },
+        { "type": "text", "text": "Horário", "x": "65%", "y": "27mm", "fill": "accent" },
+        { "type": "hline", "y": "27.5mm", "x1": "65% + 16mm", "x2": "100%" },
+        { "type": "text", "text": "Participantes", "x": 0, "y": "35mm", "fill": "accent" },
+        { "type": "hline", "y": "35.5mm", "x1": "28mm", "x2": "100%" },
+        { "type": "hline", "y": "43.5mm", "x1": "28mm", "x2": "100%" }
+      ]},
+      { "type": "hline", "y": "49mm", "strokeWidth": "0.35mm" },
+      { "type": "group", "y": "53mm", "h": "100% - 53mm", "children": [
+        { "type": "group", "y": 0, "h": "18%", "children": [
+          { "type": "text", "text": "Pauta", "x": 0, "y": "4.5mm", "size": "3.5mm", "weight": "bold", "fill": "accent" },
+          { "type": "group", "y": "7mm", "h": "100% - 7mm", "children": [
+            { "type": "repeat", "axis": "y", "period": "linha", "children": [ { "type": "hline", "y": "100%" } ] }
+          ]}
+        ]},
+        { "type": "group", "y": "18%", "h": "32%", "children": [
+          { "type": "text", "text": "Anotações", "x": 0, "y": "4.5mm", "size": "3.5mm", "weight": "bold", "fill": "accent" },
+          { "type": "group", "y": "7mm", "h": "100% - 7mm", "children": [
+            { "type": "repeat", "axis": "y", "period": "linha", "children": [ { "type": "hline", "y": "100%" } ] }
+          ]}
+        ]},
+        { "type": "group", "y": "50%", "h": "18%", "children": [
+          { "type": "text", "text": "Decisões", "x": 0, "y": "4.5mm", "size": "3.5mm", "weight": "bold", "fill": "accent" },
+          { "type": "group", "y": "7mm", "h": "100% - 7mm", "children": [
+            { "type": "repeat", "axis": "y", "period": "linha", "children": [ { "type": "hline", "y": "100%" } ] }
+          ]}
+        ]},
+        { "type": "group", "y": "68%", "h": "32%", "children": [
+          { "type": "text", "text": "Próximos passos", "x": 0, "y": "4.5mm", "size": "3.5mm", "weight": "bold", "fill": "accent" },
+          { "type": "group", "y": "7mm", "h": "100% - 7mm", "children": [
+            { "type": "rect", "strokeWidth": "0.3mm" },
+            { "type": "group", "size": "3mm", "weight": "bold", "fill": "accent", "children": [
+              { "type": "text", "text": "Ação", "x": "2mm", "y": "5mm" },
+              { "type": "text", "text": "Responsável", "x": "58% + 2mm", "y": "5mm" },
+              { "type": "text", "text": "Prazo", "x": "82% + 2mm", "y": "5mm" }
+            ]},
+            { "type": "hline", "y": "7mm", "strokeWidth": "0.3mm" },
+            { "type": "vline", "x": "58%" },
+            { "type": "vline", "x": "82%" },
+            { "type": "group", "y": "7mm", "h": "100% - 7mm", "children": [
+              { "type": "repeat", "axis": "y", "period": "linha", "fit": "round", "children": [ { "type": "hline", "y": "100%" } ] }
+            ]}
+          ]}
+        ]}
+      ]}
+    ]}
+  ]
+}

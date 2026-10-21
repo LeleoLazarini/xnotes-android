@@ -1,0 +1,21 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.squared-5mm",
+  "name": "5 mm squared",
+  "description": "Quadriculado de 5 mm dentro de uma margem, só quadrados inteiros, centrado na folha, com espaço livre no topo.",
+  "license": "MIT",
+  "tags": ["grid", "math", "school"],
+  "params": {
+    "spacing": { "type": "length", "default": "5mm", "min": "3mm", "max": "10mm", "label": "Tamanho do quadrado", "role": "spacing" },
+    "margem": { "type": "length", "default": "10mm", "min": "5mm", "max": "25mm", "label": "Margem" },
+    "topo": { "type": "length", "default": "12mm", "min": "0mm", "max": "40mm", "label": "Espaço no topo" }
+  },
+  "strokeWidth": "0.18mm",
+  "items": [
+    { "type": "group", "inset": ["margem + topo", "margem", "margem", "margem"], "children": [
+      { "type": "repeat", "axis": "xy", "period": "spacing", "fit": "center", "children": [
+        { "type": "rect" }
+      ]}
+    ]}
+  ]
+}

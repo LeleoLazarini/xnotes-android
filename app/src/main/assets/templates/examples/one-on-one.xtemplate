@@ -1,0 +1,57 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.one-on-one",
+  "name": "One-on-one",
+  "description": "Roteiro de one-a-one: pessoa e data no topo; como a pessoa está, pontos dela, pontos do gestor e combinados com caixa de marcar e prazo.",
+  "license": "MIT",
+  "tags": ["planner", "work"],
+  "params": {
+    "linha": { "type": "length", "default": "7mm", "min": "5mm", "max": "10mm", "label": "Espaço entre linhas", "role": "spacing" }
+  },
+  "items": [
+    { "type": "group", "inset": "12mm", "children": [
+      { "type": "text", "text": "One-a-one", "x": 0, "y": "7mm", "size": "5.5mm", "weight": "bold", "fill": "accent" },
+      { "type": "group", "size": "3mm", "children": [
+        { "type": "text", "text": "Pessoa", "x": 0, "y": "19mm", "fill": "accent" },
+        { "type": "hline", "y": "19.5mm", "x1": "20mm", "x2": "62%" },
+        { "type": "text", "text": "Data", "x": "65%", "y": "19mm", "fill": "accent" },
+        { "type": "hline", "y": "19.5mm", "x1": "65% + 12mm", "x2": "100%" }
+      ]},
+      { "type": "hline", "y": "25mm", "strokeWidth": "0.35mm" },
+      { "type": "group", "y": "29mm", "h": "100% - 29mm", "children": [
+        { "type": "group", "y": 0, "h": "19%", "children": [
+          { "type": "text", "text": "Como está", "x": 0, "y": "4.5mm", "size": "3.5mm", "weight": "bold", "fill": "accent" },
+          { "type": "text", "text": "humor, energia, carga de trabalho", "x": "100%", "y": "4.5mm", "size": "2.6mm", "italic": true, "align": "end" },
+          { "type": "group", "y": "7mm", "h": "100% - 7mm", "children": [
+            { "type": "repeat", "axis": "y", "period": "linha", "children": [ { "type": "hline", "y": "100%" } ] }
+          ]}
+        ]},
+        { "type": "group", "y": "19%", "h": "25%", "children": [
+          { "type": "text", "text": "Pontos da pessoa", "x": 0, "y": "4.5mm", "size": "3.5mm", "weight": "bold", "fill": "accent" },
+          { "type": "text", "text": "o que ela trouxe para conversar", "x": "100%", "y": "4.5mm", "size": "2.6mm", "italic": true, "align": "end" },
+          { "type": "group", "y": "7mm", "h": "100% - 7mm", "children": [
+            { "type": "repeat", "axis": "y", "period": "linha", "children": [ { "type": "hline", "y": "100%" } ] }
+          ]}
+        ]},
+        { "type": "group", "y": "44%", "h": "25%", "children": [
+          { "type": "text", "text": "Pontos do gestor", "x": 0, "y": "4.5mm", "size": "3.5mm", "weight": "bold", "fill": "accent" },
+          { "type": "text", "text": "feedback, alinhamentos, contexto", "x": "100%", "y": "4.5mm", "size": "2.6mm", "italic": true, "align": "end" },
+          { "type": "group", "y": "7mm", "h": "100% - 7mm", "children": [
+            { "type": "repeat", "axis": "y", "period": "linha", "children": [ { "type": "hline", "y": "100%" } ] }
+          ]}
+        ]},
+        { "type": "group", "y": "69%", "h": "31%", "children": [
+          { "type": "text", "text": "Combinados", "x": 0, "y": "4.5mm", "size": "3.5mm", "weight": "bold", "fill": "accent" },
+          { "type": "text", "text": "Prazo", "x": "82% + 2mm", "y": "4.5mm", "size": "3mm", "weight": "bold", "fill": "accent" },
+          { "type": "group", "y": "7mm", "h": "100% - 7mm", "children": [
+            { "type": "vline", "x": "82%", "opacity": 0.6 },
+            { "type": "repeat", "axis": "y", "period": "linha", "fit": "round", "children": [
+              { "type": "rect", "y": "100% - 5mm", "w": "4mm", "h": "4mm", "rx": "0.6mm" },
+              { "type": "hline", "y": "100%", "x1": "6mm" }
+            ]}
+          ]}
+        ]}
+      ]}
+    ]}
+  ]
+}

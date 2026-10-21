@@ -1,0 +1,26 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.university-ruled",
+  "name": "University ruled",
+  "description": "Pauta larga de caderno universitário: linhas a cada 8 mm, margem vermelha à esquerda e cabeçalho com Assunto e Data.",
+  "license": "MIT",
+  "tags": ["lines", "writing", "school"],
+  "params": {
+    "spacing": { "type": "length", "default": "8mm", "min": "6mm", "max": "10mm", "label": "Espaço entre linhas", "role": "spacing" },
+    "header": { "type": "length", "default": "30mm", "min": "15mm", "max": "60mm", "label": "Altura do cabeçalho" },
+    "margin": { "type": "length", "default": "25mm", "min": "10mm", "max": "50mm", "label": "Largura da margem" }
+  },
+  "items": [
+    { "type": "group", "y": "header", "h": "100% - header - 10mm", "children": [
+      { "type": "repeat", "axis": "y", "period": "spacing", "children": [ { "type": "hline", "y": "100%" } ] }
+    ]},
+    { "type": "hline", "y": "header", "stroke": "accent", "strokeWidth": "0.35mm" },
+    { "type": "vline", "x": "margin", "stroke": "accent", "strokeWidth": "0.3mm" },
+    { "type": "group", "size": "3mm", "children": [
+      { "type": "text", "text": "Assunto", "x": "margin + 3mm", "y": "header - 7mm", "fill": "accent" },
+      { "type": "hline", "y": "header - 7mm", "x1": "margin + 18mm", "x2": "100% - 70mm" },
+      { "type": "text", "text": "Data", "x": "100% - 64mm", "y": "header - 7mm", "fill": "accent" },
+      { "type": "hline", "y": "header - 7mm", "x1": "100% - 54mm", "x2": "100% - 12mm" }
+    ]}
+  ]
+}

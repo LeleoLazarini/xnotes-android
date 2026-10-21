@@ -1,0 +1,41 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.monthly-calendar",
+  "name": "Monthly calendar",
+  "description": "Calendário de um mês: mês e ano no topo, sete colunas de domingo a sábado com o fim de semana sombreado, seis semanas com cantinho para o dia e espaço para notas.",
+  "license": "MIT",
+  "tags": ["planner", "calendar"],
+  "params": {
+    "notas": { "type": "length", "default": "40mm", "min": "20mm", "max": "90mm", "label": "Altura das notas" }
+  },
+  "items": [
+    { "type": "group", "inset": "12mm", "children": [
+      { "type": "group", "size": "4mm", "weight": "bold", "fill": "accent", "children": [
+        { "type": "text", "text": "Mês", "x": 0, "y": "7mm" },
+        { "type": "text", "text": "Ano", "x": "66%", "y": "7mm" }
+      ]},
+      { "type": "hline", "y": "7.5mm", "x1": "12mm", "x2": "62%" },
+      { "type": "hline", "y": "7.5mm", "x1": "66% + 11mm", "x2": "100%" },
+      { "type": "group", "y": "13mm", "h": "100% - 19mm - notas", "children": [
+        { "type": "repeat", "axis": "x", "count": 7, "children": [
+          { "type": "rect", "y": "8mm", "h": "100% - 8mm", "fill": "ink", "stroke": "none",
+            "opacity": "0.2 * (1 - min(1, mod(i, 6)))" },
+          { "type": "text", "text": ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"], "x": "50%", "y": "5.5mm",
+            "align": "middle", "size": "3.2mm", "weight": "bold", "fill": "accent" }
+        ]},
+        { "type": "group", "y": "8mm", "h": "100% - 8mm", "children": [
+          { "type": "repeat", "axis": "xy", "count": [7, 6], "children": [
+            { "type": "rect", "strokeWidth": "0.3mm" },
+            { "type": "rect", "w": "7mm", "h": "6mm", "strokeWidth": "0.15mm", "opacity": 0.6 }
+          ]}
+        ]}
+      ]},
+      { "type": "group", "y": "100% - notas", "h": "notas", "children": [
+        { "type": "text", "text": "Notas", "x": 0, "y": "4.5mm", "size": "3.5mm", "weight": "bold", "fill": "accent" },
+        { "type": "group", "y": "7mm", "h": "100% - 7mm", "children": [
+          { "type": "repeat", "axis": "y", "period": "7mm", "children": [ { "type": "hline", "y": "100%" } ] }
+        ]}
+      ]}
+    ]}
+  ]
+}

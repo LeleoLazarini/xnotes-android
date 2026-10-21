@@ -1,0 +1,26 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.mind-map",
+  "name": "Mind map",
+  "description": "Mapa mental: um círculo central para o tema, raios tracejados e leves para os ramos e um anel guia para os subtemas.",
+  "license": "MIT",
+  "tags": ["drawing", "study"],
+  "params": {
+    "centro": { "type": "length", "default": "22mm", "min": "10mm", "max": "50mm", "label": "Raio do centro" },
+    "ramos": { "type": "integer", "default": 8, "min": 3, "max": 16, "label": "Ramos" }
+  },
+  "items": [
+    { "type": "group", "inset": "10mm", "clip": true, "children": [
+      { "type": "repeat", "axis": "none", "count": "ramos", "children": [
+        { "type": "line", "dash": ["1.5mm", "2mm"], "opacity": 0.5,
+          "x1": "50% + centro * cos(i * 360 / ramos + 180 / ramos)",
+          "y1": "50% - centro * sin(i * 360 / ramos + 180 / ramos)",
+          "x2": "50% + (W + H) * cos(i * 360 / ramos + 180 / ramos)",
+          "y2": "50% - (W + H) * sin(i * 360 / ramos + 180 / ramos)" }
+      ]},
+      { "type": "circle", "cx": "50%", "cy": "50%", "r": "min(centro * 2.6, min(W, H) / 2 - 4mm)",
+        "dash": ["1mm", "2mm"], "opacity": 0.4 },
+      { "type": "circle", "cx": "50%", "cy": "50%", "r": "centro", "stroke": "accent", "strokeWidth": "0.45mm" }
+    ]}
+  ]
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- XNotes kit drawer: paintbrush. Drawn upright with the tip down, then turned 45 degrees. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <group android:rotation="45" android:pivotX="50" android:pivotY="50">
+        <path android:fillColor="#FF000000" android:pathData="M45,2 L55,2 L54,54 L46,54 Z" />
+        <path android:fillColor="#FF000000" android:fillType="evenOdd" android:pathData="M43,56 L57,56 L57,70 L43,70 Z M43,62 L57,62 L57,64 L43,64 Z" />
+        <path android:fillColor="#FF000000" android:pathData="M43,72 L57,72 C58,82 54,90 50,98 C46,90 42,82 43,72 Z" />
+    </group>
+</vector>

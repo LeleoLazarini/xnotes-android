@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- XNotes kit drawer: wooden pencil. Drawn upright with the tip down, then turned 45 degrees. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <group android:rotation="45" android:pivotX="50" android:pivotY="50">
+        <path android:fillColor="#FF000000" android:pathData="M41,8 Q41,2 50,2 Q59,2 59,8 L59,12 L41,12 Z" />
+        <path android:fillColor="#FF000000" android:fillType="evenOdd" android:pathData="M40,14 L60,14 L60,22 L40,22 Z M40,17 L60,17 L60,18.5 L40,18.5 Z" />
+        <path android:fillColor="#FF000000" android:fillType="evenOdd" android:pathData="M40,24 L60,24 L60,70 L40,70 Z M46,24 L47.5,24 L47.5,70 L46,70 Z M52.5,24 L54,24 L54,70 L52.5,70 Z" />
+        <path android:fillColor="#FF000000" android:fillType="evenOdd" android:pathData="M40,72 L60,72 L50,96 Z M45.4,83 L54.6,83 L54,84.6 L46,84.6 Z" />
+    </group>
+</vector>

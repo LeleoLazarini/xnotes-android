@@ -91,7 +91,7 @@ data class ToolConfig(
     /** Eraser: also take off the PDF text markups it touches. Only used by [Tool.ERASER]. */
     val eraseMarkups: Boolean = true,
     /** Eraser: a pen scribbled over ink erases what it touches. Only used by [Tool.ERASER]. */
-    val scribbleErase: Boolean = true,
+    val scribbleErase: Boolean = false,
     /** What the textured pen lays down. Only used by [Tool.BRUSH]. */
     val brush: Brush = Brush.PENCIL,
 ) {

@@ -1,0 +1,35 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.kanban",
+  "name": "Kanban board",
+  "description": "Quadro kanban em três colunas, A fazer, Fazendo e Feito, com espaços tracejados para os cartões.",
+  "license": "MIT",
+  "tags": ["planner", "work"],
+  "params": {
+    "cartao": { "type": "length", "default": "30mm", "min": "15mm", "max": "60mm", "label": "Altura do cartão", "role": "spacing" }
+  },
+  "items": [
+    { "type": "group", "inset": "10mm", "children": [
+      { "type": "text", "text": "Kanban", "x": "1.5mm", "y": "7mm", "size": "5.5mm", "weight": "bold", "fill": "accent" },
+      { "type": "group", "size": "3mm", "children": [
+        { "type": "text", "text": "Projeto", "x": "1.5mm", "y": "17mm", "fill": "accent" },
+        { "type": "hline", "y": "17.5mm", "x1": "18mm", "x2": "62%" },
+        { "type": "text", "text": "Período", "x": "65%", "y": "17mm", "fill": "accent" },
+        { "type": "hline", "y": "17.5mm", "x1": "65% + 15mm", "x2": "100% - 1.5mm" }
+      ]},
+      { "type": "group", "y": "24mm", "h": "100% - 24mm", "children": [
+        { "type": "repeat", "axis": "x", "count": 3, "children": [
+          { "type": "rect", "x": "1.5mm", "w": "100% - 3mm", "rx": "2mm", "strokeWidth": "0.35mm" },
+          { "type": "text", "text": ["A fazer", "Fazendo", "Feito"], "x": "50%", "y": "7.5mm", "align": "middle",
+            "size": "4mm", "weight": "bold", "fill": "accent" },
+          { "type": "hline", "y": "11mm", "x1": "1.5mm", "x2": "100% - 1.5mm", "strokeWidth": "0.3mm" },
+          { "type": "group", "x": "4mm", "y": "14mm", "w": "100% - 8mm", "h": "100% - 16mm", "children": [
+            { "type": "repeat", "axis": "y", "period": "cartao", "fit": "space", "children": [
+              { "type": "rect", "h": "100% - 3mm", "rx": "1.5mm", "dash": ["1.2mm", "1.2mm"], "opacity": 0.6, "strokeWidth": "0.2mm" }
+            ]}
+          ]}
+        ]}
+      ]}
+    ]}
+  ]
+}

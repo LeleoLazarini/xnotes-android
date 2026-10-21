@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- XNotes kit drawer: ballpoint pen. Drawn upright with the tip down, then turned 45 degrees. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="100"
+    android:viewportHeight="100">
+    <group android:rotation="45" android:pivotX="50" android:pivotY="50">
+        <path android:fillColor="#FF000000" android:fillType="evenOdd" android:pathData="M43,6 Q43,2 50,2 Q57,2 57,6 L57,64 L43,64 Z M45,58 L55,58 L55,60 L45,60 Z" />
+        <path android:fillColor="#FF000000" android:pathData="M57,9 L61,9 L61,38 Q61,41 59,41 L57,41 Z" />
+        <path android:fillColor="#FF000000" android:pathData="M44,66 L56,66 L56,76 L44,76 Z" />
+        <path android:fillColor="#FF000000" android:pathData="M44,78 L56,78 L51.5,92 L48.5,92 Z" />
+        <path android:fillColor="#FF000000" android:pathData="M49,93 L51,93 L50,98 Z" />
+    </group>
+</vector>

@@ -127,7 +127,7 @@ data class Settings(
             .put("prefs", prefs.toJson())
             .put("view_defaults", com.xnotes.platform.ViewSettingsJson.write(JSONObject(), viewDefaults))
             .put("finger_draw_auto_checked", fingerDrawAutoChecked)
-            .put("user_pens", JSONArray().apply { userPens.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("tool", it.tool.id).put("config", toolConfigJson(it.config))) } })
+            .put("user_pens", JSONArray().apply { userPens.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("tool", it.tool.id).put("family", it.family.id).put("config", toolConfigJson(it.config))) } })
     }
 
     companion object {
@@ -193,7 +193,10 @@ data class Settings(
                 val o = a.optJSONObject(i) ?: return@mapNotNull null
                 val tool = Tool.fromId(o.optString("tool"))?.takeIf { it.isStroke } ?: return@mapNotNull null
                 val config = o.optJSONObject("config")?.let { toolConfig(it, tool) } ?: return@mapNotNull null
-                com.xnotes.core.tools.PenPreset(o.optString("id", "u$i"), o.optString("name", ""), tool, config)
+                com.xnotes.core.tools.PenPreset(
+                    o.optString("id", "u$i"), o.optString("name", ""), tool, config,
+                    family = com.xnotes.core.tools.PenFamily.fromId(o.optString("family")) ?: com.xnotes.core.tools.PenFamily.of(tool, config),
+                )
             }
         }
 
@@ -356,7 +359,8 @@ data class Settings(
             .put("erase_mode", c.eraseMode.id)
             .put("switch_back_after_erase", c.switchBackAfterErase)
             .put("erase_markups", c.eraseMarkups)
-            .put("scribble_erase", c.scribbleErase)
+            // v2: off by default now, so going over ink again never erases it unless asked; the old key is ignored.
+            .put("scribble_erase_v2", c.scribbleErase)
             .put("switch_back_after_select", c.switchBackAfterSelect)
             .put("straight_line", c.straightLine)
             .put("scale", c.scale)
@@ -386,7 +390,7 @@ data class Settings(
                 eraseMode = EraseMode.fromId(o.optString("erase_mode", d.eraseMode.id)),
                 switchBackAfterErase = o.optBoolean("switch_back_after_erase", d.switchBackAfterErase),
                 eraseMarkups = o.optBoolean("erase_markups", d.eraseMarkups),
-                scribbleErase = o.optBoolean("scribble_erase", d.scribbleErase),
+                scribbleErase = o.optBoolean("scribble_erase_v2", d.scribbleErase),
                 switchBackAfterSelect = o.optBoolean("switch_back_after_select", d.switchBackAfterSelect),
                 straightLine = o.optBoolean("straight_line", d.straightLine),
                 scale = o.optBoolean("scale", d.scale),

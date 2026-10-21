@@ -1,0 +1,57 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.5w2h",
+  "name": "5W2H action plan",
+  "description": "Plano de ação 5W2H: objetivo e responsável no topo e uma tabela com O quê, Por quê, Onde, Quando, Quem, Como e Quanto, uma ação por linha.",
+  "license": "MIT",
+  "tags": ["planner", "work"],
+  "params": {
+    "linha": { "type": "length", "default": "18mm", "min": "10mm", "max": "40mm", "label": "Altura da linha", "role": "spacing" }
+  },
+  "items": [
+    { "type": "group", "inset": "12mm", "children": [
+      { "type": "text", "text": "Plano de ação 5W2H", "x": 0, "y": "7mm", "size": "5.5mm", "weight": "bold", "fill": "accent" },
+      { "type": "group", "size": "3mm", "children": [
+        { "type": "text", "text": "Objetivo", "x": 0, "y": "18mm", "fill": "accent" },
+        { "type": "hline", "y": "18.5mm", "x1": "24mm", "x2": "100%" },
+        { "type": "text", "text": "Responsável", "x": 0, "y": "26mm", "fill": "accent" },
+        { "type": "hline", "y": "26.5mm", "x1": "24mm", "x2": "62%" },
+        { "type": "text", "text": "Data", "x": "65%", "y": "26mm", "fill": "accent" },
+        { "type": "hline", "y": "26.5mm", "x1": "65% + 12mm", "x2": "100%" }
+      ]},
+      { "type": "group", "y": "33mm", "h": "100% - 33mm", "children": [
+        { "type": "rect", "strokeWidth": "0.35mm" },
+        { "type": "hline", "y": "13mm", "strokeWidth": "0.35mm" },
+        { "type": "group", "children": [
+          { "type": "vline", "x": "17%" },
+          { "type": "vline", "x": "32%" },
+          { "type": "vline", "x": "44%" },
+          { "type": "vline", "x": "56%" },
+          { "type": "vline", "x": "67%" },
+          { "type": "vline", "x": "86%" }
+        ]},
+        { "type": "group", "size": "3mm", "weight": "bold", "fill": "accent", "children": [
+          { "type": "text", "text": "O quê", "x": "1.5mm", "y": "6mm" },
+          { "type": "text", "text": "Por quê", "x": "17% + 1.5mm", "y": "6mm" },
+          { "type": "text", "text": "Onde", "x": "32% + 1.5mm", "y": "6mm" },
+          { "type": "text", "text": "Quando", "x": "44% + 1.5mm", "y": "6mm" },
+          { "type": "text", "text": "Quem", "x": "56% + 1.5mm", "y": "6mm" },
+          { "type": "text", "text": "Como", "x": "67% + 1.5mm", "y": "6mm" },
+          { "type": "text", "text": "Quanto", "x": "86% + 1.5mm", "y": "6mm" }
+        ]},
+        { "type": "group", "size": "2.2mm", "italic": true, "children": [
+          { "type": "text", "text": "What", "x": "1.5mm", "y": "10.5mm" },
+          { "type": "text", "text": "Why", "x": "17% + 1.5mm", "y": "10.5mm" },
+          { "type": "text", "text": "Where", "x": "32% + 1.5mm", "y": "10.5mm" },
+          { "type": "text", "text": "When", "x": "44% + 1.5mm", "y": "10.5mm" },
+          { "type": "text", "text": "Who", "x": "56% + 1.5mm", "y": "10.5mm" },
+          { "type": "text", "text": "How", "x": "67% + 1.5mm", "y": "10.5mm" },
+          { "type": "text", "text": "How much", "x": "86% + 1.5mm", "y": "10.5mm" }
+        ]},
+        { "type": "group", "y": "13mm", "h": "100% - 13mm", "children": [
+          { "type": "repeat", "axis": "y", "period": "linha", "fit": "round", "children": [ { "type": "hline", "y": "100%" } ] }
+        ]}
+      ]}
+    ]}
+  ]
+}

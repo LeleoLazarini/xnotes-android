@@ -1,0 +1,20 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.narrow-ruled",
+  "name": "Narrow ruled",
+  "description": "Pauta estreita: linhas a cada 6 mm para letra pequena, com linha de cabeçalho e margem à esquerda.",
+  "license": "MIT",
+  "tags": ["lines", "writing"],
+  "params": {
+    "spacing": { "type": "length", "default": "6mm", "min": "4.5mm", "max": "8mm", "label": "Espaço entre linhas", "role": "spacing" },
+    "header": { "type": "length", "default": "18mm", "min": "8mm", "max": "50mm", "label": "Altura do cabeçalho" },
+    "margin": { "type": "length", "default": "18mm", "min": "0mm", "max": "40mm", "label": "Largura da margem" }
+  },
+  "items": [
+    { "type": "group", "y": "header", "h": "100% - header - 8mm", "children": [
+      { "type": "repeat", "axis": "y", "period": "spacing", "children": [ { "type": "hline", "y": "100%" } ] }
+    ]},
+    { "type": "hline", "y": "header", "stroke": "accent", "strokeWidth": "0.3mm" },
+    { "type": "vline", "x": "margin", "stroke": "accent", "strokeWidth": "0.25mm" }
+  ]
+}

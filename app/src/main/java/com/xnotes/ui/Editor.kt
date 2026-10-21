@@ -2097,14 +2097,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         val y = (local.y - side / 2).coerceIn(cover.top, cover.bottom - side)
         val ink = Rgba((fill.r * 0.45).toInt(), (fill.g * 0.45).toInt(), (fill.b * 0.45).toInt())
         val item = com.xnotes.core.model.ShapeItem(
-            com.xnotes.core.shapes.ShapeKind.ROUNDED_RECT,
+            com.xnotes.core.shapes.ShapeKind.RECTANGLE,
             Pt(x, y),
             Pt(x + side, y + side),
             strokeRgba = ink,
             strokeWidth = 1.5,
             fillRgba = fill,
-            adj = doubleArrayOf(0.04),
-        )
+        ).also { it.stickyNote = true }
         page.items.add(item); state.appendToCache(page, item); history.push(AddItem(page, item))
         state.document.dirty = true; refreshContent(); view.requestRender()
         controller.editLabelOf(item, pi)
@@ -5659,16 +5658,33 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     fun activePen(): com.xnotes.core.tools.PenPreset? =
         if (!tool.isStroke) null else controller.configFor(tool).let { c -> pens.firstOrNull { it.matches(tool, c) } }
 
+    /** The kit drawer last picked from, so a pen tweaked away from its preset still lights its drawer. */
+    private var lastFamily by mutableStateOf<com.xnotes.core.tools.PenFamily?>(null)
+
     /** Arm [pen]: its tool with its style, keeping the toolbar ink unless the pen has its own colour. */
     fun applyPen(pen: com.xnotes.core.tools.PenPreset) {
         updateToolConfig(pen.tool, pen.config)
         selectTool(pen.tool)
+        lastFamily = pen.family
+    }
+
+    /** The drawer the armed ink tool belongs to, or null when no ink tool is armed. */
+    fun activeFamily(): com.xnotes.core.tools.PenFamily? {
+        if (!tool.isStroke) return null
+        val c = controller.configFor(tool)
+        activePen()?.let { return it.family }
+        return lastFamily?.takeIf { f -> pens.any { it.family == f && it.tool == tool } }
+            ?: com.xnotes.core.tools.PenFamily.of(tool, c)
     }
 
     /** Keep the armed pen's current style under [name], listed after the built-in pens. */
     fun saveCurrentPen(name: String) {
         if (!tool.isStroke || name.isBlank()) return
-        val pen = com.xnotes.core.tools.PenPreset("u" + System.currentTimeMillis(), name.trim(), tool, controller.configFor(tool))
+        val config = controller.configFor(tool)
+        val pen = com.xnotes.core.tools.PenPreset(
+            "u" + System.currentTimeMillis(), name.trim(), tool, config,
+            family = activeFamily() ?: com.xnotes.core.tools.PenFamily.of(tool, config),
+        )
         settings = settings.copy(userPens = settings.userPens + pen)
         pensVersion++
         saveSettingsSoon()

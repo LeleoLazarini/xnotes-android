@@ -1,0 +1,28 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.millimetre",
+  "name": "Millimetre paper",
+  "description": "Papel milimetrado: malha de 1 mm com linhas mais fortes a cada 5 mm e a cada 1 cm, só blocos inteiros, centrada na folha.",
+  "license": "MIT",
+  "tags": ["grid", "math", "engineering"],
+  "params": {
+    "minor": { "type": "length", "default": "1mm", "min": "0.5mm", "max": "2mm", "label": "Quadrado menor", "role": "spacing" },
+    "cor": { "type": "color", "default": "#d9822b", "label": "Cor da malha" }
+  },
+  "stroke": "cor",
+  "items": [
+    { "type": "group", "inset": "10mm", "children": [
+      { "type": "repeat", "axis": "xy", "period": "minor * 10", "fit": "center", "children": [
+        { "type": "group", "opacity": 0.3, "strokeWidth": "0.08mm", "children": [
+          { "type": "repeat", "axis": "y", "count": 10, "children": [ { "type": "hline" } ] },
+          { "type": "repeat", "axis": "x", "count": 10, "children": [ { "type": "vline" } ] }
+        ]},
+        { "type": "group", "opacity": 0.6, "strokeWidth": "0.15mm", "children": [
+          { "type": "hline", "y": "50%" },
+          { "type": "vline", "x": "50%" }
+        ]},
+        { "type": "rect", "strokeWidth": "0.3mm" }
+      ]}
+    ]}
+  ]
+}

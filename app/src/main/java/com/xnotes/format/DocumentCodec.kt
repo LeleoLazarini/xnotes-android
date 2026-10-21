@@ -412,6 +412,8 @@ class DocumentCodec(
         j.name("shape").value(s.legacyId())
         j.name("start").beginArray().value(drawn?.left ?: s.start.x).value(drawn?.top ?: s.start.y).endArray()
         j.name("end").beginArray().value(drawn?.right ?: s.end.x).value(drawn?.bottom ?: s.end.y).endArray()
+        // Only sticky notes carry it, so every other shape is written as before.
+        if (s.stickyNote) j.name("sticky_note").value(true)
         j.name("stroke_rgba")
         writeRgba(j, s.strokeRgba)
         j.name("stroke_width").value(s.strokeWidth)
@@ -911,6 +913,7 @@ class DocumentCodec(
     /** Union of every kind's fields, so an item parses in one pass whatever its key order. */
     private class ItemScratch {
         var locked = false
+        var stickyNote = false
         var kind: String? = null
         var id: Int? = null
         var connector: ConnectorScratch? = null
@@ -1026,6 +1029,7 @@ class DocumentCodec(
                 "dash_length" -> s.dashLength = doubleOr(p, 10.0)
                 "dash_gap" -> s.dashGap = doubleOr(p, 8.0)
                 "locked" -> s.locked = boolOr(p, false)
+                "sticky_note" -> s.stickyNote = boolOr(p, false)
                 else -> p.skipValue()
             }
         }
@@ -1110,6 +1114,7 @@ class DocumentCodec(
         s.adj?.let { shape.adj = it }
         s.headStart?.let { shape.headStart = Head.fromId(it) }
         s.headEnd?.let { shape.headEnd = Head.fromId(it) }
+        shape.stickyNote = s.stickyNote
         s.label?.takeIf { it.text.isNotEmpty() }?.let { l ->
             shape.label = ShapeLabel(l.text, TextStyle(l.rgba ?: shape.strokeRgba, l.pointSize, FontFace.fromId(l.fontFace)), textMeasurer)
             l.at?.takeIf { it.isFinite() }?.let { shape.labelAt = it.coerceIn(0.0, 1.0) }

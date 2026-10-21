@@ -1003,4 +1003,10 @@
     <string name="my_pens">My pens</string>
     <string name="save_pen">Save as my pen…</string>
     <string name="pen_name_hint">My blue pen</string>
+    <string name="kit_pens">Pens</string>
+    <string name="kit_pencils">Pencils</string>
+    <string name="kit_markers">Markers</string>
+    <string name="kit_highlighters">Highlighters</string>
+    <string name="kit_chalks">Chalk and crayons</string>
+    <string name="kit_brushes">Brushes and effects</string>
 </resources>

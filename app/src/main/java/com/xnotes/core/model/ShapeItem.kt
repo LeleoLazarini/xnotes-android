@@ -5,6 +5,7 @@ import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Obb
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
+import com.xnotes.core.pal.FillRule
 import com.xnotes.core.pal.Mark
 import com.xnotes.core.pal.Pen
 import com.xnotes.core.pal.Renderer
@@ -31,6 +32,7 @@ import kotlin.math.ceil
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.round
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -90,6 +92,9 @@ class ShapeItem(
 
     /** Where along an open shape's line its label sits, as a share of the line's length. */
     var labelAt: Double = 0.5
+
+    /** Drawn as a paper sticky note (shadow, glue band, curled corner) instead of a plain fill and outline. */
+    var stickyNote: Boolean = false
 
     /** Normalized AABB of the two drag points: the shape's frame before [rotation] turns it. */
     val box: Rect get() = Rect.fromPoints(start, end)
@@ -196,10 +201,41 @@ class ShapeItem(
 
     /** Everything but the label: fills, then the outline, glowing when neon. */
     fun paintBody(r: Renderer) {
+        if (stickyNote) return paintStickyNote(r)
         val paths = paths()
         if (neon) return Outline.paintNeon(r, paths, fillRgba, pen(), neonStrength, paintBounds())
         ShapePainter.fill(r, paths, fillRgba, strokeRgba)
         ShapePainter.stroke(r, paths, pen())
+    }
+
+    /**
+     * A paper sticky note on the page: a soft shadow under it, a faintly darker band where the glue
+     * is, and the bottom-right corner curling up off the page, lighter on its back. Everything is
+     * laid out in the unturned box and taken through [toPage], so it turns with the note.
+     */
+    private fun paintStickyNote(r: Renderer) {
+        val b = box
+        val paper = (fillRgba ?: strokeRgba).withAlpha(255)
+        val s = min(b.w, b.h)
+        val curl = s * STICKY_CURL
+        fun at(x: Double, y: Double) = toPage(Pt(x, y))
+        val shadowShift = s * STICKY_SHADOW_SHIFT
+        val shadow = listOf(at(b.left + shadowShift, b.top + shadowShift * 2), at(b.right + shadowShift, b.top + shadowShift * 2), at(b.right + shadowShift, b.bottom + shadowShift * 2), at(b.left + shadowShift, b.bottom + shadowShift * 2))
+        r.fillPolygonGlow(packed(shadow), Rgba(0, 0, 0, STICKY_SHADOW_ALPHA), FillRule.NONZERO, s * STICKY_SHADOW_BLUR)
+        val sheet = listOf(at(b.left, b.top), at(b.right, b.top), at(b.right, b.bottom - curl), at(b.right - curl, b.bottom), at(b.left, b.bottom))
+        r.fillPolygon(sheet, paper)
+        // The glue band along the top edge.
+        val glue = b.top + b.h * STICKY_GLUE
+        r.fillPolygon(listOf(at(b.left, b.top), at(b.right, b.top), at(b.right, glue), at(b.left, glue)), Stroke.darken(paper, STICKY_GLUE_DARKEN))
+        // The curl: a shadow where the corner lifts, then its paler underside folded over.
+        r.fillPolygon(listOf(at(b.right - curl, b.bottom), at(b.right, b.bottom - curl), at(b.right - curl * 0.35, b.bottom - curl * 0.35)), Stroke.darken(paper, STICKY_CURL_SHADE))
+        r.fillPolygon(listOf(at(b.right - curl, b.bottom), at(b.right, b.bottom - curl), at(b.right - curl * 1.05, b.bottom - curl * 1.05)), Stroke.lighten(paper, STICKY_CURL_LIGHTEN))
+        // A barely-there edge so the note reads against paper of its own colour.
+        r.strokePolygon(sheet, Pen(color = Stroke.darken(paper, STICKY_EDGE_DARKEN).withAlpha(STICKY_EDGE_ALPHA), width = 0.8, cosmetic = false))
+    }
+
+    private fun packed(pts: List<Pt>): FloatArray = FloatArray(pts.size * 2).also { a ->
+        pts.forEachIndexed { i, p -> a[2 * i] = p.x.toFloat(); a[2 * i + 1] = p.y.toFloat() }
     }
 
     /** The label set in [labelRect] and turned with the shape, as text a PDF reader can select. */
@@ -738,6 +774,18 @@ class ShapeItem(
 
     companion object {
         const val KIND = "shape"
+
+        // Sticky note look, as shares of the note's shorter side (or height, for the glue band).
+        private const val STICKY_CURL = 0.13
+        private const val STICKY_SHADOW_SHIFT = 0.012
+        private const val STICKY_SHADOW_BLUR = 0.035
+        private const val STICKY_SHADOW_ALPHA = 70
+        private const val STICKY_GLUE = 0.17
+        private const val STICKY_GLUE_DARKEN = 0.025
+        private const val STICKY_CURL_SHADE = 0.30
+        private const val STICKY_CURL_LIGHTEN = 0.35
+        private const val STICKY_EDGE_DARKEN = 0.25
+        private const val STICKY_EDGE_ALPHA = 60
         const val HIT_TOLERANCE = 6.0
 
         /** A turn this close to a whole number of quarters counts as one, so upright stays upright. */

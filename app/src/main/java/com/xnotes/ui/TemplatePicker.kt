@@ -293,6 +293,10 @@ private val PT_TEMPLATE_NAMES = mapOf(
     "Polar grid" to "Polar", "Handwriting practice" to "Caligrafia infantil", "Ruled with margin" to "Pautado com margem",
     "Semi-log paper" to "Semilog", "Seyes" to "Seyès", "Storyboard" to "Storyboard", "Checklist" to "Lista de tarefas",
     "Weekly planner" to "Agenda semanal",
+    "Millimetre paper" to "Milimetrado", "University ruled" to "Pautado universitário", "Narrow ruled" to "Pauta estreita",
+    "5 mm squared" to "Quadriculado 5 mm", "Meeting minutes" to "Ata de reunião", "One-on-one" to "One-a-one",
+    "5W2H action plan" to "5W2H", "Kanban board" to "Kanban", "Mind map" to "Mapa mental",
+    "Monthly calendar" to "Calendário mensal", "Habit tracker" to "Controle de hábitos", "Sketchbook" to "Caderno de desenho",
 )
 
 internal fun localizedTemplateName(name: String): String =

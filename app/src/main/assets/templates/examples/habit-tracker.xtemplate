@@ -1,0 +1,38 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.habit-tracker",
+  "name": "Habit tracker",
+  "description": "Controle de hábitos do mês: uma coluna para o nome do hábito, 31 colunas de dias agrupadas de cinco em cinco e uma coluna de total.",
+  "license": "MIT",
+  "tags": ["planner"],
+  "params": {
+    "linha": { "type": "length", "default": "8mm", "min": "5mm", "max": "14mm", "label": "Altura da linha", "role": "spacing" },
+    "nome": { "type": "length", "default": "48mm", "min": "30mm", "max": "80mm", "label": "Coluna dos hábitos" }
+  },
+  "items": [
+    { "type": "group", "inset": ["12mm", "10mm"], "children": [
+      { "type": "text", "text": "Controle de hábitos", "x": 0, "y": "7mm", "size": "5.5mm", "weight": "bold", "fill": "accent" },
+      { "type": "text", "text": "Mês", "x": "62%", "y": "7mm", "size": "3.5mm", "weight": "bold", "fill": "accent" },
+      { "type": "hline", "y": "7.5mm", "x1": "62% + 10mm", "x2": "100%" },
+      { "type": "group", "y": "13mm", "h": "100% - 13mm", "children": [
+        { "type": "group", "x": "nome", "w": "100% - nome - 10mm", "children": [
+          { "type": "repeat", "axis": "x", "count": 31, "children": [
+            { "type": "vline", "x": 0, "opacity": "1 - 0.5 * min(1, mod(i, 5))" },
+            { "type": "text", "text": "{i + 1}", "x": "50%", "y": "5.5mm", "align": "middle", "size": "2.3mm", "fill": "accent" }
+          ]}
+        ]},
+        { "type": "group", "size": "3mm", "weight": "bold", "fill": "accent", "children": [
+          { "type": "text", "text": "Hábito", "x": "2mm", "y": "5.5mm" },
+          { "type": "text", "text": "Total", "x": "100% - 5mm", "y": "5.5mm", "align": "middle", "size": "2.4mm" }
+        ]},
+        { "type": "rect", "strokeWidth": "0.35mm" },
+        { "type": "hline", "y": "8mm", "strokeWidth": "0.35mm" },
+        { "type": "vline", "x": "nome", "strokeWidth": "0.35mm" },
+        { "type": "vline", "x": "100% - 10mm", "strokeWidth": "0.35mm" },
+        { "type": "group", "y": "8mm", "h": "100% - 8mm", "children": [
+          { "type": "repeat", "axis": "y", "period": "linha", "fit": "round", "children": [ { "type": "hline", "y": "100%" } ] }
+        ]}
+      ]}
+    ]}
+  ]
+}

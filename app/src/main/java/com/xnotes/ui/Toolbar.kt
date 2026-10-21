@@ -119,7 +119,7 @@ fun Toolbar(
     var switcherIndex by remember { mutableStateOf<Int?>(null) }
     var renaming by remember { mutableStateOf(false) }
     if (LocalToolbarLook.current.grouped) {
-        ToolbarFrame(armed = glideKeyFor(editor.tool), trailing = onClosePane?.let { { ClosePaneButton(it) } }) {
+        ToolbarFrame(armed = glideKeyFor(editor), trailing = onClosePane?.let { { ClosePaneButton(it) } }) {
             GroupedBarContent(
                 editor = editor,
                 toolIcons = toolIcons,
