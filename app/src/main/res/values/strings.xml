@@ -1009,4 +1009,10 @@
     <string name="kit_highlighters">Highlighters</string>
     <string name="kit_chalks">Chalk and crayons</string>
     <string name="kit_brushes">Brushes and effects</string>
+    <string name="new_agenda_menu">New agenda</string>
+    <string name="new_agenda">New agenda</string>
+    <string name="agenda_default_name">Agenda %1$d</string>
+    <string name="pref_page_turn">Page turn</string>
+    <string name="page_turn_on">Animated</string>
+    <string name="page_turn_off">Instant</string>
 </resources>

@@ -1539,7 +1539,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         controller.clipboardHasImage = { clipboardImageUri() != null }
         controller.onMarkupTap = { at, withLink -> tapMarkup(at, withLink) }
         controller.onTap = { at -> tapClosesNotePeek(at) }
+        controller.onBeforeFlip = { forward -> startPageTurn(forward) }
         controller.onLinkTap = onLinkTap@{ pageIndex, pageLocal ->
+            // A tap on a day of an agenda's month calendar opens that day's page.
+            Agenda.dayAt(state.document, pageIndex, pageLocal)?.let { day ->
+                goToPage(day)
+                return@onLinkTap true
+            }
             val src = pdfSource ?: return@onLinkTap false
             val page = state.document.pages.getOrNull(pageIndex) ?: return@onLinkTap false
             val pdfIdx = page.pdfPage ?: return@onLinkTap false
@@ -3837,6 +3843,18 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     /** Creates a blank `.xcanvas` under [parentDocId]; returns its URI, or null. IO — call off-thread. */
+    /** A dated planner for [year] in the folder, named after [rawName]; returns its URI, or null. IO. */
+    fun createAgendaFile(treeUri: String, parentDocId: String, rawName: String, year: Int): String? {
+        val name = uniqueDocumentName(treeUri, parentDocId, rawName, com.xnotes.core.util.DocumentKind.NOTE)
+        val (w, h) = settings.prefs.newPagePixels()
+        val doc = Document().also {
+            it.created = System.currentTimeMillis()
+            it.agendaYear = year
+        }
+        Agenda.build(doc, year, w, h, textMeasurer)
+        return createNoteFile(treeUri, parentDocId, name) { codec.write(doc, it) }
+    }
+
     fun createBlankCanvasFile(treeUri: String, parentDocId: String, rawName: String): String? {
         val name = uniqueDocumentName(treeUri, parentDocId, rawName, com.xnotes.core.util.DocumentKind.CANVAS)
         return createNoteFile(treeUri, parentDocId, name) {
@@ -4809,8 +4827,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     private fun installInitialView(path: String?) {
         val saved = viewKey(path)?.let { viewStates.get(it) }
         installViewOverrides(saved?.overrides ?: com.xnotes.canvas.ViewOverrides())
-        state.pendingInitialView =
-            if (saved != null) InitialView.Restore(saved.zoom, saved.scrollX, saved.scrollY) else InitialView.FitWidth
+        // An agenda always opens on today, wherever it was left.
+        val today = Agenda.todayPage(state.document)
+        state.pendingInitialView = when {
+            today != null -> InitialView.GoToPage(today)
+            saved != null -> InitialView.Restore(saved.zoom, saved.scrollX, saved.scrollY)
+            else -> InitialView.FitWidth
+        }
         state.didInitialFit = false
         if (state.viewportW > 0) state.establishInitialView()
     }
@@ -5810,9 +5833,41 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     fun fitWidth() { state.fitWidth(); afterView() }
     fun fitHeight() { state.fitHeight(); afterView() }
     fun fitPage() { state.fitPage(); afterView() }
-    fun prevPage() { state.goToPage(state.prevPageIndex(state.currentPageIndex())); afterView() }
-    fun nextPage() { state.goToPage(state.nextPageIndex(state.currentPageIndex())); afterView() }
-    fun goToPage(index: Int) { state.goToPage(index); afterView() }
+    fun prevPage() = goToPage(state.prevPageIndex(state.currentPageIndex()))
+    fun nextPage() = goToPage(state.nextPageIndex(state.currentPageIndex()))
+    fun goToPage(index: Int) {
+        val from = state.currentPageIndex()
+        if (index != from) startPageTurn(forward = index > from)
+        state.goToPage(index)
+        afterView()
+    }
+
+    // --- page turn animation ---
+
+    /** The leaf being turned right now, for [PageTurnOverlay]; null between turns. */
+    var pageTurn by mutableStateOf<PageTurn?>(null)
+        private set
+
+    /** Reused between turns: a page-sized snapshot is too big to allocate on every one. */
+    private var turnBitmap: android.graphics.Bitmap? = null
+
+    /** Snapshot the page about to be left, so the overlay can fold it away over the new one. */
+    fun startPageTurn(forward: Boolean) {
+        if (!settings.prefs.pageTurnAnimation) return
+        val w = view.width
+        val h = view.height
+        if (w <= 0 || h <= 0) return
+        val bmp = turnBitmap?.takeIf { it.width == w && it.height == h && pageTurn == null }
+            ?: runCatching { android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888) }.getOrNull()
+            ?: return
+        runCatching { view.draw(android.graphics.Canvas(bmp)) }.onFailure { return }
+        turnBitmap = bmp
+        pageTurn = PageTurn(bmp, forward, System.nanoTime())
+    }
+
+    fun endPageTurn(id: Long) {
+        if (pageTurn?.id == id) pageTurn = null
+    }
 
     fun toggleZoomLock() {
         zoomLocked = !zoomLocked

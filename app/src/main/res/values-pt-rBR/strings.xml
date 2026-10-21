@@ -1007,4 +1007,10 @@
     <string name="kit_highlighters">Marca-textos</string>
     <string name="kit_chalks">Gizes</string>
     <string name="kit_brushes">Pincéis e efeitos</string>
+    <string name="new_agenda_menu">Nova agenda</string>
+    <string name="new_agenda">Nova agenda</string>
+    <string name="agenda_default_name">Agenda %1$d</string>
+    <string name="pref_page_turn">Virar a página</string>
+    <string name="page_turn_on">Com animação</string>
+    <string name="page_turn_off">Instantâneo</string>
 </resources>

@@ -38,6 +38,8 @@ class Document(
      * draws the same on any device. Built-in rulings are never here. Replaced whole, never mutated.
      */
     var templates: Map<String, String> = emptyMap(),
+    /** Set on a dated planner made by "New agenda": its year, which lays out its month and day pages. */
+    var agendaYear: Int? = null,
 ) {
     /** Transient: set by the codec when legacy ink was compacted at load (debug overlay readout). */
     var compactedOnLoad = false

@@ -168,7 +168,7 @@ import kotlin.math.roundToInt
 enum class BackstageView { HOME, PREFERENCES, ABOUT, TRASH }
 
 /** Whether the Home explorer is awaiting a new file/folder name. */
-private enum class CreateMode { NONE, FILE, CANVAS, FOLDER }
+private enum class CreateMode { NONE, FILE, CANVAS, FOLDER, AGENDA }
 
 /** Entries copied or cut in the explorer; each remembers the folder it was listed in. */
 private data class ClipItem(val entries: List<BrowseEntry>, val isCut: Boolean)
@@ -783,6 +783,7 @@ private fun NewItemMenuItems(
     )
     item(XnotesIcons.edit, stringResource(R.string.new_note_menu)) { onCreateMode(CreateMode.FILE) }
     item(XnotesIcons.canvas, stringResource(R.string.new_canvas_menu)) { onCreateMode(CreateMode.CANVAS) }
+    item(XnotesIcons.clock, stringResource(R.string.new_agenda_menu)) { onCreateMode(CreateMode.AGENDA) }
     item(XnotesIcons.importDoc, stringResource(R.string.import_pdf)) { onImportPdf() }
     item(XnotesIcons.newFolder, stringResource(R.string.new_folder_menu)) { onCreateMode(CreateMode.FOLDER) }
 }
@@ -1755,6 +1756,8 @@ private fun ExplorerSection(
     LaunchedEffect(createMode, pendingImport) { fieldError = null }
     // The paper a new note starts on: the saved default until one is picked in the dialog.
     var newNotePaper by remember(createMode) { mutableStateOf(editor.newNoteStyle.template ?: PageTemplates.NONE) }
+    val thisYear = remember { java.time.LocalDate.now().year }
+    var agendaYear by remember(createMode) { mutableStateOf(thisYear) }
     // Name entry for a new note, new folder, or a pending PDF import. Hidden while an import is
     // actually being written, so only the "Importing…" dialog shows.
     if ((createMode != CreateMode.NONE || pendingImport != null) && !editor.importing) {
@@ -1763,6 +1766,7 @@ private fun ExplorerSection(
             pendingImport != null -> pendingImport.defaultName // import names default to the source file
             createMode == CreateMode.FILE || createMode == CreateMode.CANVAS ->
                 nextUntitled(editor, editor.cachedChildren(root, currentDocId))
+            createMode == CreateMode.AGENDA -> context.getString(R.string.agenda_default_name, thisYear)
             else -> "" // new folder
         }
         NameDialog(
@@ -1770,6 +1774,7 @@ private fun ExplorerSection(
                 pendingImport != null -> stringResource(R.string.import_title)
                 isFolder -> stringResource(R.string.new_folder)
                 createMode == CreateMode.CANVAS -> stringResource(R.string.new_canvas)
+                createMode == CreateMode.AGENDA -> stringResource(R.string.new_agenda)
                 else -> stringResource(R.string.new_note)
             },
             initial = default,
@@ -1777,7 +1782,12 @@ private fun ExplorerSection(
             placeholder = if (isFolder) stringResource(R.string.folder_name) else null,
             allowEmpty = !isFolder, // a folder needs a name; a blank note name becomes "untitled_N"
             error = fieldError,
-            extra = if (pendingImport == null && createMode == CreateMode.FILE) { { NewNotePaperPicker(editor, newNotePaper) { newNotePaper = it } } } else null,
+            extra = when {
+                pendingImport != null -> null
+                createMode == CreateMode.FILE -> { { NewNotePaperPicker(editor, newNotePaper) { newNotePaper = it } } }
+                createMode == CreateMode.AGENDA -> { { AgendaYearPicker(thisYear, agendaYear) { agendaYear = it } } }
+                else -> null
+            },
             onConfirm = { n ->
                 when {
                     pendingImport != null -> scope.launch {
@@ -1795,6 +1805,10 @@ private fun ExplorerSection(
                     isFolder -> scope.launch {
                         val ok = withContext(Dispatchers.IO) { editor.createFolder(root, currentDocId, n) }
                         if (ok) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_folder)
+                    }
+                    createMode == CreateMode.AGENDA -> scope.launch {
+                        val uri = withContext(Dispatchers.IO) { editor.createAgendaFile(root, currentDocId, n, agendaYear) }
+                        if (uri != null) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_note)
                     }
                     createMode == CreateMode.CANVAS -> scope.launch {
                         val uri = withContext(Dispatchers.IO) { editor.createBlankCanvasFile(root, currentDocId, n) }
@@ -2195,6 +2209,28 @@ private fun NameDialog(
             }
         },
     )
+}
+
+/** The year a new agenda covers: this one or the next, as two chips. */
+@Composable
+private fun AgendaYearPicker(thisYear: Int, selected: Int, onSelect: (Int) -> Unit) {
+    val palette = LocalPalette.current
+    Spacer(Modifier.height(12.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        for (y in listOf(thisYear, thisYear + 1)) {
+            val on = y == selected
+            Text(
+                y.toString(),
+                color = (if (on) palette.selectionForeground else palette.text).toComposeColor(),
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.small)
+                    .background((if (on) palette.selectionBackground else palette.surface).toComposeColor())
+                    .clickable { onSelect(y) }
+                    .padding(horizontal = 14.dp, vertical = 7.dp),
+            )
+        }
+    }
 }
 
 /** The paper grid in the New note dialog: plain, or any template in the library. */

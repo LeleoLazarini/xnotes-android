@@ -1,0 +1,174 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.agenda.day",
+  "name": "Agenda day",
+  "description": "Página de dia da agenda: faixa para a data no topo, horários das 7h às 22h à esquerda, tarefas com caixinhas e notas à direita.",
+  "license": "MIT",
+  "tags": [
+    "planner",
+    "agenda"
+  ],
+  "params": {},
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "hline",
+          "y": "16mm",
+          "strokeWidth": "0.4mm",
+          "stroke": "accent"
+        },
+        {
+          "type": "group",
+          "y": "20mm",
+          "w": "62%",
+          "h": "100% - 20mm",
+          "children": [
+            {
+              "type": "text",
+              "text": "Horários",
+              "x": 0,
+              "y": "4.5mm",
+              "size": "3.5mm",
+              "weight": "bold",
+              "fill": "accent"
+            },
+            {
+              "type": "group",
+              "y": "7mm",
+              "h": "100% - 7mm",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "y",
+                  "count": 16,
+                  "children": [
+                    {
+                      "type": "hline",
+                      "y": "100%"
+                    },
+                    {
+                      "type": "text",
+                      "text": [
+                        "07:00",
+                        "08:00",
+                        "09:00",
+                        "10:00",
+                        "11:00",
+                        "12:00",
+                        "13:00",
+                        "14:00",
+                        "15:00",
+                        "16:00",
+                        "17:00",
+                        "18:00",
+                        "19:00",
+                        "20:00",
+                        "21:00",
+                        "22:00"
+                      ],
+                      "x": 0,
+                      "y": "4mm",
+                      "size": "2.8mm",
+                      "fill": "ink",
+                      "opacity": 0.7
+                    },
+                    {
+                      "type": "vline",
+                      "x": "13mm",
+                      "opacity": 0.35
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "x": "66%",
+          "y": "20mm",
+          "w": "34%",
+          "h": "58%",
+          "children": [
+            {
+              "type": "text",
+              "text": "Tarefas",
+              "x": 0,
+              "y": "4.5mm",
+              "size": "3.5mm",
+              "weight": "bold",
+              "fill": "accent"
+            },
+            {
+              "type": "group",
+              "y": "7mm",
+              "h": "100% - 7mm",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "y",
+                  "period": "8mm",
+                  "fit": "round",
+                  "children": [
+                    {
+                      "type": "rect",
+                      "y": "100% - 5.5mm",
+                      "w": "4mm",
+                      "h": "4mm",
+                      "rx": "0.6mm"
+                    },
+                    {
+                      "type": "hline",
+                      "y": "100%",
+                      "x1": "6mm"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "x": "66%",
+          "y": "20mm + 60%",
+          "w": "34%",
+          "h": "40% - 20mm",
+          "children": [
+            {
+              "type": "text",
+              "text": "Notas",
+              "x": 0,
+              "y": "4.5mm",
+              "size": "3.5mm",
+              "weight": "bold",
+              "fill": "accent"
+            },
+            {
+              "type": "group",
+              "y": "7mm",
+              "h": "100% - 7mm",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "y",
+                  "period": "8mm",
+                  "fit": "round",
+                  "children": [
+                    {
+                      "type": "hline",
+                      "y": "100%"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

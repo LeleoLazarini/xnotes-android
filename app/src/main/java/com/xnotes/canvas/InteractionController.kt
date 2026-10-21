@@ -3705,8 +3705,12 @@ class InteractionController(
      * Jump to [rowIndex] with no animation: the new row simply appears at its landing spot
      * ([CanvasState.rowTargetScroll] — zoom kept, top-aligned).
      */
+    /** Told just before a swipe turns the page, and which way, so the turn can be animated. */
+    var onBeforeFlip: ((forward: Boolean) -> Unit)? = null
+
     private fun flipTo(rowIndex: Int) {
         stopFling()
+        onBeforeFlip?.invoke(rowIndex > state.currentRow)
         state.goToPage(state.rowRanges()[rowIndex].first)
         onViewChanged()
         requestRender()

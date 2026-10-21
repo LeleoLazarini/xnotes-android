@@ -1253,6 +1253,7 @@ private fun EditorPane(
                             modifier = Modifier.fillMaxSize(),
                             update = { editor.view.requestRender() }, // repaint on (re)attach so a push never flashes blank
                         )
+                        com.xnotes.ui.PageTurnOverlay(editor)
                         editor.editingField?.let { field ->
                             com.xnotes.ui.TextEditorOverlay(editor, field)
                         }

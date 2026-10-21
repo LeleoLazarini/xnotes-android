@@ -254,6 +254,7 @@ class DocumentCodec(
         j.name("version").value(VERSION)
         j.name("writer").value(WRITER)
         doc.created?.let { j.name("created").value(java.time.Instant.ofEpochMilli(it).toString()) }
+        doc.agendaYear?.let { j.name("agenda_year").value(it) }
         j.name("dpi").value(doc.dpi)
         j.name("has_pdf").value(doc.pdfFile != null)
         j.name("bookmarks").beginArray()
@@ -672,6 +673,7 @@ class DocumentCodec(
 
         val doc = Document(dpi = m.dpi)
         doc.created = m.created
+        doc.agendaYear = m.agendaYear
         doc.templates = templates
         doc.style = m.style
         doc.margins = m.margins
@@ -739,6 +741,7 @@ class DocumentCodec(
         var formatOk = false
         var writer = 0
         var created: Long? = null
+        var agendaYear: Int? = null
         var dpi = PageSize.DEFAULT_DPI
         var hasPdf = false
         var style = PageStyle()
@@ -820,6 +823,7 @@ class DocumentCodec(
                     m.formatOk = true
                 }
                 "writer" -> m.writer = intOr(p, 0)
+                "agenda_year" -> m.agendaYear = intOrNull(p)
                 "created" -> m.created = stringOrNull(p)?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
                 "dpi" -> m.dpi = intOr(p, PageSize.DEFAULT_DPI)
                 "has_pdf" -> m.hasPdf = boolOr(p, false)

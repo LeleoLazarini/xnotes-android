@@ -1,0 +1,88 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.agenda.month",
+  "name": "Agenda month",
+  "description": "Página de mês da agenda: faixa para o mês no topo e a grade de seis semanas, de domingo a sábado, com o fim de semana sombreado.",
+  "license": "MIT",
+  "tags": [
+    "planner",
+    "agenda",
+    "calendar"
+  ],
+  "params": {},
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "hline",
+          "y": "16mm",
+          "strokeWidth": "0.4mm",
+          "stroke": "accent"
+        },
+        {
+          "type": "group",
+          "y": "20mm",
+          "h": "100% - 20mm",
+          "children": [
+            {
+              "type": "repeat",
+              "axis": "x",
+              "count": 7,
+              "children": [
+                {
+                  "type": "rect",
+                  "y": "8mm",
+                  "h": "100% - 8mm",
+                  "fill": "ink",
+                  "stroke": "none",
+                  "opacity": "0.2 * (1 - min(1, mod(i, 6)))"
+                },
+                {
+                  "type": "text",
+                  "text": [
+                    "Dom",
+                    "Seg",
+                    "Ter",
+                    "Qua",
+                    "Qui",
+                    "Sex",
+                    "Sáb"
+                  ],
+                  "x": "50%",
+                  "y": "5.5mm",
+                  "align": "middle",
+                  "size": "3.2mm",
+                  "weight": "bold",
+                  "fill": "accent"
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "8mm",
+              "h": "100% - 8mm",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "xy",
+                  "count": [
+                    7,
+                    6
+                  ],
+                  "children": [
+                    {
+                      "type": "rect",
+                      "strokeWidth": "0.3mm"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

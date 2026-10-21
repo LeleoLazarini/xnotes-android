@@ -21,6 +21,8 @@ data class Preferences(
     val materialSurfaceSeed: Rgba = DEFAULT_MATERIAL_SURFACE,
     val cornerStyle: CornerStyle = CornerStyle.SOFT,
     val toolbarLook: ToolbarLook = ToolbarLook(),
+    /** A page folds over like paper when the note turns to another page. */
+    val pageTurnAnimation: Boolean = true,
     val hideWindowDecoration: Boolean = false,
     val pageColor: Rgba? = null, // null ⇒ follow theme paper
     val pageTemplatePdf: String? = null,
@@ -175,6 +177,7 @@ data class Preferences(
             if (toolbarLook.position != ToolbarPosition.TOP) put("toolbar_position", toolbarLook.position.id)
             if (toolbarLook.size != ToolbarSize.REGULAR) put("toolbar_size", toolbarLook.size.id)
             put("toolbar_floating", toolbarLook.floating)
+            put("page_turn_animation", pageTurnAnimation)
             if (!toolbarLook.grouped) put("toolbar_grouped", false)
             startFullscreen?.let { put("start_fullscreen", it) }
             codeThemePath?.let { put("code_theme_path", it) }
@@ -251,6 +254,7 @@ data class Preferences(
                     grouped = o.optBoolean("toolbar_grouped", true),
                 ),
                 hideWindowDecoration = o.optBoolean("hide_window_decoration", false),
+                pageTurnAnimation = o.optBoolean("page_turn_animation", true),
                 pageColor = if (o.isNull("page_color")) null else Rgba.fromHex(o.optString("page_color")),
                 pageTemplatePdf = if (o.isNull("page_template_pdf")) null else o.optString("page_template_pdf").ifEmpty { null },
                 defaultTemplate = template,

@@ -65,6 +65,9 @@ sealed class InitialView {
 
     /** Reapply a remembered zoom + scroll. */
     class Restore(val zoom: Double, val scrollX: Double, val scrollY: Double) : InitialView()
+
+    /** Fit the page width on page [index]: an agenda opening on today. */
+    class GoToPage(val index: Int) : InitialView()
 }
 
 /**
@@ -996,6 +999,10 @@ class CanvasState(
         if (viewportW <= 0 || viewportH <= 0) return
         when (val v = pendingInitialView) {
             is InitialView.Restore -> setView(v.zoom, v.scrollX, v.scrollY)
+            is InitialView.GoToPage -> {
+                resetViewToFitWidth()
+                goToPage(v.index)
+            }
             else -> resetViewToFitWidth()
         }
         pendingInitialView = null
