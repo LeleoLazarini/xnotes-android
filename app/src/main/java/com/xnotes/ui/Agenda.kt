@@ -128,5 +128,18 @@ internal object Agenda {
         }
     }
 
+    /**
+     * Repaint the locked words on [pages] of an agenda [doc] in each page's heading colour (its own,
+     * else the document's), or the default ink when none is set. False when [doc] is no agenda.
+     */
+    fun recolor(doc: Document, pages: List<Page>): Boolean {
+        if (doc.agendaYear == null) return false
+        for (p in pages) {
+            val c = (p.style.accentColor ?: doc.style.accentColor)?.withAlpha(255) ?: INK
+            for (item in p.items) if (item is TextItem && item.locked) item.rgba = c
+        }
+        return true
+    }
+
     private fun String.cap() = replaceFirstChar { it.titlecase(PT) }
 }

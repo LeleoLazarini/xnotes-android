@@ -440,6 +440,12 @@ private fun InsertGroupButton(
             GroupMenuItem(stringResource(R.string.stickers), XnotesIcons.heart) { menuOpen = false; stickersOpen = true }
             GroupMenuItem(stringResource(R.string.insert_image_ellipsis), XnotesIcons.image) { menuOpen = false; onInsertImage() }
             GroupMenuItem(stringResource(R.string.paste_image), XnotesIcons.paste) { menuOpen = false; editor.pasteImage() }
+            GroupMenuItem(stringResource(R.string.scan_document), XnotesIcons.importDoc) { menuOpen = false; editor.scanRequested = true }
+            if (editor.recording == null) {
+                GroupMenuItem(stringResource(R.string.audio_record), XnotesIcons.clock) { menuOpen = false; editor.recordRequested = true }
+            } else {
+                GroupMenuItem(stringResource(R.string.audio_stop_recording), XnotesIcons.clock, active = true) { menuOpen = false; editor.stopRecording() }
+            }
             MenuDivider()
             GroupMenuItem(stringResource(R.string.tool_ruler), XnotesIcons.ruler, active = editor.rulerVisible) { menuOpen = false; editor.toggleRuler() }
             GroupMenuItem(stringResource(R.string.tool_wand), XnotesIcons.magicWand, active = editor.wandEnabled) { menuOpen = false; editor.toggleWand() }
@@ -519,6 +525,15 @@ private fun MoreMenu(editor: Editor, onRename: () -> Unit, onToggleFullscreen: (
         ToolbarIcon(XnotesIcons.more, stringResource(R.string.more_options), grouped = true) { menuOpen = true }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             GroupMenuItem(stringResource(R.string.eyedropper), XnotesIcons.palette) { menuOpen = false; editor.eyedropperActive = true }
+            GroupMenuItem(stringResource(R.string.insert_contents), XnotesIcons.contents) { menuOpen = false; editor.insertContentsPage() }
+            val fingerDraws = editor.preferences.fingerDraws
+            GroupMenuItem(stringResource(R.string.finger_draws_toggle), XnotesIcons.pan, active = fingerDraws) { menuOpen = false; editor.applyPreferences(editor.preferences.copy(fingerDraws = !fingerDraws)) }
+            // Book-style turning versus one long scroll, for this note.
+            val flipping = !editor.viewSettings.verticalScroll
+            GroupMenuItem(stringResource(R.string.turn_pages_like_book), XnotesIcons.pages, active = flipping) {
+                menuOpen = false
+                editor.updateViewOverrides(editor.viewOverrides.copy(verticalScroll = flipping))
+            }
             GroupMenuItem(stringResource(R.string.go_to_page_n, editor.pageIndex + 1, editor.pageCount), XnotesIcons.pages) { menuOpen = false; popup = MorePopup.JUMP }
             GroupMenuItem(stringResource(R.string.rename_note), XnotesIcons.edit) { menuOpen = false; onRename() }
             GroupMenuItem(stringResource(R.string.side_panel), XnotesIcons.sidebar, active = editor.sidebarVisible) { menuOpen = false; editor.toggleSidebar() }

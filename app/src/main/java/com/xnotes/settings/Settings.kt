@@ -49,7 +49,7 @@ data class Settings(
     val tools: Map<Tool, ToolConfig> = emptyMap(),
     val shapeConfig: ShapeConfig = ShapeConfig(),
     val toolbarColors: List<Rgba> = InkPalette.presets,
-    val toolbarColorCount: Int = 5,
+    val toolbarColorCount: Int = 6,
     val toolbarLayout: ToolbarLayout = ToolbarLayout.DEFAULT,
     /** The infinite canvas's own bar. A separate layout because the two hold different items. */
     val canvasToolbarLayout: ToolbarLayout = ToolbarLayout.CANVAS_DEFAULT,
@@ -104,7 +104,8 @@ data class Settings(
         return JSONObject()
             .put("tools", toolsObj)
             .put("toolbar_colors", JSONArray().apply { toolbarColors.forEach { put(rgbaArr(it)) } })
-            .put("toolbar_color_count", toolbarColorCount)
+            // v2 key: the compact colour block holds 3 + 3, so the old default of 5 moves to 6 once.
+            .put("toolbar_color_count2", toolbarColorCount)
             .put("toolbar_layout", toolbarLayoutJson(toolbarLayout))
             .put("canvas_toolbar_layout", toolbarLayoutJson(canvasToolbarLayout))
             .put("active_color", activeColor)
@@ -151,7 +152,7 @@ data class Settings(
                 tools = tools,
                 shapeConfig = shape,
                 toolbarColors = colors.take(InkPalette.MAX_SWATCHES),
-                toolbarColorCount = o.optInt("toolbar_color_count", 5).coerceIn(1, InkPalette.MAX_SWATCHES),
+                toolbarColorCount = o.optInt("toolbar_color_count2", 6).coerceIn(1, InkPalette.MAX_SWATCHES),
                 toolbarLayout = toolbarLayout(o.optJSONObject("toolbar_layout")),
                 canvasToolbarLayout = toolbarLayout(
                     o.optJSONObject("canvas_toolbar_layout"),

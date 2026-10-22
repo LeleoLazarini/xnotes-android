@@ -133,7 +133,7 @@ class FrontInk(
      * in play are rebuilt each present. The two overlap by a point so the quad bridging them
      * belongs to the later one and no gap can open on the join.
      */
-    fun wet(stroke: Stroke?, pageIndex: Int?) {
+    fun wet(stroke: Stroke?, pageIndex: Int?, predicted: com.xnotes.core.geometry.Pt? = null) {
         if (stroke == null || pageIndex == null) return abandon()
         val ribbon = stroke.wetRibbon
         // Ink whose runs cannot simply be laid over each other keeps the ordinary path, which
@@ -158,7 +158,21 @@ class FrontInk(
         val tailFrom = (meshed - 1).coerceAtLeast(0)
         val tail = ItemMesher.meshRun(stroke, ribbon, tailFrom, ribbon.pointCount - tailFrom, arc)
         tailPart = tail
-        pad.setTail(if (tail == null) emptyList() else listOf(tail))
+        // The predicted run rides on the tail only: it is redrawn each frame and never becomes ink.
+        val ahead = predicted?.let { p -> predictedRun(stroke, p) }.orEmpty()
+        pad.setTail((if (tail == null) emptyList() else listOf(tail)) + ahead)
+    }
+
+    /** A short segment from the stroke's last sample to [to], in the stroke's own style. */
+    private fun predictedRun(stroke: Stroke, to: com.xnotes.core.geometry.Pt): List<com.xnotes.core.infinite.MeshPart> {
+        val n = stroke.sampleCount
+        if (n == 0) return emptyList()
+        val p = stroke.pAt(n - 1)
+        val run = Stroke(stroke.tool, stroke.config, listOf(
+            com.xnotes.core.stroke.Sample(stroke.xAt(n - 1), stroke.yAt(n - 1), p),
+            com.xnotes.core.stroke.Sample(to.x, to.y, p),
+        ))
+        return ItemMesher.mesh(run)?.parts.orEmpty()
     }
 
     /**

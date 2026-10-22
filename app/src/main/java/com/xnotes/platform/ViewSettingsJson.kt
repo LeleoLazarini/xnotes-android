@@ -59,7 +59,8 @@ internal object ViewOverridesJson {
 
     fun write(o: JSONObject, s: ViewOverrides): JSONObject = o.apply {
         s.mode?.let { put("mode", it.id) }
-        s.verticalScroll?.let { put("verticalScroll", it) }
+        // v2 key: notes saved before page-flip became the default dropped their old scroll choice once.
+        s.verticalScroll?.let { put("verticalScroll2", it) }
         s.contrast?.let { put("contrast", it) }
         s.invert?.let { put("invert", it) }
         s.brightness?.let { put("brightness", it) }
@@ -73,7 +74,7 @@ internal object ViewOverridesJson {
 
     fun read(o: JSONObject): ViewOverrides = ViewOverrides(
         mode = if (o.has("mode")) ViewingMode.fromId(o.optString("mode")) else null,
-        verticalScroll = if (o.has("verticalScroll")) o.optBoolean("verticalScroll", true) else null,
+        verticalScroll = if (o.has("verticalScroll2")) o.optBoolean("verticalScroll2", false) else null,
         contrast = if (o.has("contrast")) o.optInt("contrast", 100).coerceIn(0, 200) else null,
         invert = if (o.has("invert")) o.optInt("invert", 0).coerceIn(0, 100) else null,
         brightness = if (o.has("brightness")) o.optInt("brightness", 100).coerceIn(0, 200) else null,

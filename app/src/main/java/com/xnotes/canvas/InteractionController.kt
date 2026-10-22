@@ -514,6 +514,37 @@ class InteractionController(
 
     val hasSelection: Boolean get() = selection.isNotEmpty()
 
+    /** What is selected, page by page, for the actions the editor runs on it. */
+    val selectedItems: List<Selected> get() = selection.toList()
+
+    /**
+     * Put [added] on page [pageIndex] in place of the selection (or beside it, with [keepSelected]),
+     * as one undo step: handwriting turned into typed text, an image's words lifted out.
+     */
+    fun replaceSelection(pageIndex: Int, added: CanvasItem, keepSelected: Boolean) {
+        val page = state.document.pages.getOrNull(pageIndex) ?: return
+        val removals = if (keepSelected) emptyList() else selection.map { state.document.pages[it.pageIndex] to it.item }
+        for ((p, item) in removals) p.items.remove(item)
+        clearSelection()
+        page.items.add(added)
+        state.appendToCache(page, added)
+        history.push(if (removals.isEmpty()) AddItem(page, added) else CompositeCommand(listOf(EraseItems(removals), AddItem(page, added))))
+        state.document.dirty = true
+        onContentChanged()
+    }
+
+    /** Called with each stroke as it is committed, so the editor can stamp it (audio time). */
+    var onStrokeFiled: ((Stroke) -> Unit)? = null
+
+    /** Draw a closed loop, then tap inside it: the loop turns into a lasso round what it encloses. */
+    var circleToSelect: Boolean = true
+
+    /** The last loop drawn, waiting a moment for the tap that turns it into a selection. */
+    private var pendingLoop: Triple<Stroke, Int, Long>? = null
+
+    /** Where the hovering pen is, in viewport px, with the nib's radius there; null when not hovering. */
+    private var penCursor: Pair<Pt, Double>? = null
+
     fun configFor(t: Tool): ToolConfig = toolConfigs[t] ?: ToolDefaults.configFor(t)
 
     fun setToolConfig(t: Tool, config: ToolConfig) {
@@ -564,7 +595,11 @@ class InteractionController(
 
     // --- touch entry point ---
 
+    /** Predicts where the pen is heading, so the live line can be drawn a little ahead of it. */
+    var motionPredictor: androidx.input.motionprediction.MotionEventPredictor? = null
+
     fun onTouch(e: MotionEvent): Boolean {
+        if (e.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS) motionPredictor?.record(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 tapDown(e)
@@ -596,6 +631,13 @@ class InteractionController(
         if (handleHoverAction(e)) return true
         if (hoverConnect(e)) return true
         val isEraserPointer = e.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER
+        // A pen hovering over the page shows where its nib will land and how wide it will draw.
+        if (tool.isStroke && !isEraserPointer && e.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS) {
+            penCursor = if (e.actionMasked == MotionEvent.ACTION_HOVER_EXIT) null
+            else Pt(e.x.toDouble(), e.y.toDouble()) to (configFor(tool).baseWidth / 2.0 * state.zoom).coerceAtLeast(1.5)
+            requestRender()
+            return true
+        }
         if (tool != Tool.ERASER && !isEraserPointer) return false
         eraserCursor = if (e.actionMasked == MotionEvent.ACTION_HOVER_EXIT) {
             null
@@ -1102,8 +1144,30 @@ class InteractionController(
             e.getX(idx).toDouble(), e.getY(idx).toDouble(),
             if (drawingIsStylus) e.getPressure(idx).toDouble() else 1.0, e.eventTime, force = false,
         )
-        frontInk?.wet(liveStroke, strokePageIndex)
+        frontInk?.wet(liveStroke, strokePageIndex, predictedLocal())
         requestRender()
+    }
+
+    /**
+     * The pen's predicted position a frame or two ahead, in the live stroke's page space, capped so
+     * a jittery guess can never fling a spike out of the line. Null without a confident guess.
+     */
+    private fun predictedLocal(): Pt? {
+        if (!drawingIsStylus) return null
+        val stroke = liveStroke ?: return null
+        val pi = strokePageIndex ?: return null
+        if (stroke.straight || stroke.sampleCount < 2) return null
+        val p = runCatching { motionPredictor?.predict() }.getOrNull() ?: return null
+        val local = state.toPageSpace(pi, state.viewportToContent(Pt(p.x.toDouble(), p.y.toDouble())))
+        p.recycle()
+        val n = stroke.sampleCount
+        val lx = stroke.xAt(n - 1)
+        val ly = stroke.yAt(n - 1)
+        val reach = kotlin.math.hypot(local.x - lx, local.y - ly)
+        val cap = PREDICT_MAX_DP * state.devicePxPerDp / state.zoom
+        if (reach < 0.5) return null
+        val k = if (reach > cap) cap / reach else 1.0
+        return Pt(lx + (local.x - lx) * k, ly + (local.y - ly) * k)
     }
 
     private fun addStrokePoint(vx: Double, vy: Double, pressure: Double, timeMs: Long, force: Boolean) {
@@ -1222,6 +1286,7 @@ class InteractionController(
         // antialiased edges over each other. It goes into the cache once the pad has let go.
         if (frontInk?.hold(stroke, page) != true) state.appendToCache(page, stroke)
         state.document.dirty = true
+        onStrokeFiled?.invoke(stroke)
         return AddItem(page, stroke)
     }
 
@@ -1254,8 +1319,12 @@ class InteractionController(
                     fadeAlpha = 1.0
                     scheduleFade()
                 }
+                loopTapSelect(stroke, pi) -> Unit
                 scribbleErase(stroke, pi) -> Unit
-                else -> pushStrokeEdit(fileStroke(stroke, pi))
+                else -> {
+                    pushStrokeEdit(fileStroke(stroke, pi))
+                    rememberLoop(stroke, pi)
+                }
             }
         }
         // Nothing was committed here (a dismissing tap, or ephemeral ink), but a crossing may
@@ -1355,6 +1424,47 @@ class InteractionController(
      * filing the scribble. The undo stack gets the scribble and then its erase, so one undo says
      * "that was not an erase" and gives both back. False when the stroke stays ink.
      */
+    /** Keep [stroke] as a candidate loop when it closes on itself and is big enough to circle things. */
+    private fun rememberLoop(stroke: Stroke, pageIndex: Int) {
+        pendingLoop = null
+        if (!circleToSelect || stroke.tool == Tool.HIGHLIGHTER || crossedSegments.isNotEmpty()) return
+        val n = stroke.sampleCount
+        if (n < LOOP_MIN_SAMPLES) return
+        var perimeter = 0.0
+        for (i in 1 until n) perimeter += kotlin.math.hypot(stroke.xAt(i) - stroke.xAt(i - 1), stroke.yAt(i) - stroke.yAt(i - 1))
+        val gap = kotlin.math.hypot(stroke.xAt(n - 1) - stroke.xAt(0), stroke.yAt(n - 1) - stroke.yAt(0))
+        if (perimeter < LOOP_MIN_PERIMETER || gap > maxOf(LOOP_MIN_GAP, perimeter * LOOP_GAP_SHARE)) return
+        pendingLoop = Triple(stroke, pageIndex, android.os.SystemClock.uptimeMillis())
+    }
+
+    /**
+     * A dot tapped inside the loop just drawn: drop both the dot and the loop, and select what the
+     * loop encloses, as the lasso would. Anything else leaves the loop as ink.
+     */
+    private fun loopTapSelect(dot: Stroke, pageIndex: Int): Boolean {
+        val (loop, loopPage, at) = pendingLoop ?: return false
+        if (android.os.SystemClock.uptimeMillis() - at > LOOP_TAP_MS || loopPage != pageIndex) { pendingLoop = null; return false }
+        val b = dot.bounds()
+        if (b.w > LOOP_TAP_SIZE || b.h > LOOP_TAP_SIZE) { pendingLoop = null; return false }
+        val ring = List(loop.sampleCount) { Pt(loop.xAt(it), loop.yAt(it)) }
+        if (!Geometry.pointInPolygon(ring, Pt(b.centerX, b.centerY))) { pendingLoop = null; return false }
+        pendingLoop = null
+        val page = state.document.pages.getOrNull(pageIndex) ?: return false
+        val pr = state.pageRects.getOrNull(pageIndex) ?: return false
+        page.items.remove(loop)
+        history.push(EraseItems(listOf(page to loop)))
+        repairRegion(page, loop.paintBounds())
+        val members = SelectionMath.lassoMembers(state.document.pages, state.pageRects, ring.map { Pt(it.x + pr.left, it.y + pr.top) })
+            .filter { it.item !== loop }
+        if (members.isNotEmpty()) {
+            setSelection(members)
+            refreshSelectionMenu()
+        }
+        onContentChanged()
+        requestRender()
+        return true
+    }
+
     private fun scribbleErase(stroke: Stroke, pageIndex: Int): Boolean {
         val eraser = configFor(Tool.ERASER)
         if (!eraser.scribbleErase || !stroke.tool.isStroke || stroke.tool == Tool.HIGHLIGHTER) return false
@@ -4160,6 +4270,11 @@ class InteractionController(
         // Note icons: chrome of one size at any zoom, so in viewport space.
         noteIcons?.draw(r)
 
+        penCursor?.let { (at, radius) ->
+            r.fillEllipse(at, radius, radius, inkColor.withAlpha(150))
+            r.strokeEllipse(at, radius + 2.0, radius + 2.0, Pen(state.palette.textDim, 1.0, cosmetic = true))
+        }
+
         // Eraser cursor (viewport space, after the transform is restored).
         eraserCursor?.let {
             val radius = eraserRadius() * state.zoom
@@ -4435,6 +4550,15 @@ class InteractionController(
     }
 
     companion object {
+        // Loop-then-tap selection: what counts as a loop, and how soon and how small the tap must be.
+        private const val LOOP_MIN_SAMPLES = 12
+        /** The longest predicted run drawn ahead of the pen, in dp. */
+        private const val PREDICT_MAX_DP = 14.0
+        private const val LOOP_MIN_PERIMETER = 120.0
+        private const val LOOP_MIN_GAP = 24.0
+        private const val LOOP_GAP_SHARE = 0.12
+        private const val LOOP_TAP_MS = 2500L
+        private const val LOOP_TAP_SIZE = 14.0
         const val MIN_SAMPLE_DIST = 1.0
 
         /** Pen-up reduction tolerance, viewport px at the draw zoom (see [simplifyForCommit]). */

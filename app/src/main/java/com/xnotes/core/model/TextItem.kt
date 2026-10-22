@@ -25,7 +25,8 @@ class TextItem(
     var pointSize: Double = DEFAULT_POINT_SIZE,
     var face: FontFace = DEFAULT_FACE,
     private val measurer: TextMeasurer,
-) : CanvasItem, Resizable {
+) : CanvasItem, Resizable, Linkable {
+    override var linkPage: Int? = null
 
     override val kind = KIND
     override val mirrorable = false

@@ -123,6 +123,24 @@ interface SelectionMenuHost : SwatchHost {
 
     /** Mirror the selection about its own centre, left to right or [upsideDown], as one undo step. */
     fun mirrorSelection(upsideDown: Boolean)
+
+    /** True when the selection holds handwriting that can be read into typed text. */
+    fun canConvertToText(): Boolean = false
+
+    /** Read the selected handwriting and offer it as a text box. */
+    fun convertToText() {}
+
+    /** True when the lone selection is a picture whose words can be read. */
+    fun canReadImageText(): Boolean = false
+
+    /** Read the words off the selected picture. */
+    fun readImageText() {}
+
+    /** True when every selected item can be made a link to a page. */
+    fun canLinkSelection(): Boolean = false
+
+    /** Open the page picker to link the selection. */
+    fun linkSelection() {}
 }
 
 /**
@@ -173,6 +191,15 @@ fun SelectionMenu(host: SelectionMenuHost) {
                     onDismissRequest = { overflowOpen = false },
                     properties = PopupProperties(focusable = false),
                 ) {
+                    if (host.canConvertToText()) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.convert_to_text)) }, onClick = { overflowOpen = false; host.convertToText() })
+                    }
+                    if (host.canReadImageText()) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.read_image_text)) }, onClick = { overflowOpen = false; host.readImageText() })
+                    }
+                    if (host.canLinkSelection()) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.link_to_page)) }, onClick = { overflowOpen = false; host.linkSelection() })
+                    }
                     // Empty when nothing selected carries ink: an image or a text box has no
                     // colour-and-width pair to restyle.
                     val styles = host.selectionStyles()

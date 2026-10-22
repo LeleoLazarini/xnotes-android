@@ -146,6 +146,9 @@ class MainActivity : ComponentActivity() {
     // A PDF handed to us by another app ("Open with" / Share); consumed once the editor is ready.
     private var pendingPdfImport by mutableStateOf<Uri?>(null)
 
+    /** Images or text shared in from another app, waiting for an open note. */
+    private var pendingShare by mutableStateOf<com.xnotes.ui.SharedIn?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         com.xnotes.platform.FontCatalog.init(this)
@@ -153,6 +156,7 @@ class MainActivity : ComponentActivity() {
         setTheme(com.xnotes.R.style.Theme_Xnotes) // leave the dark launch/splash theme behind
         applyFullscreen(!deviceHasDisplayCutout(this)) // provisional; reconciled once the editor loads prefs
         pendingPdfImport = pdfImportUri(intent)
+        pendingShare = sharedIn(intent)
         setContent {
             val context = LocalContext.current
             val ed = remember { Editor(context).also { editor = it } }
@@ -175,6 +179,8 @@ class MainActivity : ComponentActivity() {
                             onToggleFullscreen = ed::toggleFullscreen,
                             importPdfUri = pendingPdfImport,
                             onImportConsumed = { pendingPdfImport = null },
+                            sharedIn = pendingShare,
+                            onSharedConsumed = { pendingShare = null },
                         )
                         androidx.compose.animation.AnimatedVisibility(
                             visible = !ready,
@@ -221,6 +227,23 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pdfImportUri(intent)?.let { pendingPdfImport = it }
+        sharedIn(intent)?.let { pendingShare = it }
+    }
+
+    // Pictures or text shared from another app ("Share" → xnotes), else null. PDFs go to [pdfImportUri].
+    private fun sharedIn(intent: Intent?): com.xnotes.ui.SharedIn? {
+        val type = intent?.type ?: return null
+        return when (intent.action) {
+            Intent.ACTION_SEND -> when {
+                type.startsWith("image/") -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)?.let { com.xnotes.ui.SharedIn(listOf(it), null) }
+                type.startsWith("text/") -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let { com.xnotes.ui.SharedIn(emptyList(), it) }
+                else -> null
+            }
+            Intent.ACTION_SEND_MULTIPLE -> if (type.startsWith("image/")) {
+                IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)?.let { com.xnotes.ui.SharedIn(it.toList(), null) }
+            } else null
+            else -> null
+        }
     }
 
     // The PDF uri carried by an inbound VIEW ("Open with") or SEND ("Share") intent, else null.
@@ -279,6 +302,8 @@ private fun EditorScreen(
     onToggleFullscreen: () -> Unit,
     importPdfUri: Uri? = null,
     onImportConsumed: () -> Unit = {},
+    sharedIn: com.xnotes.ui.SharedIn? = null,
+    onSharedConsumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
@@ -801,6 +826,17 @@ private fun EditorScreen(
     // A PDF opened from another app ("Open with"/Share): set up a pending import and land on the
     // backstage so its name dialog appears, exactly like the in-app "Import PDF" button. With no
     // folder chosen yet, fall back to App storage so the explorer renders and the note autosaves.
+    // Shared pictures or text land in the open note's current page; with none open, they wait.
+    LaunchedEffect(sharedIn, editor.noteOpen) {
+        val share = sharedIn ?: return@LaunchedEffect
+        if (!editor.noteOpen) {
+            editor.message = context.getString(R.string.share_open_note)
+            return@LaunchedEffect
+        }
+        onSharedConsumed()
+        editor.acceptShared(share.uris, share.text, context.contentResolver)
+    }
+
     LaunchedEffect(importPdfUri) {
         val src = importPdfUri ?: return@LaunchedEffect
         onImportConsumed() // consume once; the body has no suspend point so it runs to completion
@@ -1247,7 +1283,7 @@ private fun EditorPane(
                             onInsertPdf = { after -> actions.onInsertPdf(editor, after) },
                         )
                     }
-                    Box(modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds().then(com.xnotes.ui.dropTarget(editor))) {
                         AndroidView(
                             factory = { detached(editor.surfaces) },
                             modifier = Modifier.fillMaxSize(),
@@ -1255,6 +1291,7 @@ private fun EditorPane(
                         )
                         com.xnotes.ui.PageTurnOverlay(editor)
                         com.xnotes.ui.EyedropperOverlay(editor)
+                        com.xnotes.ui.ToolkitOverlays(editor)
                         editor.editingField?.let { field ->
                             com.xnotes.ui.TextEditorOverlay(editor, field)
                         }

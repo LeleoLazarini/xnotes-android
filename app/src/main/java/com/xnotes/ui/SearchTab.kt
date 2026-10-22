@@ -3,6 +3,8 @@ package com.xnotes.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -87,11 +89,49 @@ internal fun SearchTab(editor: Editor) {
         QueryField(editor)
         QueryBar(editor, results)
         Progress(results)
+        HandwritingSearch(editor)
         Box(Modifier.fillMaxWidth().weight(1f)) {
             when {
                 editor.searchQuery.isBlank() || results == null -> Unit
                 results.count == 0 -> if (results.done) EmptyHint(stringResource(R.string.no_matches))
                 else -> MatchList(editor, results) { focusManager.clearFocus() }
+            }
+        }
+    }
+}
+
+/** The handwriting pass: a button to read the pages' ink, then the lines that match. */
+@Composable
+private fun HandwritingSearch(editor: Editor) {
+    val palette = LocalPalette.current
+    val query = editor.searchQuery
+    LaunchedEffect(query) { editor.clearHandwritingSearch() }
+    if (query.isBlank()) return
+    val progress = editor.inkSearchProgress
+    val hits = editor.inkSearchHits
+    Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)) {
+        when {
+            progress != null -> Text(stringResource(R.string.search_ink_indexing, progress.first, progress.second), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
+            hits == null -> Text(
+                stringResource(R.string.search_ink),
+                color = palette.accent.toComposeColor(),
+                fontSize = 13.sp,
+                modifier = Modifier.clip(CircleShape).clickable { editor.searchHandwriting(query) }.padding(vertical = 6.dp, horizontal = 4.dp),
+            )
+            hits.isEmpty() -> Text(stringResource(R.string.search_ink_none), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
+            else -> {
+                Text(stringResource(R.string.search_ink_title), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
+                Column(Modifier.heightIn(max = 220.dp).verticalScroll(androidx.compose.foundation.rememberScrollState())) {
+                    hits.forEach { (page, line) ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(CircleShape).clickable { editor.goToPage(page) }.padding(vertical = 6.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("${page + 1}", color = palette.textDim.toComposeColor(), fontSize = 12.sp, modifier = Modifier.width(28.dp))
+                            Text(line, color = palette.text.toComposeColor(), fontSize = 13.sp, maxLines = 2)
+                        }
+                    }
+                }
             }
         }
     }

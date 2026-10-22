@@ -6,6 +6,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -96,6 +100,7 @@ fun ToolConfigPopup(editor: ToolPopupHost, tool: Tool, onDismiss: () -> Unit) {
     var intensity by remember { mutableStateOf(ToolConversions.highlighterAlphaToIntensity(base.highlighterAlpha).toFloat()) }
     var inverse by remember { mutableStateOf(base.highlighterInverse) }
     var colorOverride by remember { mutableStateOf(base.colorOverride) }
+    var brush by remember { mutableStateOf(base.brush) }
 
     fun emit() {
         val m = ToolConversions.sensitivityToMinFactor(sensitivity.toDouble())
@@ -121,74 +126,200 @@ fun ToolConfigPopup(editor: ToolPopupHost, tool: Tool, onDismiss: () -> Unit) {
                 highlighterAlpha = ha,
                 highlighterInverse = inverse,
                 colorOverride = colorOverride,
+                brush = brush,
             ),
         )
     }
 
+    var advanced by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    val palette = LocalPalette.current
+    val fullEditor = editor as? Editor
+    val toolbarInk = editor.hostToolbarColors.getOrNull(editor.hostActiveColorIndex)
+    val ink = colorOverride ?: toolbarInk ?: base.rgba
+
+    fun emitAll() = emit()
+
+    @Composable
+    fun Card(title: String, content: @Composable () -> Unit) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(palette.surface.toComposeColor())
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+        ) {
+            Text(title, color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.4.sp)
+            Spacer(Modifier.size(6.dp))
+            content()
+        }
+    }
+
     DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
-        Column(Modifier.width(250.dp).padding(horizontal = 14.dp, vertical = 8.dp)) {
-            PopupTitle(stringResource(tool.labelRes))
-            // COLOUR override: "Default" follows the toolbar's active ink colour; pick a hue to pin
-            // this tool to it regardless of the toolbar selection.
-            StyleCaption(stringResource(R.string.caption_colour))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ModeChip(stringResource(R.string.default_choice), colorOverride == null) { colorOverride = null; emit() }
-                ColorPickerDot(
-                    colorOverride,
-                    custom = colorOverride != null,
-                    onPick = { colorOverride = it; emit() },
-                    dismissOnPick = false,
-                ) { d, p ->
-                    ColorPickerPopup(
-                        initial = colorOverride ?: editor.hostToolbarColors.getOrNull(editor.hostActiveColorIndex),
-                        recents = editor.hostRecentColors,
-                        onDismiss = d,
-                        onPick = p,
-                    )
+        Column(Modifier.width(312.dp).padding(horizontal = 12.dp, vertical = 6.dp)) {
+            // Header: the drawer's picture in the ink, and the pen's name.
+            val family = com.xnotes.core.tools.PenFamily.of(tool, base.copy(brush = brush))
+            val penName = fullEditor?.activePen()?.name ?: stringResource(tool.labelRes)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (tool.isStroke) Icon(KitIcons.get(family, ink.toComposeColor()), null, tint = Color.Unspecified, modifier = Modifier.size(34.dp))
+                Spacer(Modifier.size(10.dp))
+                Column {
+                    Text(penName, color = palette.text.toComposeColor(), fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(stringResource(tool.labelRes), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
                 }
             }
-            Spacer(Modifier.size(12.dp))
-            val hasPressure = tool == Tool.PEN || tool == Tool.CALLIGRAPHY || tool == Tool.SPEED || tool == Tool.TAPER
-            if (hasPressure) {
-                ToggleRow(stringResource(R.string.caption_pressure), pressure) { pressure = it; emit() }
-                SliderRow(stringResource(R.string.caption_sensitivity), sensitivity, 0f..100f, enabled = pressure) { sensitivity = it; emit() }
+            Spacer(Modifier.size(8.dp))
+            // A live sample of the stroke: width, pressure swell, translucency and glow as set.
+            StrokePreview(
+                color = ink,
+                widthPx = width,
+                pressure = pressure,
+                minFactor = ToolConversions.sensitivityToMinFactor(sensitivity.toDouble()).toFloat(),
+                alpha = if (tool == Tool.HIGHLIGHTER) ToolConversions.intensityToHighlighterAlpha(intensity.toDouble()).toFloat() else 1f,
+                glow = glow,
+                dashed = tool == Tool.DASHED,
+            )
+            Spacer(Modifier.size(4.dp))
+
+            Card(stringResource(R.string.section_colour)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ModeChip(stringResource(R.string.default_choice), colorOverride == null) { colorOverride = null; emitAll() }
+                    editor.hostToolbarColors.take(6).forEach { c ->
+                        ColorDot(c.toComposeColor(), colorOverride == c) { colorOverride = c; emitAll() }
+                    }
+                    ColorPickerDot(
+                        colorOverride,
+                        custom = colorOverride != null && colorOverride !in editor.hostToolbarColors,
+                        onPick = { colorOverride = it; emitAll() },
+                        dismissOnPick = false,
+                    ) { d, p ->
+                        ColorPickerPopup(initial = colorOverride ?: toolbarInk, recents = editor.hostRecentColors, onDismiss = d, onPick = p)
+                    }
+                }
             }
-            if (tool == Tool.CALLIGRAPHY) {
-                SliderRow(stringResource(R.string.caption_multiplier), multiplier, 1f..5f) { multiplier = it; emit() }
-            }
-            if (tool == Tool.SPEED) {
-                SliderRow(stringResource(R.string.caption_speed), speed, 0f..100f) { speed = it; emit() }
-            }
-            if (tool == Tool.TAPER) {
-                SliderRow(stringResource(R.string.caption_tip_width), taperTip, 0f..100f) { taperTip = it; emit() }
-            }
+
             val range = ToolConversions.widthRange(tool)
-            SliderRow(stringResource(R.string.caption_width), width, range.start.toFloat()..range.endInclusive.toFloat()) { width = it; emit() }
-            // SCALE off: ink keeps a constant on-screen thickness whatever zoom you draw at.
-            ToggleRow(stringResource(R.string.caption_scale), scale) { scale = it; emit() }
-            if (tool == Tool.DASHED) {
-                SliderRow(stringResource(R.string.caption_dash), dashLen, 2f..40f) { dashLen = it; emit() }
-                SliderRow(stringResource(R.string.caption_gap), gapLen, 2f..40f) { gapLen = it; emit() }
-            }
-            // The highlighter's strength (translucency) and an optional straight-segment lock
-            // (for ruling/underlining).
-            if (tool == Tool.HIGHLIGHTER) {
-                SliderRow(stringResource(R.string.caption_intensity), intensity, 10f..90f) { intensity = it; emit() }
-                ToggleRow(stringResource(R.string.caption_straight_line), straight) { straight = it; emit() }
-                // INVERSE swaps the multiply blend for a screen one, so the marker lightens the
-                // page instead of darkening it. A multiply has nothing to darken on a dark page.
-                ToggleRow(stringResource(R.string.caption_inverse), inverse) { inverse = it; emit() }
-            }
-            // Glow is offered on every stroke tool except the highlighter (translucent) and the
-            // dashed pen (it draws a line, not a fillable ribbon, so a halo has nothing to hug).
-            if (tool.isStroke && tool != Tool.HIGHLIGHTER && tool != Tool.DASHED) {
-                ToggleRow(stringResource(R.string.caption_neon), glow) { glow = it; emit() }
-                if (glow) {
-                    SliderRow(stringResource(R.string.caption_glow_intensity), glowIntensity, 0f..100f) { glowIntensity = it; emit() }
+            Card(stringResource(R.string.section_width)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(R.string.width_fine to 0.12f, R.string.width_medium to 0.3f, R.string.width_bold to 0.55f, R.string.width_extra to 0.85f).forEach { (label, t) ->
+                        val w = range.start.toFloat() + (range.endInclusive - range.start).toFloat() * t * t
+                        ModeChip(stringResource(label), kotlin.math.abs(width - w) < 0.05f * (range.endInclusive - range.start).toFloat() * t + 0.05f) { width = w; emitAll() }
+                    }
                 }
+                SliderRow(stringResource(R.string.caption_width), width, range.start.toFloat()..range.endInclusive.toFloat()) { width = it; emitAll() }
+            }
+
+            val hasPressure = tool == Tool.PEN || tool == Tool.CALLIGRAPHY || tool == Tool.SPEED || tool == Tool.TAPER || tool == Tool.BRUSH
+            if (hasPressure) {
+                Card(stringResource(R.string.section_pressure)) {
+                    ToggleRow(stringResource(R.string.caption_pressure), pressure) { pressure = it; emitAll() }
+                    SliderRow(stringResource(R.string.caption_sensitivity), sensitivity, 0f..100f, enabled = pressure) { sensitivity = it; emitAll() }
+                    if (tool == Tool.CALLIGRAPHY) SliderRow(stringResource(R.string.caption_multiplier), multiplier, 1f..5f) { multiplier = it; emitAll() }
+                    if (tool == Tool.SPEED) SliderRow(stringResource(R.string.caption_speed), speed, 0f..100f) { speed = it; emitAll() }
+                    if (tool == Tool.TAPER) SliderRow(stringResource(R.string.caption_tip_width), taperTip, 0f..100f) { taperTip = it; emitAll() }
+                }
+            }
+
+            if (tool == Tool.BRUSH) {
+                Card(stringResource(R.string.section_texture)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(
+                            com.xnotes.core.tools.Brush.PENCIL to R.string.brush_pencil,
+                            com.xnotes.core.tools.Brush.CRAYON to R.string.brush_crayon,
+                            com.xnotes.core.tools.Brush.CHALK to R.string.brush_chalk,
+                            com.xnotes.core.tools.Brush.WATERCOLOR to R.string.brush_watercolor,
+                            com.xnotes.core.tools.Brush.SPRAY to R.string.brush_spray,
+                            com.xnotes.core.tools.Brush.RAINBOW to R.string.brush_rainbow,
+                        ).forEach { (b, label) -> ModeChip(stringResource(label), brush == b) { brush = b; emitAll() } }
+                    }
+                }
+            }
+
+            if (tool == Tool.HIGHLIGHTER) {
+                Card(stringResource(R.string.section_marker)) {
+                    SliderRow(stringResource(R.string.caption_intensity), intensity, 10f..90f) { intensity = it; emitAll() }
+                    ToggleRow(stringResource(R.string.caption_straight_line), straight) { straight = it; emitAll() }
+                }
+            }
+
+            if (tool.isStroke && tool != Tool.HIGHLIGHTER && tool != Tool.DASHED) {
+                Card(stringResource(R.string.section_effects)) {
+                    ToggleRow(stringResource(R.string.caption_neon), glow) { glow = it; emitAll() }
+                    if (glow) SliderRow(stringResource(R.string.caption_glow_intensity), glowIntensity, 0f..100f) { glowIntensity = it; emitAll() }
+                }
+            }
+
+            // The rarely touched settings, folded away.
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { advanced = !advanced }.padding(vertical = 8.dp, horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(stringResource(R.string.section_advanced), color = palette.text.toComposeColor(), fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Icon(if (advanced) XnotesIcons.chevronUp else XnotesIcons.chevronDown, null, tint = palette.textDim.toComposeColor(), modifier = Modifier.size(16.dp))
+            }
+            if (advanced) {
+                ToggleRow(stringResource(R.string.caption_scale), scale) { scale = it; emitAll() }
+                if (tool == Tool.DASHED) {
+                    SliderRow(stringResource(R.string.caption_dash), dashLen, 2f..40f) { dashLen = it; emitAll() }
+                    SliderRow(stringResource(R.string.caption_gap), gapLen, 2f..40f) { gapLen = it; emitAll() }
+                }
+                if (tool == Tool.HIGHLIGHTER) ToggleRow(stringResource(R.string.caption_inverse), inverse) { inverse = it; emitAll() }
+            }
+
+            if (fullEditor != null && tool.isStroke) {
+                Spacer(Modifier.size(4.dp))
+                Box(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(palette.selectionBackground.toComposeColor())
+                        .clickable { saving = true }.padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Text(stringResource(R.string.save_pen), color = palette.selectionForeground.toComposeColor(), fontSize = 14.sp, fontWeight = FontWeight.Medium) }
             }
         }
     }
+    if (saving && fullEditor != null) SavePenNameDialog(onSave = { fullEditor.saveCurrentPen(it); saving = false; onDismiss() }, onDismiss = { saving = false })
+}
+
+/** A sample stroke drawn with the pen's current settings, so changes show before touching the page. */
+@Composable
+private fun StrokePreview(color: Rgba, widthPx: Float, pressure: Boolean, minFactor: Float, alpha: Float, glow: Boolean, dashed: Boolean) {
+    val palette = LocalPalette.current
+    val ink = color.toComposeColor().copy(alpha = alpha)
+    Box(
+        Modifier.fillMaxWidth().height(64.dp).clip(RoundedCornerShape(14.dp))
+            .background(palette.paper.toComposeColor())
+            .border(1.dp, palette.border.toComposeColor(), RoundedCornerShape(14.dp)),
+    ) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 10.dp)) {
+            val n = 64
+            val w = size.width
+            val h = size.height
+            fun pt(t: Float) = androidx.compose.ui.geometry.Offset(t * w, h / 2 + kotlin.math.sin(t * 2 * Math.PI.toFloat()) * h * 0.32f)
+            val base = (widthPx * 1.4f).coerceIn(1f, h * 0.7f)
+            for (i in 0 until n) {
+                val t0 = i / n.toFloat()
+                val t1 = (i + 1) / n.toFloat()
+                if (dashed && (i / 4) % 2 == 1) continue
+                val p = if (pressure) minFactor + (1 - minFactor) * kotlin.math.sin(t0 * Math.PI.toFloat()) else 1f
+                val sw = base * p
+                if (glow) drawLine(ink.copy(alpha = 0.18f), pt(t0), pt(t1), strokeWidth = sw * 3.2f, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                drawLine(ink, pt(t0), pt(t1), strokeWidth = sw, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+            }
+        }
+    }
+}
+
+/** Names the pen's current settings to keep them in its drawer. */
+@Composable
+private fun SavePenNameDialog(onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var name by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.save_pen)) },
+        text = { androidx.compose.material3.OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, placeholder = { Text(stringResource(R.string.pen_name_hint)) }) },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { if (name.isNotBlank()) onSave(name) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.save)) } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+    )
 }
 
 /**

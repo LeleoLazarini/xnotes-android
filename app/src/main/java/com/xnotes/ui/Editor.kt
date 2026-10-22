@@ -499,7 +499,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         private set
     var toolbarColors by mutableStateOf(InkPalette.presets)
         private set
-    var toolbarColorCount by mutableStateOf(5)
+    var toolbarColorCount by mutableStateOf(6)
         private set
     var toolbarLayout by mutableStateOf(ToolbarLayout.DEFAULT)
 
@@ -1543,7 +1543,16 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         controller.onMarkupTap = { at, withLink -> tapMarkup(at, withLink) }
         controller.onTap = { at -> tapClosesNotePeek(at) }
         controller.onBeforeFlip = { forward -> startPageTurn(forward) }
+        controller.motionPredictor = runCatching { androidx.input.motionprediction.MotionEventPredictor.newInstance(view) }.getOrNull()
+        // Ink drawn while recording remembers when, so a tap on it plays that moment back.
+        controller.onStrokeFiled = { s -> recording?.let { clip -> s.audioClip = clip.id; s.audioAt = android.os.SystemClock.uptimeMillis() - recordingStartedAt } }
         controller.onLinkTap = onLinkTap@{ pageIndex, pageLocal ->
+            // A finger tap on a linked box jumps to its page; on ink drawn while recording, plays that moment.
+            state.document.pages.getOrNull(pageIndex)?.items?.asReversed()?.forEach { item ->
+                if (!item.contains(pageLocal)) return@forEach
+                (item as? com.xnotes.core.model.Linkable)?.linkPage?.takeIf { it in state.document.pages.indices }?.let { goToPage(it); return@onLinkTap true }
+                audioOf(item)?.let { (clip, at) -> playAudio(clip, at); return@onLinkTap true }
+            }
             // A tap on a day of an agenda's month calendar opens that day's page.
             Agenda.dayAt(state.document, pageIndex, pageLocal)?.let { day ->
                 goToPage(day)
@@ -2017,7 +2026,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     fun insertImage(bytes: ByteArray) = insertImageAt(bytes, null)
 
     /** Insert an image, centred on [atContent] (or on the current page when null). */
-    fun insertImageAt(bytes: ByteArray, atContent: com.xnotes.core.geometry.Pt?) {
+    fun insertImageAt(bytes: ByteArray, atContent: com.xnotes.core.geometry.Pt?, fill: Double = 0.6) {
         val file = runCatching {
             java.io.File.createTempFile("img", null, imageDir).apply { writeBytes(bytes) }
         }.getOrNull()
@@ -2031,8 +2040,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             .coerceIn(0, state.document.pages.lastIndex)
         val page = state.document.pages[index]
         val pr = state.pageRects.getOrNull(index)
-        val maxW = page.width * 0.6
-        val maxH = page.height * 0.6
+        val maxW = page.width * fill
+        val maxH = page.height * fill
         val scale = minOf(1.0, maxW / size.width, maxH / size.height)
         val w = size.width * scale
         val h = size.height * scale
@@ -2702,6 +2711,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         TemplateLibrary.embed(state.document, style.template)
         state.document.style = style
         applyStyleChange(prev, style, state.document.pages.toList())
+        if (prev.accentColor != style.accentColor) recolorAgendaText(state.document.pages.toList())
     }
 
     /** Replace the current page's style override. */
@@ -2712,6 +2722,16 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         TemplateLibrary.embed(state.document, style.template)
         page.style = style
         applyStyleChange(prev, style, listOf(page))
+        if (prev.accentColor != style.accentColor) recolorAgendaText(listOf(page))
+    }
+
+    /** An agenda's dates and day numbers follow the heading colour chosen for their page. */
+    private fun recolorAgendaText(pages: List<com.xnotes.core.model.Page>) {
+        if (!Agenda.recolor(state.document, pages)) return
+        state.document.dirty = true
+        state.invalidateAllCaches()
+        refreshView()
+        view.requestRender()
     }
 
     // --- page margins (extra paper on any edge): document-wide ("All Pages") and per-page ---
@@ -4531,6 +4551,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         for ((name, file) in assets) expected.add(name to file.length())
         doc.pdfFile?.let { expected.add("assets/source.pdf" to it.length()) }
         if (expected.isEmpty()) return@runCatching false
+        // Recordings are assets the in-place splice doesn't track: write the whole bundle instead.
+        if (doc.audio.isNotEmpty()) return@runCatching false
 
         val target = android.net.Uri.parse(uri)
         // Streams built on a descriptor the provider owns are never closed here: closing one closes
@@ -6268,6 +6290,344 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     override fun mirrorSelection(upsideDown: Boolean) = controller.mirrorSelection(upsideDown)
 
+    // --- toolkit: handwriting to text, text in images, page links, audio, drops, scans ---
+
+    /** Handwriting read back, waiting for the user to accept it as a text box. */
+    class InkConversion(val pageIndex: Int, val text: String, val alternatives: List<String>, val bounds: Rect, val color: Rgba, val pointSize: Double)
+
+    var inkConversion by mutableStateOf<InkConversion?>(null)
+        private set
+
+    /** The words read off a picture, waiting to be copied or placed. */
+    class ImageTextResult(val pageIndex: Int, val text: String, val beside: Rect)
+
+    var imageTextResult by mutableStateOf<ImageTextResult?>(null)
+        private set
+
+    /** True while the "Link to page" picker is open for the selection. */
+    var linkPicking by mutableStateOf(false)
+
+    override fun canConvertToText(): Boolean = controller.selectedItems.any { it.item is com.xnotes.core.model.Stroke }
+
+    override fun convertToText() {
+        val sel = controller.selectedItems.filter { it.item is com.xnotes.core.model.Stroke }
+        if (sel.isEmpty()) return
+        val pageIndex = sel.groupingBy { it.pageIndex }.eachCount().maxByOrNull { it.value }!!.key
+        val strokes = sel.filter { it.pageIndex == pageIndex }.map { it.item as com.xnotes.core.model.Stroke }
+        autosaveScope.launch {
+            message = appContext.getString(if (com.xnotes.platform.InkText.ready()) R.string.ink_reading else R.string.ink_downloading)
+            val lines = com.xnotes.platform.InkText.recognize(strokes)
+            if (lines.isEmpty()) {
+                message = appContext.getString(R.string.ink_failed)
+                return@launch
+            }
+            message = null
+            val bounds = Rect.bounding(lines.flatMap { listOf(it.bounds.topLeft, Pt(it.bounds.right, it.bounds.bottom)) })
+            val lineH = lines.map { it.bounds.h }.average()
+            // A typed line about as tall as the handwritten one: the cap height runs near 0.7 of a line.
+            val points = (lineH * TEXT_FROM_INK_SCALE / state.document.dpi * 72.0).coerceIn(9.0, 48.0)
+            inkConversion = InkConversion(
+                pageIndex,
+                lines.joinToString("\n") { it.text },
+                if (lines.size == 1) lines[0].alternatives else emptyList(),
+                bounds,
+                strokes.first().config.rgba,
+                points,
+            )
+        }
+    }
+
+    /** Place [text] where the handwriting was, replacing it unless [keepInk]. One undo step. */
+    fun applyInkConversion(text: String, keepInk: Boolean) {
+        val c = inkConversion ?: return
+        inkConversion = null
+        if (text.isBlank()) return
+        val item = com.xnotes.core.model.TextItem(
+            c.bounds.topLeft, maxOf(c.bounds.w * 1.15, MIN_CONVERTED_WIDTH), 0.0, text,
+            c.color.withAlpha(255), c.pointSize, FontFace.SANS, textMeasurer,
+        )
+        controller.replaceSelection(c.pageIndex, item, keepInk)
+        refreshContent()
+        view.requestRender()
+    }
+
+    fun dismissInkConversion() {
+        inkConversion = null
+    }
+
+    override fun canReadImageText(): Boolean = controller.selectedItems.singleOrNull()?.item is ImageItem
+
+    override fun readImageText() {
+        val s = controller.selectedItems.singleOrNull() ?: return
+        val img = s.item as? ImageItem ?: return
+        autosaveScope.launch {
+            message = appContext.getString(R.string.ocr_reading)
+            val text = com.xnotes.platform.ImageText.read(img.image.file.path)
+            message = if (text == null) appContext.getString(R.string.ocr_failed) else null
+            if (text != null) imageTextResult = ImageTextResult(s.pageIndex, text, img.rect)
+        }
+    }
+
+    /** Put the read words in a text box beside the picture (the picture stays). */
+    fun placeImageText(text: String) {
+        val r = imageTextResult ?: return
+        imageTextResult = null
+        val item = com.xnotes.core.model.TextItem(
+            Pt(r.beside.left, r.beside.bottom + 12.0), maxOf(r.beside.w, MIN_CONVERTED_WIDTH), 0.0, text,
+            controller.inkColor.withAlpha(255), 12.0, FontFace.SANS, textMeasurer,
+        )
+        controller.replaceSelection(r.pageIndex, item, keepSelected = true)
+        refreshContent()
+        view.requestRender()
+    }
+
+    fun dismissImageText() {
+        imageTextResult = null
+    }
+
+    override fun canLinkSelection(): Boolean =
+        controller.selectedItems.isNotEmpty() && controller.selectedItems.all { it.item is com.xnotes.core.model.Linkable }
+
+    override fun linkSelection() {
+        linkPicking = true
+    }
+
+    /** Make every selected text box or shape jump to page [index] on a finger tap (null unlinks). */
+    fun applyLink(index: Int?) {
+        linkPicking = false
+        controller.selectedItems.forEach { (it.item as? com.xnotes.core.model.Linkable)?.linkPage = index }
+        state.document.dirty = true
+        dirty = true
+        message = appContext.getString(if (index == null) R.string.link_removed else R.string.link_set, (index ?: 0) + 1)
+    }
+
+    /**
+     * Append a contents page: the note's bookmarks (or, with none, its pages) as rows that jump
+     * where they point. It goes at the end so no page number it links to shifts.
+     */
+    fun insertContentsPage() {
+        val doc = state.document
+        val entries = doc.bookmarks.sortedBy { it.page }.map { it.label to it.page }
+            .ifEmpty { doc.pages.indices.take(MAX_CONTENTS_ROWS).map { appContext.getString(R.string.page_n, it + 1) to it } }
+        val ref = doc.pages.last()
+        val page = Page(ref.width, ref.height)
+        val inset = 12.0 / 25.4 * doc.dpi
+        val ink = Rgba(40, 40, 48)
+        page.items += com.xnotes.core.model.TextItem(Pt(inset, inset), page.width - 2 * inset, 0.0, appContext.getString(R.string.contents_title), ink, 26.0, FontFace.SERIF, textMeasurer).also { it.locked = true }
+        val rowH = 11.0 / 25.4 * doc.dpi
+        entries.forEachIndexed { i, (label, target) ->
+            val y = inset + 22.0 / 25.4 * doc.dpi + i * rowH
+            if (y > page.height - inset) return@forEachIndexed
+            page.items += com.xnotes.core.model.TextItem(
+                Pt(inset, y), page.width - 2 * inset, 0.0, "$label  ·  ${appContext.getString(R.string.page_n, target + 1)}",
+                ink, 14.0, FontFace.SANS, textMeasurer,
+            ).also { it.locked = true; it.linkPage = target }
+        }
+        doc.pages.add(page)
+        history.push(com.xnotes.core.history.AddPage(doc, page, doc.pages.lastIndex))
+        doc.dirty = true
+        state.relayout()
+        goToPage(doc.pages.lastIndex)
+        refreshContent()
+    }
+
+    // Recording ----------------------------------------------------------------------------------
+
+    private var recorder: android.media.MediaRecorder? = null
+
+    /** The clip being recorded, or null. */
+    var recording by mutableStateOf<com.xnotes.core.model.AudioClip?>(null)
+        private set
+
+    /** When [recording] started, on the uptime clock (for the elapsed time and the stroke stamps). */
+    var recordingStartedAt by mutableStateOf(0L)
+        private set
+
+    /** Set by the toolbar; the overlay asks for the microphone, then calls [startRecording]. */
+    var recordRequested by mutableStateOf(false)
+
+    fun startRecording(): Boolean {
+        if (recording != null) return true
+        val id = (state.document.audio.maxOfOrNull { it.id } ?: 0) + 1
+        val dir = java.io.File(appContext.cacheDir, "audio").apply { mkdirs() }
+        val file = java.io.File.createTempFile("rec", ".m4a", dir)
+        val r = if (android.os.Build.VERSION.SDK_INT >= 31) android.media.MediaRecorder(appContext) else @Suppress("DEPRECATION") android.media.MediaRecorder()
+        val ok = runCatching {
+            r.setAudioSource(android.media.MediaRecorder.AudioSource.MIC)
+            r.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
+            r.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC)
+            r.setAudioSamplingRate(44_100)
+            r.setAudioEncodingBitRate(64_000)
+            r.setOutputFile(file.path)
+            r.prepare()
+            r.start()
+        }.isSuccess
+        if (!ok) {
+            r.release()
+            message = appContext.getString(R.string.audio_failed)
+            return false
+        }
+        recorder = r
+        recording = com.xnotes.core.model.AudioClip(id, file)
+        recordingStartedAt = android.os.SystemClock.uptimeMillis()
+        return true
+    }
+
+    fun stopRecording() {
+        val clip = recording ?: return
+        runCatching { recorder?.stop() }
+        recorder?.release()
+        recorder = null
+        recording = null
+        if (clip.file.length() > 0) {
+            state.document.audio += clip
+            state.document.dirty = true
+            dirty = true
+            message = appContext.getString(R.string.audio_saved)
+        }
+    }
+
+    // Playback -----------------------------------------------------------------------------------
+
+    private var player: android.media.MediaPlayer? = null
+
+    /** The clip playing, or null. */
+    var playing by mutableStateOf<com.xnotes.core.model.AudioClip?>(null)
+        private set
+
+    /** Play [clip] from [fromMs], a moment early so the start of what was said isn't clipped. */
+    fun playAudio(clip: com.xnotes.core.model.AudioClip, fromMs: Long) {
+        stopAudio()
+        val p = android.media.MediaPlayer()
+        val ok = runCatching {
+            p.setDataSource(clip.file.path)
+            p.prepare()
+            p.seekTo((fromMs - AUDIO_LEAD_MS).coerceAtLeast(0L).toInt())
+            p.setOnCompletionListener { stopAudio() }
+            p.start()
+        }.isSuccess
+        if (!ok) { p.release(); return }
+        player = p
+        playing = clip
+    }
+
+    fun stopAudio() {
+        runCatching { player?.stop() }
+        player?.release()
+        player = null
+        playing = null
+    }
+
+    /** The clip a finger tap on [item] should play, and from where; null when it has none. */
+    private fun audioOf(item: com.xnotes.core.model.CanvasItem): Pair<com.xnotes.core.model.AudioClip, Long>? {
+        val s = item as? com.xnotes.core.model.Stroke ?: return null
+        val id = s.audioClip ?: return null
+        val clip = state.document.audio.firstOrNull { it.id == id } ?: return null
+        return clip to s.audioAt
+    }
+
+    // Drops, shares and scans -------------------------------------------------------------------
+
+    /** Text dropped or shared in: a text box at [atContent] (or the middle of the view). */
+    fun insertTextAt(text: String, atContent: Pt?) {
+        if (text.isBlank()) return
+        val c = atContent ?: state.viewportToContent(Pt(state.viewportW / 2.0, state.viewportH / 2.0))
+        val pi = (state.pageIndexAtContent(c) ?: state.currentPageIndex()).coerceIn(0, state.document.pages.lastIndex)
+        val page = state.document.pages[pi]
+        val local = state.toPageSpace(pi, c)
+        val item = com.xnotes.core.model.TextItem(local, minOf(page.width * 0.6, 900.0), 0.0, text.trim(), controller.inkColor.withAlpha(255), 13.0, FontFace.SANS, textMeasurer)
+        page.items.add(item); state.appendToCache(page, item); history.push(AddItem(page, item))
+        state.document.dirty = true; refreshContent(); view.requestRender()
+    }
+
+    /** Images, files or text dropped from another app at viewport ([vx], [vy]). IO happens off-thread. */
+    fun acceptDrop(clip: android.content.ClipData?, vx: Double, vy: Double, resolver: android.content.ContentResolver, done: () -> Unit) {
+        val at = state.viewportToContent(Pt(vx, vy))
+        if (clip == null) { done(); return }
+        autosaveScope.launch {
+            for (i in 0 until clip.itemCount) {
+                val it = clip.getItemAt(i)
+                val uri = it.uri
+                if (uri != null) {
+                    val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { resolver.openInputStream(uri)?.use { s -> s.readBytes() } }.getOrNull() }
+                    if (bytes != null) insertImageAt(bytes, at) else message = appContext.getString(R.string.drop_failed)
+                } else {
+                    it.text?.toString()?.let { t -> insertTextAt(t, at) }
+                }
+            }
+            done()
+        }
+    }
+
+    /** Images (or text) shared in from another app, into the open note's current page. */
+    fun acceptShared(uris: List<android.net.Uri>, text: String?, resolver: android.content.ContentResolver) {
+        autosaveScope.launch {
+            for (uri in uris) {
+                val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { resolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull() }
+                if (bytes != null) insertImageAt(bytes, null)
+            }
+            text?.let { insertTextAt(it, null) }
+        }
+    }
+
+    /** Scanned pages: each on a page of its own after the current one, filling it. */
+    fun insertScannedPages(images: List<ByteArray>) {
+        for (bytes in images) {
+            insertPageAfter(state.currentPageIndex())
+            insertImageAt(bytes, null, fill = SCAN_FILL)
+        }
+    }
+
+    /** Set by the toolbar; the overlay launches the system document scanner. */
+    var scanRequested by mutableStateOf(false)
+
+    // Handwriting search -------------------------------------------------------------------------
+
+    /** Each page's handwriting read as lines, with the stroke count it was read at (stale when that changes). */
+    private val inkIndex = java.util.IdentityHashMap<Page, Pair<Int, List<String>>>()
+
+    /** "Page i of n" while handwriting is being read for a search, else null. */
+    var inkSearchProgress by mutableStateOf<Pair<Int, Int>?>(null)
+        private set
+
+    /** Lines of handwriting matching the last handwriting search, as (page index, line); null before one. */
+    var inkSearchHits by mutableStateOf<List<Pair<Int, String>>?>(null)
+        private set
+
+    /** Read every page's handwriting (once per change) and keep the lines containing [query]. */
+    fun searchHandwriting(query: String) {
+        val q = fold(query)
+        if (q.isBlank()) return
+        autosaveScope.launch {
+            if (!com.xnotes.platform.InkText.ready()) message = appContext.getString(R.string.ink_downloading)
+            if (!com.xnotes.platform.InkText.ensureModel()) {
+                message = appContext.getString(R.string.ink_failed)
+                return@launch
+            }
+            message = null
+            val pages = state.document.pages.toList()
+            val hits = ArrayList<Pair<Int, String>>()
+            pages.forEachIndexed { i, p ->
+                inkSearchProgress = (i + 1) to pages.size
+                val strokes = p.items.filterIsInstance<com.xnotes.core.model.Stroke>().filter { it.tool != Tool.HIGHLIGHTER }
+                val cached = inkIndex[p]
+                val lines = if (cached != null && cached.first == strokes.size) cached.second
+                else com.xnotes.platform.InkText.recognize(strokes).map { it.text }.also { inkIndex[p] = strokes.size to it }
+                lines.filter { fold(it).contains(q) }.forEach { hits += i to it }
+            }
+            inkSearchProgress = null
+            inkSearchHits = hits
+        }
+    }
+
+    fun clearHandwritingSearch() {
+        inkSearchHits = null
+    }
+
+    /** Lower case without accents, so "reuniao" finds "Reunião". */
+    private fun fold(s: String): String =
+        java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD).replace(Regex("\\p{M}+"), "")
+
     override fun restyleSelection(color: Rgba?, width: Double?, preview: Boolean) {
         controller.restyleSelection(color, width, preview)
         if (!preview) color?.let { settings = settings.rememberColor(it) }
@@ -7631,3 +7991,18 @@ private const val BUNDLED_STICKERS = "stickers"
 
 /** A new sticky note's side, as a share of the page's shorter side (about 63 mm on A4). */
 private const val POST_IT_SHARE = 0.3
+
+/** Typed text from handwriting: font size as a share of the handwritten line height. */
+private const val TEXT_FROM_INK_SCALE = 0.62
+
+/** The narrowest text box a conversion makes, in page px. */
+private const val MIN_CONVERTED_WIDTH = 160.0
+
+/** At most this many rows on a contents page built from pages (no bookmarks). */
+private const val MAX_CONTENTS_ROWS = 40
+
+/** Playback from a tapped stroke starts this much earlier, in ms. */
+private const val AUDIO_LEAD_MS = 1500L
+
+/** A scanned page fills this share of its note page. */
+private const val SCAN_FILL = 0.94

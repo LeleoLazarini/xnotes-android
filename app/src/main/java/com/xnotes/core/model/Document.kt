@@ -41,6 +41,9 @@ class Document(
     /** Set on a dated planner made by "New agenda": its year, which lays out its month and day pages. */
     var agendaYear: Int? = null,
 ) {
+    /** Recordings made in this note, saved inside it as assets/audio-NNN.m4a. */
+    val audio: MutableList<AudioClip> = mutableListOf()
+
     /** Transient: set by the codec when legacy ink was compacted at load (debug overlay readout). */
     var compactedOnLoad = false
 

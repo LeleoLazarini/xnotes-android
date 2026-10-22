@@ -93,7 +93,15 @@ class Stroke(
     /** Copy constructor: duplicates the sample arrays without materializing a single [Sample]. */
     constructor(src: Stroke) : this(src.tool, src.config, emptyList(), src.speedScale, src.straight, src.smoothScale) {
         pts = src.pts.detached()
+        audioClip = src.audioClip
+        audioAt = src.audioAt
     }
+
+    /** The recording ([AudioClip.id]) running when this stroke was drawn, or null. */
+    var audioClip: Int? = null
+
+    /** How far into [audioClip] the stroke began, in ms. */
+    var audioAt: Long = 0L
 
     // --- sample access ---
 

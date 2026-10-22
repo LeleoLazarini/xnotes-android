@@ -71,7 +71,8 @@ class ShapeItem(
     /** What an open shape's two ends carry; an arrow starts with a chevron at its end. */
     var headStart: Head = shape.defaultHeadStart,
     var headEnd: Head = shape.defaultHeadEnd,
-) : CanvasItem, Resizable, Labelled {
+) : CanvasItem, Resizable, Labelled, Linkable {
+    override var linkPage: Int? = null
 
     override val kind = KIND
     override val resizable = true

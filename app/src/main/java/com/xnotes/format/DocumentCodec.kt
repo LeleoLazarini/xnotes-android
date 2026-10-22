@@ -3,8 +3,10 @@ package com.xnotes.format
 import com.xnotes.core.geometry.Flip
 import com.xnotes.core.geometry.Pt
 import com.xnotes.core.geometry.Rect
+import com.xnotes.core.model.AudioClip
 import com.xnotes.core.model.Bookmark
 import com.xnotes.core.model.CanvasItem
+import com.xnotes.core.model.Linkable
 import com.xnotes.core.model.ConnectorEnd
 import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Document
@@ -172,6 +174,7 @@ class DocumentCodec(
             // The source PDF streams straight from disk for the same reason. [isCancelled] lets a
             // long copy abort (e.g. import cancel).
             doc.pdfFile?.let { zos.putStored("assets/source.pdf", it, isCancelled) }
+            for (clip in doc.audio) if (clip.file.isFile) zos.putStored(audioEntry(clip.id), clip.file, isCancelled)
             val assetsDone = System.nanoTime()
             writeTail(zos, doc, assets, timing)
             timing?.assetsMs = (assetsDone - started) / 1_000_000L
@@ -362,6 +365,7 @@ class DocumentCodec(
         if (s.smoothScale != 1.0) j.name("smooth_scale").value(s.smoothScale)
         // Straight-line strokes must reload un-smoothed, else the EMA pulls their far end inward.
         if (s.straight) j.name("straight").value(true)
+        s.audioClip?.let { j.name("audio").beginArray().value(it).value(s.audioAt.toDouble()).endArray() }
         if (s.locked) j.name("locked").value(true)
         j.endObject()
     }
@@ -398,6 +402,7 @@ class DocumentCodec(
         if (t.height > 0.0) j.name("height").value(t.height)
         if (t.face != TextItem.DEFAULT_FACE) j.name("font_face").value(t.face.id)
         if (t.locked) j.name("locked").value(true)
+        t.linkPage?.let { j.name("link_page").value(it) }
         j.endObject()
     }
 
@@ -466,6 +471,7 @@ class DocumentCodec(
             j.endObject()
         }
         if (s.locked) j.name("locked").value(true)
+        s.linkPage?.let { j.name("link_page").value(it) }
         j.endObject()
     }
 
@@ -612,6 +618,7 @@ class DocumentCodec(
         var markupBytes: ByteArray? = null
         val templates = HashMap<String, String>()
         val imageFiles = HashMap<String, File>()
+        val audioFiles = HashMap<Int, File>()
         var pdfFile: File? = null
         ZipInputStream(input).use { zis ->
             var entry: ZipEntry? = zis.nextEntry
@@ -641,6 +648,14 @@ class DocumentCodec(
                             FileOutputStream(f).use { zis.copyTo(it) }
                             pdfFile = f
                             timing?.assetsMs += (System.nanoTime() - started) / 1_000_000L
+                        }
+                    } else if (name.startsWith(AUDIO_PREFIX)) {
+                        // Recordings stream to disk like images; the number in the name is the clip id.
+                        val id = name.removePrefix(AUDIO_PREFIX).substringBefore('.').toIntOrNull()
+                        if (imageDir != null && id != null) {
+                            val f = File.createTempFile("aud", ".m4a", imageDir)
+                            FileOutputStream(f).use { zis.copyTo(it) }
+                            audioFiles[id] = f
                         }
                     } else if (name.startsWith("assets/image-")) {
                         // Stream images to disk too (or skip): a note full of large images must never
@@ -674,6 +689,7 @@ class DocumentCodec(
         val doc = Document(dpi = m.dpi)
         doc.created = m.created
         doc.agendaYear = m.agendaYear
+        audioFiles.toSortedMap().forEach { (id, file) -> doc.audio += AudioClip(id, file) }
         doc.templates = templates
         doc.style = m.style
         doc.margins = m.margins
@@ -917,6 +933,8 @@ class DocumentCodec(
     /** Union of every kind's fields, so an item parses in one pass whatever its key order. */
     private class ItemScratch {
         var locked = false
+        var audio: DoubleArray? = null
+        var linkPage: Int? = null
         var stickyNote = false
         var kind: String? = null
         var id: Int? = null
@@ -1033,6 +1051,8 @@ class DocumentCodec(
                 "dash_length" -> s.dashLength = doubleOr(p, 10.0)
                 "dash_gap" -> s.dashGap = doubleOr(p, 8.0)
                 "locked" -> s.locked = boolOr(p, false)
+                "audio" -> s.audio = doublesOrNull(p)
+                "link_page" -> s.linkPage = intOrNull(p)
                 "sticky_note" -> s.stickyNote = boolOr(p, false)
                 else -> p.skipValue()
             }
@@ -1073,6 +1093,7 @@ class DocumentCodec(
         if (items.size > before) glue.named(items[before], s.id)
         // Absent on every note written before locking existed, which reads back as unlocked.
         if (s.locked && items.size > before) items[before].locked = true
+        s.linkPage?.let { lp -> (items.getOrNull(before) as? Linkable)?.linkPage = lp }
     }
 
     private fun buildStroke(s: ItemScratch): Stroke {
@@ -1099,6 +1120,7 @@ class DocumentCodec(
             brush = Brush.fromId(c?.brush) ?: def.brush,
         )
         val stroke = Stroke(tool, config, emptyList(), s.speedScale, s.straight, s.smoothScale)
+        s.audio?.takeIf { it.size >= 2 }?.let { stroke.audioClip = it[0].toInt(); stroke.audioAt = it[1].toLong() }
         s.samples?.let { stroke.setSamples(it.xs, it.ys, it.ps, it.ts, it.n) }
         return stroke
     }
@@ -1429,6 +1451,10 @@ class DocumentCodec(
     // --- streaming value helpers (mirroring org.json's forgiving opt* coercions) ---
 
     private fun doubleOr(p: JsonPull, def: Double): Double = doubleOrNull(p) ?: def
+
+    private fun audioEntry(id: Int) = "%s%03d.m4a".format(AUDIO_PREFIX, id)
+
+    private val AUDIO_PREFIX = "assets/audio-"
 
     private fun doubleOrNull(p: JsonPull): Double? = when (p.peek()) {
         JsonPull.Token.NUMBER -> p.nextDouble()
