@@ -1,0 +1,231 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.reading-list",
+  "name": "Reading list",
+  "description": "Lista de leitura: livros numerados com título, autor, datas de início e fim e nota de uma a cinco estrelas para pintar.",
+  "license": "MIT",
+  "tags": [
+    "study",
+    "lists"
+  ],
+  "params": {
+    "linha": {
+      "type": "length",
+      "default": "10mm",
+      "min": "7mm",
+      "max": "16mm",
+      "label": "Altura da linha",
+      "role": "spacing"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Lista de leitura",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Meta",
+          "x": 0,
+          "y": "19mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "19.5mm",
+          "x1": "14mm",
+          "x2": "62%"
+        },
+        {
+          "type": "text",
+          "text": "Ano",
+          "x": "65%",
+          "y": "19mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "19.5mm",
+          "x1": "65% + 11mm",
+          "x2": "100%"
+        },
+        {
+          "type": "hline",
+          "y": "25mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "29mm",
+          "h": "100% - 29mm",
+          "children": [
+            {
+              "type": "rect",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "hline",
+              "y": "9mm",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "vline",
+              "x": "6%"
+            },
+            {
+              "type": "vline",
+              "x": "44%"
+            },
+            {
+              "type": "vline",
+              "x": "66%"
+            },
+            {
+              "type": "vline",
+              "x": "77%"
+            },
+            {
+              "type": "vline",
+              "x": "88%"
+            },
+            {
+              "type": "text",
+              "text": "#",
+              "x": "3%",
+              "y": "6mm",
+              "fill": "accent",
+              "size": "3mm",
+              "weight": "bold",
+              "align": "middle"
+            },
+            {
+              "type": "text",
+              "text": "Título",
+              "x": "6% + 1.5mm",
+              "y": "6mm",
+              "fill": "accent",
+              "size": "3mm",
+              "weight": "bold"
+            },
+            {
+              "type": "text",
+              "text": "Autor",
+              "x": "44% + 1.5mm",
+              "y": "6mm",
+              "fill": "accent",
+              "size": "3mm",
+              "weight": "bold"
+            },
+            {
+              "type": "text",
+              "text": "Início",
+              "x": "66% + 1.5mm",
+              "y": "6mm",
+              "fill": "accent",
+              "size": "3mm",
+              "weight": "bold"
+            },
+            {
+              "type": "text",
+              "text": "Fim",
+              "x": "77% + 1.5mm",
+              "y": "6mm",
+              "fill": "accent",
+              "size": "3mm",
+              "weight": "bold"
+            },
+            {
+              "type": "text",
+              "text": "Nota",
+              "x": "88% + 1.5mm",
+              "y": "6mm",
+              "fill": "accent",
+              "size": "3mm",
+              "weight": "bold"
+            },
+            {
+              "type": "group",
+              "y": "9mm",
+              "h": "100% - 9mm",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "y",
+                  "period": "linha",
+                  "fit": "round",
+                  "children": [
+                    {
+                      "type": "hline",
+                      "y": "100%"
+                    },
+                    {
+                      "type": "text",
+                      "text": "{i + 1}",
+                      "x": "3%",
+                      "y": "50% + 1mm",
+                      "fill": "accent",
+                      "size": "2.8mm",
+                      "align": "middle"
+                    },
+                    {
+                      "type": "text",
+                      "text": "/",
+                      "x": "71.5%",
+                      "y": "50% + 1mm",
+                      "fill": "accent",
+                      "size": "3mm",
+                      "align": "middle"
+                    },
+                    {
+                      "type": "text",
+                      "text": "/",
+                      "x": "82.5%",
+                      "y": "50% + 1mm",
+                      "fill": "accent",
+                      "size": "3mm",
+                      "align": "middle"
+                    },
+                    {
+                      "type": "group",
+                      "x": "88% + 1mm",
+                      "y": "50% - 2.2mm",
+                      "w": "12% - 2mm",
+                      "h": "4.4mm",
+                      "children": [
+                        {
+                          "type": "repeat",
+                          "axis": "x",
+                          "count": 5,
+                          "children": [
+                            {
+                              "type": "path",
+                              "d": "M12 2 L14.9 8.6 L22 9.3 L16.6 14 L18.2 21 L12 17.3 L5.8 21 L7.4 14 L2 9.3 L9.1 8.6 Z",
+                              "viewBox": "0 0 24 24",
+                              "stroke": "accent",
+                              "strokeWidth": "0.2mm"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

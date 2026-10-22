@@ -1,0 +1,168 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.timetable",
+  "name": "Timetable",
+  "description": "Grade de horários: seis dias da semana (segunda a sábado) por oito horários numerados, com espaço para escrever o início e o fim de cada aula.",
+  "license": "MIT",
+  "tags": [
+    "study",
+    "planner"
+  ],
+  "params": {
+    "aulas": {
+      "type": "integer",
+      "default": 8,
+      "min": 4,
+      "max": 14,
+      "label": "Horários"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Grade de horários",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Nome / turma",
+          "x": 0,
+          "y": "19mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "19.5mm",
+          "x1": "26mm",
+          "x2": "62%"
+        },
+        {
+          "type": "text",
+          "text": "Período",
+          "x": "65%",
+          "y": "19mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "19.5mm",
+          "x1": "65% + 17mm",
+          "x2": "100%"
+        },
+        {
+          "type": "hline",
+          "y": "25mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "29mm",
+          "h": "100% - 29mm",
+          "children": [
+            {
+              "type": "rect",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "hline",
+              "y": "10mm",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "text",
+              "text": "Horário",
+              "x": "7%",
+              "y": "6.5mm",
+              "fill": "accent",
+              "size": "3mm",
+              "weight": "bold",
+              "align": "middle"
+            },
+            {
+              "type": "group",
+              "x": "14%",
+              "w": "86%",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "x",
+                  "count": 6,
+                  "children": [
+                    {
+                      "type": "vline",
+                      "x": 0
+                    },
+                    {
+                      "type": "text",
+                      "text": [
+                        "Segunda",
+                        "Terça",
+                        "Quarta",
+                        "Quinta",
+                        "Sexta",
+                        "Sábado"
+                      ],
+                      "x": "50%",
+                      "y": "6.5mm",
+                      "fill": "accent",
+                      "size": "3.2mm",
+                      "weight": "bold",
+                      "align": "middle"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "10mm",
+              "h": "100% - 10mm",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "y",
+                  "count": "aulas",
+                  "children": [
+                    {
+                      "type": "hline",
+                      "y": "100%"
+                    },
+                    {
+                      "type": "text",
+                      "text": "{i + 1}º",
+                      "x": "1.5mm",
+                      "y": "4.5mm",
+                      "fill": "accent",
+                      "size": "2.8mm",
+                      "weight": "bold"
+                    },
+                    {
+                      "type": "text",
+                      "text": "às",
+                      "x": "7%",
+                      "y": "50% + 1mm",
+                      "fill": "accent",
+                      "size": "2.4mm",
+                      "italic": true,
+                      "align": "middle"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,279 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.journal",
+  "name": "Journal",
+  "description": "Diário: data e dia da semana, humor do dia em cinco carinhas para marcar, três motivos de gratidão e linhas para escrever.",
+  "license": "MIT",
+  "tags": [
+    "journal"
+  ],
+  "params": {
+    "linha": {
+      "type": "length",
+      "default": "8mm",
+      "min": "6mm",
+      "max": "12mm",
+      "label": "Espaço entre linhas",
+      "role": "spacing"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Diário",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Data",
+          "x": 0,
+          "y": "19mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "19.5mm",
+          "x1": "12mm",
+          "x2": "42%"
+        },
+        {
+          "type": "group",
+          "x": "50%",
+          "y": "13mm",
+          "w": "50%",
+          "h": "9mm",
+          "children": [
+            {
+              "type": "repeat",
+              "axis": "x",
+              "count": 7,
+              "children": [
+                {
+                  "type": "circle",
+                  "cx": "50%",
+                  "cy": "50%",
+                  "r": "3.2mm",
+                  "stroke": "accent",
+                  "strokeWidth": "0.25mm"
+                },
+                {
+                  "type": "text",
+                  "text": [
+                    "D",
+                    "S",
+                    "T",
+                    "Q",
+                    "Q",
+                    "S",
+                    "S"
+                  ],
+                  "x": "50%",
+                  "y": "50%",
+                  "fill": "accent",
+                  "size": "2.8mm",
+                  "weight": "bold",
+                  "align": "middle",
+                  "baseline": "middle"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "hline",
+          "y": "25mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "29mm",
+          "h": "22mm",
+          "children": [
+            {
+              "type": "text",
+              "text": "Como me sinto",
+              "x": 0,
+              "y": "10.5mm",
+              "fill": "accent",
+              "size": "3.5mm",
+              "weight": "bold"
+            },
+            {
+              "type": "group",
+              "x": "34mm",
+              "w": "100% - 34mm",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "x",
+                  "count": 5,
+                  "children": [
+                    {
+                      "type": "circle",
+                      "cx": "50%",
+                      "cy": "9mm",
+                      "r": "5mm",
+                      "stroke": "accent",
+                      "strokeWidth": "0.3mm"
+                    },
+                    {
+                      "type": "dot",
+                      "cx": "50% - 1.8mm",
+                      "cy": "7.6mm",
+                      "r": "0.5mm",
+                      "fill": "accent"
+                    },
+                    {
+                      "type": "dot",
+                      "cx": "50% + 1.8mm",
+                      "cy": "7.6mm",
+                      "r": "0.5mm",
+                      "fill": "accent"
+                    },
+                    {
+                      "type": "polyline",
+                      "stroke": "accent",
+                      "strokeWidth": "0.3mm",
+                      "points": [
+                        [
+                          "50% - 2.3mm",
+                          "11mm"
+                        ],
+                        [
+                          "50%",
+                          "11mm + (i - 2) * 0.8mm"
+                        ],
+                        [
+                          "50% + 2.3mm",
+                          "11mm"
+                        ]
+                      ]
+                    },
+                    {
+                      "type": "text",
+                      "text": [
+                        "Muito mal",
+                        "Mal",
+                        "Normal",
+                        "Bem",
+                        "Ótimo"
+                      ],
+                      "x": "50%",
+                      "y": "19.5mm",
+                      "fill": "accent",
+                      "size": "2.4mm",
+                      "align": "middle"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "hline",
+          "y": "52mm",
+          "opacity": 0.5
+        },
+        {
+          "type": "group",
+          "y": "55mm",
+          "h": "30mm",
+          "children": [
+            {
+              "type": "text",
+              "text": "Sou grato por",
+              "x": 0,
+              "y": "4.5mm",
+              "fill": "accent",
+              "size": "3.5mm",
+              "weight": "bold"
+            },
+            {
+              "type": "group",
+              "y": "7mm",
+              "h": "100% - 7mm",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "y",
+                  "count": 3,
+                  "children": [
+                    {
+                      "type": "text",
+                      "text": "{i + 1}.",
+                      "x": 0,
+                      "y": "100% - 1.5mm",
+                      "fill": "accent",
+                      "size": "3mm",
+                      "weight": "bold"
+                    },
+                    {
+                      "type": "hline",
+                      "y": "100%",
+                      "x1": "6mm"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "y": "89mm",
+          "h": "100% - 89mm",
+          "children": [
+            {
+              "type": "text",
+              "text": "Hoje",
+              "x": 0,
+              "y": "4.5mm",
+              "fill": "accent",
+              "size": "3.5mm",
+              "weight": "bold"
+            },
+            {
+              "type": "text",
+              "text": "o que aconteceu, o que aprendi",
+              "x": "100%",
+              "y": "4.5mm",
+              "fill": "accent",
+              "size": "2.6mm",
+              "italic": true,
+              "align": "end"
+            },
+            {
+              "type": "group",
+              "y": "7mm",
+              "h": "100% - 7mm",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "y",
+                  "period": "linha",
+                  "fit": "round",
+                  "children": [
+                    {
+                      "type": "hline",
+                      "y": "100%"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,215 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.swot",
+  "name": "SWOT analysis",
+  "description": "Análise SWOT (FOFA): forças e fraquezas (fatores internos), oportunidades e ameaças (fatores externos) em quatro quadrantes pautados.",
+  "license": "MIT",
+  "tags": [
+    "work",
+    "study"
+  ],
+  "params": {
+    "linha": {
+      "type": "length",
+      "default": "8mm",
+      "min": "6mm",
+      "max": "12mm",
+      "label": "Espaço entre linhas",
+      "role": "spacing"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Análise SWOT",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Objeto",
+          "x": 0,
+          "y": "19mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "19.5mm",
+          "x1": "17mm",
+          "x2": "62%"
+        },
+        {
+          "type": "text",
+          "text": "Data",
+          "x": "65%",
+          "y": "19mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "19.5mm",
+          "x1": "65% + 12mm",
+          "x2": "100%"
+        },
+        {
+          "type": "hline",
+          "y": "25mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "29mm",
+          "h": "100% - 29mm",
+          "children": [
+            {
+              "type": "group",
+              "x": "10mm",
+              "w": "100% - 10mm",
+              "h": "8mm",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Ajuda",
+                  "x": "25%",
+                  "y": "5.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold",
+                  "align": "middle"
+                },
+                {
+                  "type": "text",
+                  "text": "Atrapalha",
+                  "x": "75%",
+                  "y": "5.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold",
+                  "align": "middle"
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "8mm",
+              "w": "10mm",
+              "h": "100% - 8mm",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Fatores internos",
+                  "x": "6.5mm",
+                  "y": "25%",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold",
+                  "align": "middle",
+                  "rotate": 270
+                },
+                {
+                  "type": "text",
+                  "text": "Fatores externos",
+                  "x": "6.5mm",
+                  "y": "75%",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold",
+                  "align": "middle",
+                  "rotate": 270
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "x": "10mm",
+              "y": "8mm",
+              "w": "100% - 10mm",
+              "h": "100% - 8mm",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "xy",
+                  "count": [
+                    2,
+                    2
+                  ],
+                  "children": [
+                    {
+                      "type": "rect",
+                      "x": "1.5mm",
+                      "y": "1.5mm",
+                      "w": "100% - 3mm",
+                      "h": "100% - 3mm",
+                      "rx": "2mm",
+                      "strokeWidth": "0.35mm"
+                    },
+                    {
+                      "type": "text",
+                      "text": [
+                        "Forças",
+                        "Fraquezas",
+                        "Oportunidades",
+                        "Ameaças"
+                      ],
+                      "x": "5mm",
+                      "y": "9mm",
+                      "fill": "accent",
+                      "select": "j * 2 + i",
+                      "size": "4mm",
+                      "weight": "bold"
+                    },
+                    {
+                      "type": "text",
+                      "text": [
+                        "o que fazemos bem, vantagens",
+                        "o que falta, limitações",
+                        "tendências e chances lá fora",
+                        "concorrência, riscos externos"
+                      ],
+                      "x": "5mm",
+                      "y": "13.5mm",
+                      "fill": "accent",
+                      "select": "j * 2 + i",
+                      "size": "2.6mm",
+                      "italic": true
+                    },
+                    {
+                      "type": "group",
+                      "x": "5mm",
+                      "y": "16mm",
+                      "w": "100% - 10mm",
+                      "h": "100% - 19mm",
+                      "children": [
+                        {
+                          "type": "repeat",
+                          "axis": "y",
+                          "period": "linha",
+                          "fit": "round",
+                          "children": [
+                            {
+                              "type": "hline",
+                              "y": "100%"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

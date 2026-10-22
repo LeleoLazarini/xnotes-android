@@ -4,6 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,7 +29,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -97,28 +100,58 @@ internal fun GroupedBarContent(
     ToolbarIcon(XnotesIcons.prev, stringResource(R.string.toolbar_home)) { onOpenBackstage() }
     Separator()
     PenFamily.entries.forEach { FamilyButton(editor, it, toolIcons, configForTool, setConfigForTool) }
-    ToolButton(editor, Tool.ERASER, toolIcons[Tool.ERASER], configForTool, setConfigForTool)
+    ToolButton(editor, Tool.ERASER, KitIcons.eraser, configForTool, setConfigForTool, colored = true)
     ToolGroupButton(editor, ToolGroup.SELECTION, toolIcons, configForTool, setConfigForTool)
     Separator()
-    editor.toolbarColors.take(editor.toolbarColorCount).forEachIndexed { i, color ->
-        Box {
-            Swatch(
-                color = color.toComposeColor(),
-                active = i == editor.activeColorIndex,
-                onClick = { if (i == editor.activeColorIndex) setSwitcherIndex(i) else editor.pickColor(i) },
-            )
-            if (switcherIndex == i) ColorSwitcherPopup(editor, i) { setSwitcherIndex(null) }
-        }
-    }
+    CompactColors(editor, switcherIndex, setSwitcherIndex)
     Separator()
     InsertGroupButton(editor, toolIcons, configForTool, setConfigForTool, onInsertImage, onAddStickers)
     PostItButton(editor)
     StylesButton(editor, onImportTemplate)
-    PageCounterButton(editor)
     Separator()
     ToolbarIcon(XnotesIcons.undo, stringResource(R.string.undo), enabled = editor.canUndo, shortcut = Keys.UNDO) { editor.undo() }
     ToolbarIcon(XnotesIcons.redo, stringResource(R.string.redo), enabled = editor.canRedo, shortcut = Keys.REDO) { editor.redo() }
     MoreMenu(editor, onRename, onToggleFullscreen)
+}
+
+/** The ink [pen] lays down: its own colour, or the toolbar's active one when it follows the toolbar. */
+@Composable
+private fun familyInk(editor: Editor, pen: com.xnotes.core.tools.PenPreset): Color =
+    (pen.config.colorOverride ?: editor.toolbarColors.getOrNull(editor.activeColorIndex) ?: pen.config.rgba).toComposeColor()
+
+/**
+ * The toolbar colours as a small block: two rows of dots in the room of about two buttons, so a
+ * full palette never pushes tools off the bar. Tapping the active dot opens its colour switcher.
+ */
+@Composable
+private fun CompactColors(editor: Editor, switcherIndex: Int?, setSwitcherIndex: (Int?) -> Unit) {
+    val colors = editor.toolbarColors.take(editor.toolbarColorCount)
+    val bar = LocalBar.current
+    val perLine = (colors.size + 1) / 2
+    val dot = (bar.button - 10.dp) / 2
+    @Composable
+    fun cell(i: Int) {
+        val c = colors[i].toComposeColor()
+        val on = i == editor.activeColorIndex
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(dot + 4.dp)) {
+            Box(
+                Modifier
+                    .size(dot)
+                    .then(if (on) Modifier.border(2.dp, LocalPalette.current.text.toComposeColor(), CircleShape) else Modifier)
+                    .padding(if (on) 3.dp else 1.dp)
+                    .clip(CircleShape)
+                    .background(c)
+                    .border(0.5.dp, Color(0x33000000), CircleShape)
+                    .clickable { if (on) setSwitcherIndex(i) else editor.pickColor(i) },
+            )
+            if (switcherIndex == i) ColorSwitcherPopup(editor, i) { setSwitcherIndex(null) }
+        }
+    }
+    if (bar.vertical) {
+        Row { for (col in 0 until 2) Column { for (i in col * perLine until minOf(colors.size, (col + 1) * perLine)) cell(i) } }
+    } else {
+        Column(Modifier.padding(horizontal = 2.dp)) { for (row in 0 until 2) Row { for (i in row * perLine until minOf(colors.size, (row + 1) * perLine)) cell(i) } }
+    }
 }
 
 /** The kit drawer's toolbar picture and name. */
@@ -169,12 +202,13 @@ private fun FamilyButton(
     val palette = LocalPalette.current
     Box {
         ToolbarIcon(
-            familyIcon(family),
+            KitIcons.get(family, familyInk(editor, current)),
             stringResource(familyLabel(family)),
             active = armedHere,
             glideKey = family,
             hint = if (armedHere) stringResource(R.string.tip_tap_for_group) else null,
             grouped = true,
+            colored = true,
         ) {
             if (!armedHere) {
                 editor.applyPen(current)
@@ -201,7 +235,7 @@ private fun FamilyButton(
                 val ink = pen.config.colorOverride?.toComposeColor() ?: palette.textDim.toComposeColor()
                 DropdownMenuItem(
                     text = { Text(pen.name, color = (if (on) palette.selectionForeground else palette.text).toComposeColor()) },
-                    leadingIcon = { Icon(familyIcon(family), contentDescription = null, tint = ink, modifier = Modifier.size(20.dp)) },
+                    leadingIcon = { Icon(KitIcons.get(family, familyInk(editor, pen)), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.size(26.dp)) },
                     trailingIcon = if (pen.builtIn) null else { {
                         Icon(
                             XnotesIcons.close,
@@ -434,7 +468,7 @@ private val POST_IT_COLORS = listOf(
 private fun PostItButton(editor: Editor) {
     var open by remember { mutableStateOf(false) }
     Box {
-        ToolbarIcon(XnotesIcons.note, stringResource(R.string.post_it), grouped = true) { open = true }
+        ToolbarIcon(KitIcons.postIt, stringResource(R.string.post_it), grouped = true, colored = true) { open = true }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             Text(
                 stringResource(R.string.post_it_pick_colour),
@@ -474,7 +508,7 @@ private fun PageCounterButton(editor: Editor) {
     }
 }
 
-private enum class MorePopup { MARGINS, VIEW, ZOOM, TRANSCRIBE }
+private enum class MorePopup { MARGINS, VIEW, ZOOM, TRANSCRIBE, JUMP }
 
 /** Everything used now and then: margins, view, zoom and fit, side panel, full screen, rename. */
 @Composable
@@ -484,6 +518,8 @@ private fun MoreMenu(editor: Editor, onRename: () -> Unit, onToggleFullscreen: (
     Box {
         ToolbarIcon(XnotesIcons.more, stringResource(R.string.more_options), grouped = true) { menuOpen = true }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            GroupMenuItem(stringResource(R.string.eyedropper), XnotesIcons.palette) { menuOpen = false; editor.eyedropperActive = true }
+            GroupMenuItem(stringResource(R.string.go_to_page_n, editor.pageIndex + 1, editor.pageCount), XnotesIcons.pages) { menuOpen = false; popup = MorePopup.JUMP }
             GroupMenuItem(stringResource(R.string.rename_note), XnotesIcons.edit) { menuOpen = false; onRename() }
             GroupMenuItem(stringResource(R.string.side_panel), XnotesIcons.sidebar, active = editor.sidebarVisible) { menuOpen = false; editor.toggleSidebar() }
             MenuDivider()
@@ -515,6 +551,7 @@ private fun MoreMenu(editor: Editor, onRename: () -> Unit, onToggleFullscreen: (
             MorePopup.VIEW -> ViewMenuPopup(editor) { popup = null }
             MorePopup.ZOOM -> ZoomMenuPopup(editor) { popup = null }
             MorePopup.TRANSCRIBE -> TranscriptionTestDialog { popup = null }
+            MorePopup.JUMP -> PageJumpPopup(editor) { popup = null }
             null -> Unit
         }
     }

@@ -1,0 +1,287 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.brainstorm",
+  "name": "Brainstorm",
+  "description": "Brainstorm: tema no centro e caixas e círculos espalhados pela página, ligados por linhas leves, para soltar ideias sem ordem.",
+  "license": "MIT",
+  "tags": [
+    "drawing",
+    "work",
+    "study"
+  ],
+  "params": {},
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Brainstorm",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Tema",
+          "x": 0,
+          "y": "19mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "19.5mm",
+          "x1": "14mm",
+          "x2": "62%"
+        },
+        {
+          "type": "text",
+          "text": "Data",
+          "x": "65%",
+          "y": "19mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "19.5mm",
+          "x1": "65% + 12mm",
+          "x2": "100%"
+        },
+        {
+          "type": "hline",
+          "y": "25mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "29mm",
+          "h": "100% - 29mm",
+          "children": [
+            {
+              "type": "group",
+              "dash": [
+                "1.2mm",
+                "1.8mm"
+              ],
+              "opacity": 0.5,
+              "children": [
+                {
+                  "type": "line",
+                  "x1": "43.19%",
+                  "y1": "41.44%",
+                  "x2": "22.07%",
+                  "y2": "14.88%"
+                },
+                {
+                  "type": "line",
+                  "x1": "50%",
+                  "y1": "40.98%",
+                  "x2": "50%",
+                  "y2": "19.89%"
+                },
+                {
+                  "type": "line",
+                  "x1": "56.81%",
+                  "y1": "41.44%",
+                  "x2": "77.93%",
+                  "y2": "14.88%"
+                },
+                {
+                  "type": "line",
+                  "x1": "26.66%",
+                  "y1": "50%",
+                  "x2": "24.34%",
+                  "y2": "50%"
+                },
+                {
+                  "type": "line",
+                  "x1": "73.34%",
+                  "y1": "50%",
+                  "x2": "75.66%",
+                  "y2": "50%"
+                },
+                {
+                  "type": "line",
+                  "x1": "43.19%",
+                  "y1": "58.56%",
+                  "x2": "22.07%",
+                  "y2": "85.12%"
+                },
+                {
+                  "type": "line",
+                  "x1": "50%",
+                  "y1": "59.02%",
+                  "x2": "50%",
+                  "y2": "80.11%"
+                },
+                {
+                  "type": "line",
+                  "x1": "56.81%",
+                  "y1": "58.56%",
+                  "x2": "77.93%",
+                  "y2": "85.12%"
+                },
+                {
+                  "type": "line",
+                  "x1": "14%",
+                  "y1": "33.84%",
+                  "x2": "14%",
+                  "y2": "42.11%"
+                },
+                {
+                  "type": "line",
+                  "x1": "86%",
+                  "y1": "33.84%",
+                  "x2": "86%",
+                  "y2": "42.11%"
+                },
+                {
+                  "type": "line",
+                  "x1": "14%",
+                  "y1": "66.16%",
+                  "x2": "14%",
+                  "y2": "57.89%"
+                },
+                {
+                  "type": "line",
+                  "x1": "86%",
+                  "y1": "66.16%",
+                  "x2": "86%",
+                  "y2": "57.89%"
+                }
+              ]
+            },
+            {
+              "type": "rect",
+              "x": "3%",
+              "y": "3%",
+              "w": "28%",
+              "h": "11%",
+              "rx": "3mm",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "circle",
+              "cx": "50%",
+              "cy": "12%",
+              "r": "9%",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "rect",
+              "x": "69%",
+              "y": "3%",
+              "w": "28%",
+              "h": "11%",
+              "rx": "3mm",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "circle",
+              "cx": "14%",
+              "cy": "50%",
+              "r": "9%",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "circle",
+              "cx": "86%",
+              "cy": "50%",
+              "r": "9%",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "rect",
+              "x": "3%",
+              "y": "86%",
+              "w": "28%",
+              "h": "11%",
+              "rx": "3mm",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "circle",
+              "cx": "50%",
+              "cy": "88%",
+              "r": "9%",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "rect",
+              "x": "69%",
+              "y": "86%",
+              "w": "28%",
+              "h": "11%",
+              "rx": "3mm",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "circle",
+              "cx": "14%",
+              "cy": "29%",
+              "r": "5%",
+              "dash": [
+                "1mm",
+                "1.5mm"
+              ]
+            },
+            {
+              "type": "circle",
+              "cx": "86%",
+              "cy": "29%",
+              "r": "5%",
+              "dash": [
+                "1mm",
+                "1.5mm"
+              ]
+            },
+            {
+              "type": "circle",
+              "cx": "14%",
+              "cy": "71%",
+              "r": "5%",
+              "dash": [
+                "1mm",
+                "1.5mm"
+              ]
+            },
+            {
+              "type": "circle",
+              "cx": "86%",
+              "cy": "71%",
+              "r": "5%",
+              "dash": [
+                "1mm",
+                "1.5mm"
+              ]
+            },
+            {
+              "type": "ellipse",
+              "cx": "50%",
+              "cy": "50%",
+              "rx": "22%",
+              "ry": "8%",
+              "stroke": "accent",
+              "strokeWidth": "0.5mm"
+            },
+            {
+              "type": "text",
+              "text": "tema central",
+              "x": "50%",
+              "y": "58% - 3mm",
+              "fill": "accent",
+              "size": "2.6mm",
+              "italic": true,
+              "align": "middle"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

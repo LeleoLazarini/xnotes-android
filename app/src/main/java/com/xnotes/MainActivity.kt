@@ -1254,6 +1254,7 @@ private fun EditorPane(
                             update = { editor.view.requestRender() }, // repaint on (re)attach so a push never flashes blank
                         )
                         com.xnotes.ui.PageTurnOverlay(editor)
+                        com.xnotes.ui.EyedropperOverlay(editor)
                         editor.editingField?.let { field ->
                             com.xnotes.ui.TextEditorOverlay(editor, field)
                         }

@@ -284,6 +284,32 @@ fun StylesPopup(editor: Editor, onImportTemplate: () -> Unit = {}, onDismiss: ()
                 onKeep = { editor.keepNoteTemplate(it) },
             )
             if (shown != null) {
+                // Line and heading colours up front, not only behind Customize: the first thing
+                // people want from a ruled page is lines they can see, in a colour they like.
+                Spacer(Modifier.size(10.dp))
+                StyleCaption(stringResource(R.string.caption_line_colour))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ModeChip(stringResource(R.string.default_choice), style.patternColor == null) { apply(style.copy(patternColor = null)) }
+                    PAPER_INK_PRESETS.forEach { c ->
+                        ColorDot(c.toComposeColor(), style.patternColor?.copy(a = 255) == c) { apply(style.copy(patternColor = c.copy(a = look.ink.a.coerceAtLeast(MIN_LINE_ALPHA)))) }
+                    }
+                }
+                val strength = look.ink.a * 100f / 255f
+                StyleCaption(stringResource(R.string.caption_line_strength, strength.roundToInt()))
+                Slider(
+                    value = strength,
+                    onValueChange = { pct -> apply(style.copy(patternColor = look.ink.copy(a = (pct / 100f * 255f).roundToInt().coerceIn(0, 255)))) },
+                    valueRange = 5f..100f,
+                )
+                if (shown.usesAccent) {
+                    StyleCaption(stringResource(R.string.caption_heading_colour))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ModeChip(stringResource(R.string.default_choice), style.accentColor == null) { apply(style.copy(accentColor = null)) }
+                        PAPER_INK_PRESETS.forEach { c ->
+                            ColorDot(c.toComposeColor(), style.accentColor?.copy(a = 255) == c) { apply(style.copy(accentColor = c)) }
+                        }
+                    }
+                }
                 Spacer(Modifier.size(6.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
@@ -1131,3 +1157,12 @@ fun FontMenuItems(
         }
     }
 }
+
+/** Ink colours for a page's rulings and headings: greys, then the usual notebook colours. */
+private val PAPER_INK_PRESETS = listOf(
+    Rgba(150, 150, 158), Rgba(90, 90, 98), Rgba(30, 30, 36),
+    Rgba(37, 99, 235), Rgba(220, 38, 38), Rgba(22, 128, 61), Rgba(147, 51, 234), Rgba(217, 119, 6), Rgba(236, 72, 153),
+)
+
+/** A colour picked for the lines never starts out nearly invisible. */
+private const val MIN_LINE_ALPHA = 110

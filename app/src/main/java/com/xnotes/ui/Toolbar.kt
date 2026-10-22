@@ -299,6 +299,7 @@ internal fun ToolButton(
     icon: ImageVector?,
     configForTool: Tool?,
     setConfigForTool: (Tool?) -> Unit,
+    colored: Boolean = false,
 ) {
     if (icon == null) return
     val armed = editor.tool == tool
@@ -311,6 +312,7 @@ internal fun ToolButton(
             glideKey = tool,
             hint = if (armed && configurable) stringResource(R.string.tip_tap_for_settings) else null,
             shortcut = PAGED_TOOL_KEYS[tool],
+            colored = colored,
         ) {
             if (armed && configurable) {
                 setConfigForTool(tool)
@@ -374,7 +376,7 @@ internal fun StylesButton(editor: Editor, onImportTemplate: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     PrewarmTemplateThumbs(editor, open)
     Box {
-        ToolbarIcon(XnotesIcons.page, stringResource(R.string.toolbar_styles)) { open = true }
+        ToolbarIcon(KitIcons.paper, stringResource(R.string.toolbar_styles), colored = true) { open = true }
         if (open) StylesPopup(editor, onImportTemplate) { open = false }
     }
 }
@@ -501,6 +503,8 @@ internal fun ToolbarIcon(
     hint: String? = null,
     shortcut: String? = null,
     grouped: Boolean = false,
+    /** A full-colour picture: drawn as painted, the selection circle behind it the only state cue. */
+    colored: Boolean = false,
     onClick: () -> Unit,
 ) {
     val palette = LocalPalette.current
@@ -543,7 +547,13 @@ internal fun ToolbarIcon(
                     .drawBehind { if (fill > 0f) drawCircle(circle.copy(alpha = circle.alpha * fill)) },
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(bar.icon).graphicsLayer { scaleX = press; scaleY = press })
+                Icon(
+                    icon,
+                    contentDescription = contentDescription,
+                    tint = if (colored) androidx.compose.ui.graphics.Color.Unspecified else tint,
+                    // A coloured picture fills a little more of the button than a line glyph does.
+                    modifier = Modifier.size(if (colored) bar.icon + 6.dp else bar.icon).graphicsLayer { scaleX = press; scaleY = press; alpha = if (enabled) 1f else 0.4f },
+                )
             }
         }
     }

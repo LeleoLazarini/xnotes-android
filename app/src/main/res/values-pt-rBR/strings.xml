@@ -1013,4 +1013,10 @@
     <string name="pref_page_turn">Virar a página</string>
     <string name="page_turn_on">Com animação</string>
     <string name="page_turn_off">Instantâneo</string>
+    <string name="caption_line_colour">Cor das linhas</string>
+    <string name="caption_line_strength">Intensidade das linhas  %1$d%%</string>
+    <string name="caption_heading_colour">Cor dos títulos e textos</string>
+    <string name="go_to_page_n">Ir para a página (%1$d / %2$d)</string>
+    <string name="eyedropper">Conta-gotas (pegar cor da página)</string>
+    <string name="eyedropper_hint">Toque numa cor da página</string>
 </resources>

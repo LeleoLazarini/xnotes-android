@@ -297,6 +297,12 @@ private val PT_TEMPLATE_NAMES = mapOf(
     "5 mm squared" to "Quadriculado 5 mm", "Meeting minutes" to "Ata de reunião", "One-on-one" to "One-a-one",
     "5W2H action plan" to "5W2H", "Kanban board" to "Kanban", "Mind map" to "Mapa mental",
     "Monthly calendar" to "Calendário mensal", "Habit tracker" to "Controle de hábitos", "Sketchbook" to "Caderno de desenho",
+    "Weekly priorities planner" to "Planner semanal", "Eisenhower matrix" to "Matriz de Eisenhower",
+    "SWOT analysis" to "Análise SWOT", "Retrospective" to "Retrospectiva", "Brainstorm" to "Brainstorm",
+    "Monthly budget" to "Orçamento mensal", "Study plan" to "Plano de estudos", "Journal" to "Diário",
+    "Reading list" to "Lista de leitura", "Timetable" to "Grade de horários", "Recipe" to "Receita",
+    "Project canvas" to "Canvas de projeto", "Presentation outline" to "Pauta e roteiro de apresentação",
+    "Isometric drafting sheet" to "Desenho técnico isométrico",
 )
 
 internal fun localizedTemplateName(name: String): String =

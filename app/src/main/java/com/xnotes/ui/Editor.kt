@@ -2117,19 +2117,27 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     /**
      * Copy the stickers that ship with the app into the library once, on first run. A marker file
-     * keeps ones the user removed from coming back.
+     * keeps ones the user removed from coming back. Bundled files are split into seeding batches by
+     * their numeric name prefix: v1 is the original set (prefix < 30), v2 the set added later
+     * (prefix >= 30), which installs that already ran v1 also receive once. v2 copies are numbered
+     * from 100 so they list after the v1 ones.
      */
     private fun seedBundledStickers(dir: java.io.File) {
-        val marker = java.io.File(dir, ".seeded-v1")
-        if (marker.exists()) return
-        runCatching {
-            val names = appContext.assets.list(BUNDLED_STICKERS).orEmpty().sorted()
-            names.forEachIndexed { i, name ->
-                val out = java.io.File(dir, "stamp-0000-%03d-%s".format(i, name))
-                appContext.assets.open("$BUNDLED_STICKERS/$name").use { input -> out.outputStream().use { input.copyTo(it) } }
+        val names = runCatching { appContext.assets.list(BUNDLED_STICKERS).orEmpty().sorted() }.getOrNull() ?: return
+        fun prefix(name: String) = name.substringBefore('-').toIntOrNull() ?: 0
+        fun seed(markerName: String, batch: List<String>, indexBase: Int) {
+            val marker = java.io.File(dir, markerName)
+            if (marker.exists()) return
+            runCatching {
+                batch.forEachIndexed { i, name ->
+                    val out = java.io.File(dir, "stamp-0000-%03d-%s".format(indexBase + i, name))
+                    appContext.assets.open("$BUNDLED_STICKERS/$name").use { input -> out.outputStream().use { input.copyTo(it) } }
+                }
+                marker.writeText("1")
             }
-            marker.writeText("1")
         }
+        seed(".seeded-v1", names.filter { prefix(it) < 30 }, 0)
+        seed(".seeded-v2", names.filter { prefix(it) >= 30 }, 100)
     }
 
     fun pasteImage() {
@@ -5867,6 +5875,24 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     fun endPageTurn(id: Long) {
         if (pageTurn?.id == id) pageTurn = null
+    }
+
+    // --- eyedropper ---
+
+    /** True while the next tap on the canvas picks a colour instead of drawing. */
+    var eyedropperActive by mutableStateOf(false)
+
+    /** Make the colour on screen at ([x], [y]) the active toolbar colour, and disarm the eyedropper. */
+    fun pickColorAt(x: Int, y: Int) {
+        eyedropperActive = false
+        val w = view.width
+        val h = view.height
+        if (w <= 0 || h <= 0) return
+        val bmp = runCatching { android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888) }.getOrNull() ?: return
+        runCatching { view.draw(android.graphics.Canvas(bmp)) }
+        val c = pixelAt(bmp, x, y)
+        bmp.recycle()
+        if (c != null) setSwatchColor(activeColorIndex, c)
     }
 
     fun toggleZoomLock() {

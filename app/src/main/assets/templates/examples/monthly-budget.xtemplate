@@ -1,0 +1,216 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.monthly-budget",
+  "name": "Monthly budget",
+  "description": "Orçamento mensal: renda prevista e real no topo, tabela de gastos com descrição, categoria, valor previsto e real, e linhas de total e saldo.",
+  "license": "MIT",
+  "tags": [
+    "finance",
+    "planner"
+  ],
+  "params": {
+    "linha": {
+      "type": "length",
+      "default": "8mm",
+      "min": "6mm",
+      "max": "12mm",
+      "label": "Altura da linha",
+      "role": "spacing"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Orçamento mensal",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Mês",
+          "x": 0,
+          "y": "18mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "18.5mm",
+          "x1": "11mm",
+          "x2": "40%"
+        },
+        {
+          "type": "text",
+          "text": "Renda prevista",
+          "x": "44%",
+          "y": "18mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "18.5mm",
+          "x1": "44% + 29mm",
+          "x2": "100%"
+        },
+        {
+          "type": "text",
+          "text": "Meta de economia",
+          "x": 0,
+          "y": "26mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "26.5mm",
+          "x1": "33mm",
+          "x2": "40%"
+        },
+        {
+          "type": "text",
+          "text": "Renda real",
+          "x": "44%",
+          "y": "26mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "26.5mm",
+          "x1": "44% + 29mm",
+          "x2": "100%"
+        },
+        {
+          "type": "hline",
+          "y": "33mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "37mm",
+          "h": "100% - 37mm",
+          "children": [
+            {
+              "type": "rect",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "hline",
+              "y": "9mm",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "vline",
+              "x": "40%"
+            },
+            {
+              "type": "vline",
+              "x": "62%"
+            },
+            {
+              "type": "vline",
+              "x": "81%"
+            },
+            {
+              "type": "text",
+              "text": "Descrição",
+              "x": "1.5mm",
+              "y": "6mm",
+              "fill": "accent",
+              "size": "3mm",
+              "weight": "bold"
+            },
+            {
+              "type": "text",
+              "text": "Categoria",
+              "x": "40% + 1.5mm",
+              "y": "6mm",
+              "fill": "accent",
+              "size": "3mm",
+              "weight": "bold"
+            },
+            {
+              "type": "text",
+              "text": "Previsto (R$)",
+              "x": "62% + 1.5mm",
+              "y": "6mm",
+              "fill": "accent",
+              "size": "3mm",
+              "weight": "bold"
+            },
+            {
+              "type": "text",
+              "text": "Real (R$)",
+              "x": "81% + 1.5mm",
+              "y": "6mm",
+              "fill": "accent",
+              "size": "3mm",
+              "weight": "bold"
+            },
+            {
+              "type": "group",
+              "y": "9mm",
+              "h": "100% - 29mm",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "y",
+                  "period": "linha",
+                  "fit": "round",
+                  "children": [
+                    {
+                      "type": "hline",
+                      "y": "100%"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "100% - 20mm",
+              "h": "20mm",
+              "children": [
+                {
+                  "type": "hline",
+                  "y": 0,
+                  "strokeWidth": "0.5mm"
+                },
+                {
+                  "type": "hline",
+                  "y": "10mm"
+                },
+                {
+                  "type": "text",
+                  "text": "Total de gastos",
+                  "x": "1.5mm",
+                  "y": "6.5mm",
+                  "fill": "accent",
+                  "size": "3.2mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "Saldo (renda real - gastos)",
+                  "x": "1.5mm",
+                  "y": "16.5mm",
+                  "fill": "accent",
+                  "size": "3.2mm",
+                  "weight": "bold"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

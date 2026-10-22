@@ -1015,4 +1015,10 @@
     <string name="pref_page_turn">Page turn</string>
     <string name="page_turn_on">Animated</string>
     <string name="page_turn_off">Instant</string>
+    <string name="caption_line_colour">Line colour</string>
+    <string name="caption_line_strength">Line strength  %1$d%%</string>
+    <string name="caption_heading_colour">Heading colour</string>
+    <string name="go_to_page_n">Go to page (%1$d / %2$d)</string>
+    <string name="eyedropper">Eyedropper</string>
+    <string name="eyedropper_hint">Tap a colour on the page</string>
 </resources>

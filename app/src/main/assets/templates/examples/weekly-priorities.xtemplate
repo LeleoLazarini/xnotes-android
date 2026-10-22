@@ -1,0 +1,219 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.weekly-priorities",
+  "name": "Weekly priorities planner",
+  "description": "Planner semanal: prioridades da semana com caixinhas no topo e os sete dias em blocos pautados, de segunda a domingo, mais um bloco de notas.",
+  "license": "MIT",
+  "tags": [
+    "planner",
+    "agenda"
+  ],
+  "params": {
+    "linha": {
+      "type": "length",
+      "default": "7mm",
+      "min": "5mm",
+      "max": "10mm",
+      "label": "Espaço entre linhas",
+      "role": "spacing"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Planner semanal",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Semana",
+          "x": 0,
+          "y": "19mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "19.5mm",
+          "x1": "18mm",
+          "x2": "62%"
+        },
+        {
+          "type": "text",
+          "text": "Mês",
+          "x": "65%",
+          "y": "19mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "19.5mm",
+          "x1": "65% + 11mm",
+          "x2": "100%"
+        },
+        {
+          "type": "hline",
+          "y": "25mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "29mm",
+          "h": "100% - 29mm",
+          "children": [
+            {
+              "type": "group",
+              "y": 0,
+              "h": "21%",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Prioridades da semana",
+                  "x": 0,
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "o que precisa acontecer até domingo",
+                  "x": "100%",
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "2.6mm",
+                  "italic": true,
+                  "align": "end"
+                },
+                {
+                  "type": "group",
+                  "y": "7mm",
+                  "h": "100% - 7mm",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "period": "linha",
+                      "fit": "round",
+                      "children": [
+                        {
+                          "type": "rect",
+                          "y": "100% - 5mm",
+                          "w": "4mm",
+                          "h": "4mm",
+                          "rx": "0.6mm"
+                        },
+                        {
+                          "type": "hline",
+                          "y": "100%",
+                          "x1": "6mm",
+                          "x2": "48%"
+                        },
+                        {
+                          "type": "rect",
+                          "x": "52%",
+                          "y": "100% - 5mm",
+                          "w": "4mm",
+                          "h": "4mm",
+                          "rx": "0.6mm"
+                        },
+                        {
+                          "type": "hline",
+                          "y": "100%",
+                          "x1": "52% + 6mm",
+                          "x2": "100%"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "23%",
+              "h": "77%",
+              "children": [
+                {
+                  "type": "repeat",
+                  "axis": "xy",
+                  "count": [
+                    2,
+                    4
+                  ],
+                  "children": [
+                    {
+                      "type": "rect",
+                      "x": "1.5mm",
+                      "y": "1.5mm",
+                      "w": "100% - 3mm",
+                      "h": "100% - 3mm",
+                      "rx": "2mm"
+                    },
+                    {
+                      "type": "text",
+                      "text": [
+                        "Segunda",
+                        "Terça",
+                        "Quarta",
+                        "Quinta",
+                        "Sexta",
+                        "Sábado",
+                        "Domingo",
+                        "Notas"
+                      ],
+                      "x": "5mm",
+                      "y": "8mm",
+                      "fill": "accent",
+                      "select": "j * 2 + i",
+                      "size": "3.5mm",
+                      "weight": "bold"
+                    },
+                    {
+                      "type": "hline",
+                      "y": "8.5mm",
+                      "x1": "100% - 20mm",
+                      "x2": "100% - 5mm",
+                      "opacity": "1 - floor((j * 2 + i) / 7)"
+                    },
+                    {
+                      "type": "group",
+                      "x": "5mm",
+                      "y": "11mm",
+                      "w": "100% - 10mm",
+                      "h": "100% - 14mm",
+                      "children": [
+                        {
+                          "type": "repeat",
+                          "axis": "y",
+                          "period": "linha",
+                          "fit": "round",
+                          "children": [
+                            {
+                              "type": "hline",
+                              "y": "100%",
+                              "opacity": 0.6
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

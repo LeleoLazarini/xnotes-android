@@ -1,0 +1,263 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.retrospective",
+  "name": "Retrospective",
+  "description": "Retrospectiva: o que foi bem e o que pode melhorar lado a lado, e um plano de ações com responsável e prazo.",
+  "license": "MIT",
+  "tags": [
+    "work",
+    "agile"
+  ],
+  "params": {
+    "linha": {
+      "type": "length",
+      "default": "7mm",
+      "min": "5mm",
+      "max": "10mm",
+      "label": "Espaço entre linhas",
+      "role": "spacing"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Retrospectiva",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Time / projeto",
+          "x": 0,
+          "y": "18mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "18.5mm",
+          "x1": "28mm",
+          "x2": "62%"
+        },
+        {
+          "type": "text",
+          "text": "Data",
+          "x": "65%",
+          "y": "18mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "18.5mm",
+          "x1": "65% + 12mm",
+          "x2": "100%"
+        },
+        {
+          "type": "text",
+          "text": "Participantes",
+          "x": 0,
+          "y": "26mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "26.5mm",
+          "x1": "28mm",
+          "x2": "100%"
+        },
+        {
+          "type": "hline",
+          "y": "33mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "37mm",
+          "h": "100% - 37mm",
+          "children": [
+            {
+              "type": "group",
+              "x": 0,
+              "w": "48%",
+              "h": "58%",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Foi bem",
+                  "x": 0,
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "manter fazendo",
+                  "x": "100%",
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "2.6mm",
+                  "italic": true,
+                  "align": "end"
+                },
+                {
+                  "type": "group",
+                  "y": "7mm",
+                  "h": "100% - 7mm",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "period": "linha",
+                      "fit": "round",
+                      "children": [
+                        {
+                          "type": "hline",
+                          "y": "100%"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "vline",
+              "x": "50%",
+              "y1": 0,
+              "y2": "58%",
+              "opacity": 0.5
+            },
+            {
+              "type": "group",
+              "x": "52%",
+              "w": "48%",
+              "h": "58%",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Pode melhorar",
+                  "x": 0,
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "o que atrapalhou",
+                  "x": "100%",
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "2.6mm",
+                  "italic": true,
+                  "align": "end"
+                },
+                {
+                  "type": "group",
+                  "y": "7mm",
+                  "h": "100% - 7mm",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "period": "linha",
+                      "fit": "round",
+                      "children": [
+                        {
+                          "type": "hline",
+                          "y": "100%"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "61%",
+              "h": "39%",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Ações",
+                  "x": 0,
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "Responsável",
+                  "x": "62% + 2mm",
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "Prazo",
+                  "x": "84% + 2mm",
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "group",
+                  "y": "7mm",
+                  "h": "100% - 7mm",
+                  "children": [
+                    {
+                      "type": "vline",
+                      "x": "62%",
+                      "opacity": 0.6
+                    },
+                    {
+                      "type": "vline",
+                      "x": "84%",
+                      "opacity": 0.6
+                    },
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "period": "linha",
+                      "fit": "round",
+                      "children": [
+                        {
+                          "type": "rect",
+                          "y": "100% - 5mm",
+                          "w": "4mm",
+                          "h": "4mm",
+                          "rx": "0.6mm"
+                        },
+                        {
+                          "type": "hline",
+                          "y": "100%",
+                          "x1": "6mm",
+                          "x2": "100%"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

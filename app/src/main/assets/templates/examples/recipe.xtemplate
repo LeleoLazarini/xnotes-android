@@ -1,0 +1,252 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.recipe",
+  "name": "Recipe",
+  "description": "Receita: nome, porções, tempo e forno no topo; ingredientes à esquerda, modo de preparo em passos numerados à direita e dicas no rodapé.",
+  "license": "MIT",
+  "tags": [
+    "cooking",
+    "lists"
+  ],
+  "params": {
+    "linha": {
+      "type": "length",
+      "default": "8mm",
+      "min": "6mm",
+      "max": "12mm",
+      "label": "Espaço entre linhas",
+      "role": "spacing"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Receita",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Nome",
+          "x": 0,
+          "y": "18mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "18.5mm",
+          "x1": "14mm",
+          "x2": "100%"
+        },
+        {
+          "type": "text",
+          "text": "Porções",
+          "x": 0,
+          "y": "26mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "26.5mm",
+          "x1": "17mm",
+          "x2": "30%"
+        },
+        {
+          "type": "text",
+          "text": "Tempo",
+          "x": "34%",
+          "y": "26mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "26.5mm",
+          "x1": "34% + 14mm",
+          "x2": "64%"
+        },
+        {
+          "type": "text",
+          "text": "Forno",
+          "x": "68%",
+          "y": "26mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "26.5mm",
+          "x1": "68% + 13mm",
+          "x2": "100%"
+        },
+        {
+          "type": "hline",
+          "y": "33mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "37mm",
+          "h": "100% - 37mm",
+          "children": [
+            {
+              "type": "group",
+              "w": "36%",
+              "h": "82%",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Ingredientes",
+                  "x": 0,
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "group",
+                  "y": "7mm",
+                  "h": "100% - 7mm",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "period": "linha",
+                      "fit": "round",
+                      "children": [
+                        {
+                          "type": "dot",
+                          "cx": "1.2mm",
+                          "cy": "100% - 1.6mm",
+                          "r": "0.6mm",
+                          "fill": "accent"
+                        },
+                        {
+                          "type": "hline",
+                          "y": "100%",
+                          "x1": "4mm"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "vline",
+              "x": "39%",
+              "y1": 0,
+              "y2": "82%",
+              "opacity": 0.5
+            },
+            {
+              "type": "group",
+              "x": "42%",
+              "w": "58%",
+              "h": "82%",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Modo de preparo",
+                  "x": 0,
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "group",
+                  "y": "7mm",
+                  "h": "100% - 7mm",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "period": "linha * 2",
+                      "fit": "round",
+                      "children": [
+                        {
+                          "type": "circle",
+                          "cx": "3.5mm",
+                          "cy": "50% - 2.5mm",
+                          "r": "2.8mm",
+                          "stroke": "accent",
+                          "strokeWidth": "0.25mm"
+                        },
+                        {
+                          "type": "text",
+                          "text": "{i + 1}",
+                          "x": "3.5mm",
+                          "y": "50% - 2.5mm",
+                          "fill": "accent",
+                          "size": "2.8mm",
+                          "weight": "bold",
+                          "align": "middle",
+                          "baseline": "middle"
+                        },
+                        {
+                          "type": "hline",
+                          "y": "50%",
+                          "x1": "9mm"
+                        },
+                        {
+                          "type": "hline",
+                          "y": "100%",
+                          "x1": "9mm"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "85%",
+              "h": "15%",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Dicas e variações",
+                  "x": 0,
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "group",
+                  "y": "7mm",
+                  "h": "100% - 7mm",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "period": "linha",
+                      "fit": "round",
+                      "children": [
+                        {
+                          "type": "hline",
+                          "y": "100%"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

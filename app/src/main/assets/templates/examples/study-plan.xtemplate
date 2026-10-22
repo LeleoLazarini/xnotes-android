@@ -1,0 +1,229 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.study-plan",
+  "name": "Study plan",
+  "description": "Plano de estudos: matérias nas linhas e dias da semana nas colunas para distribuir o tempo, e uma área de metas com prazo.",
+  "license": "MIT",
+  "tags": [
+    "study",
+    "planner"
+  ],
+  "params": {
+    "linha": {
+      "type": "length",
+      "default": "12mm",
+      "min": "8mm",
+      "max": "20mm",
+      "label": "Altura da linha",
+      "role": "spacing"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Plano de estudos",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Período",
+          "x": 0,
+          "y": "18mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "18.5mm",
+          "x1": "18mm",
+          "x2": "62%"
+        },
+        {
+          "type": "text",
+          "text": "Horas/semana",
+          "x": "65%",
+          "y": "18mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "18.5mm",
+          "x1": "65% + 25mm",
+          "x2": "100%"
+        },
+        {
+          "type": "text",
+          "text": "Objetivo",
+          "x": 0,
+          "y": "26mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "26.5mm",
+          "x1": "18mm",
+          "x2": "100%"
+        },
+        {
+          "type": "hline",
+          "y": "33mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "37mm",
+          "h": "100% - 37mm",
+          "children": [
+            {
+              "type": "group",
+              "h": "64%",
+              "children": [
+                {
+                  "type": "rect",
+                  "strokeWidth": "0.35mm"
+                },
+                {
+                  "type": "hline",
+                  "y": "9mm",
+                  "strokeWidth": "0.35mm"
+                },
+                {
+                  "type": "text",
+                  "text": "Matéria",
+                  "x": "1.5mm",
+                  "y": "6mm",
+                  "fill": "accent",
+                  "size": "3mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "group",
+                  "x": "28%",
+                  "w": "72%",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "x",
+                      "count": 7,
+                      "children": [
+                        {
+                          "type": "vline",
+                          "x": 0
+                        },
+                        {
+                          "type": "text",
+                          "text": [
+                            "Seg",
+                            "Ter",
+                            "Qua",
+                            "Qui",
+                            "Sex",
+                            "Sáb",
+                            "Dom"
+                          ],
+                          "x": "50%",
+                          "y": "6mm",
+                          "fill": "accent",
+                          "size": "3mm",
+                          "weight": "bold",
+                          "align": "middle"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "group",
+                  "y": "9mm",
+                  "h": "100% - 9mm",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "period": "linha",
+                      "fit": "round",
+                      "children": [
+                        {
+                          "type": "hline",
+                          "y": "100%"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "67%",
+              "h": "33%",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Metas",
+                  "x": 0,
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "Prazo",
+                  "x": "82% + 2mm",
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "group",
+                  "y": "7mm",
+                  "h": "100% - 7mm",
+                  "children": [
+                    {
+                      "type": "vline",
+                      "x": "82%",
+                      "opacity": 0.6
+                    },
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "period": "8mm",
+                      "fit": "round",
+                      "children": [
+                        {
+                          "type": "rect",
+                          "y": "100% - 5mm",
+                          "w": "4mm",
+                          "h": "4mm",
+                          "rx": "0.6mm"
+                        },
+                        {
+                          "type": "hline",
+                          "y": "100%",
+                          "x1": "6mm",
+                          "x2": "100%"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

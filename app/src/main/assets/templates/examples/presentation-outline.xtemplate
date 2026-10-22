@@ -1,0 +1,291 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.presentation-outline",
+  "name": "Presentation outline",
+  "description": "Pauta e roteiro de apresentação: tema, público e duração; pauta numerada com minutos por tópico e slides numerados com caixa 16:9 para rascunho e notas ao lado.",
+  "license": "MIT",
+  "tags": [
+    "work",
+    "planner"
+  ],
+  "params": {
+    "slides": {
+      "type": "integer",
+      "default": 4,
+      "min": 2,
+      "max": 6,
+      "label": "Slides por página"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Roteiro de apresentação",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Tema",
+          "x": 0,
+          "y": "18mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "18.5mm",
+          "x1": "14mm",
+          "x2": "62%"
+        },
+        {
+          "type": "text",
+          "text": "Data",
+          "x": "65%",
+          "y": "18mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "18.5mm",
+          "x1": "65% + 12mm",
+          "x2": "100%"
+        },
+        {
+          "type": "text",
+          "text": "Público",
+          "x": 0,
+          "y": "26mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "26.5mm",
+          "x1": "17mm",
+          "x2": "62%"
+        },
+        {
+          "type": "text",
+          "text": "Duração",
+          "x": "65%",
+          "y": "26mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "26.5mm",
+          "x1": "65% + 17mm",
+          "x2": "100%"
+        },
+        {
+          "type": "hline",
+          "y": "33mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "37mm",
+          "h": "100% - 37mm",
+          "children": [
+            {
+              "type": "group",
+              "h": "23%",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Pauta",
+                  "x": 0,
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "tópicos na ordem em que serão falados",
+                  "x": "100%",
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "2.6mm",
+                  "italic": true,
+                  "align": "end"
+                },
+                {
+                  "type": "group",
+                  "y": "7mm",
+                  "h": "100% - 7mm",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "xy",
+                      "count": [
+                        2,
+                        4
+                      ],
+                      "children": [
+                        {
+                          "type": "text",
+                          "text": "{i * 4 + j + 1}.",
+                          "x": 0,
+                          "y": "100% - 1.5mm",
+                          "fill": "accent",
+                          "size": "2.8mm",
+                          "weight": "bold"
+                        },
+                        {
+                          "type": "hline",
+                          "y": "100%",
+                          "x1": "6mm",
+                          "x2": "100% - 22mm"
+                        },
+                        {
+                          "type": "hline",
+                          "y": "100%",
+                          "x1": "100% - 19mm",
+                          "x2": "100% - 12mm"
+                        },
+                        {
+                          "type": "text",
+                          "text": "min",
+                          "x": "100% - 11mm",
+                          "y": "100% - 1mm",
+                          "fill": "accent",
+                          "size": "2.4mm"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "26%",
+              "h": "74%",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Slides",
+                  "x": 0,
+                  "y": "4.5mm",
+                  "fill": "accent",
+                  "size": "3.5mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "group",
+                  "y": "7mm",
+                  "h": "100% - 7mm",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "count": "slides",
+                      "children": [
+                        {
+                          "type": "circle",
+                          "cx": "3.5mm",
+                          "cy": "5.5mm",
+                          "r": "3mm",
+                          "stroke": "accent",
+                          "strokeWidth": "0.3mm"
+                        },
+                        {
+                          "type": "text",
+                          "text": "{i + 1}",
+                          "x": "3.5mm",
+                          "y": "5.5mm",
+                          "fill": "accent",
+                          "size": "3mm",
+                          "weight": "bold",
+                          "align": "middle",
+                          "baseline": "middle"
+                        },
+                        {
+                          "type": "rect",
+                          "x": "9mm",
+                          "y": "2mm",
+                          "w": "min(W * 0.5 - 12mm, (H - 4mm) * 16 / 9)",
+                          "h": "min(H - 4mm, (W * 0.5 - 12mm) * 9 / 16)",
+                          "rx": "1mm",
+                          "strokeWidth": "0.35mm"
+                        },
+                        {
+                          "type": "group",
+                          "x": "min(W * 0.5 - 12mm, (H - 4mm) * 16 / 9) + 15mm",
+                          "y": "2mm",
+                          "w": "W - min(W * 0.5 - 12mm, (H - 4mm) * 16 / 9) - 15mm",
+                          "h": "100% - 4mm",
+                          "children": [
+                            {
+                              "type": "text",
+                              "text": "Notas",
+                              "x": 0,
+                              "y": "3.5mm",
+                              "fill": "accent",
+                              "size": "2.8mm",
+                              "weight": "bold"
+                            },
+                            {
+                              "type": "text",
+                              "text": "Tempo",
+                              "x": "100% - 24mm",
+                              "y": "3.5mm",
+                              "fill": "accent",
+                              "size": "2.6mm"
+                            },
+                            {
+                              "type": "hline",
+                              "y": "4mm",
+                              "x1": "100% - 12mm",
+                              "x2": "100%"
+                            },
+                            {
+                              "type": "group",
+                              "y": "6mm",
+                              "h": "100% - 6mm",
+                              "children": [
+                                {
+                                  "type": "repeat",
+                                  "axis": "y",
+                                  "period": "7mm",
+                                  "fit": "round",
+                                  "children": [
+                                    {
+                                      "type": "hline",
+                                      "y": "100%",
+                                      "opacity": 0.6
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "hline",
+                          "y": "100%",
+                          "opacity": 0.5
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,142 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.technical-drawing",
+  "name": "Isometric drafting sheet",
+  "description": "Folha de desenho técnico: pontos isométricos dentro de uma moldura e carimbo no rodapé com título, autor, data, escala e folha.",
+  "license": "MIT",
+  "tags": [
+    "drawing",
+    "isometric",
+    "engineering"
+  ],
+  "params": {
+    "side": {
+      "type": "length",
+      "default": "5mm",
+      "min": "3mm",
+      "max": "15mm",
+      "label": "Espaço entre pontos",
+      "role": "spacing"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "rect",
+          "stroke": "accent",
+          "strokeWidth": "0.5mm"
+        },
+        {
+          "type": "group",
+          "h": "100% - 24mm",
+          "inset": "3mm",
+          "clip": true,
+          "children": [
+            {
+              "type": "repeat",
+              "axis": "xy",
+              "period": [
+                "side",
+                "side * sin(60)"
+              ],
+              "stagger": "side / 2",
+              "fit": "center",
+              "children": [
+                {
+                  "type": "dot",
+                  "r": "0.35mm"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "group",
+          "y": "100% - 24mm",
+          "h": "24mm",
+          "children": [
+            {
+              "type": "hline",
+              "y": 0,
+              "stroke": "accent",
+              "strokeWidth": "0.5mm"
+            },
+            {
+              "type": "vline",
+              "x": "55%",
+              "stroke": "accent",
+              "strokeWidth": "0.35mm"
+            },
+            {
+              "type": "text",
+              "text": "Título",
+              "x": "2mm",
+              "y": "4mm",
+              "fill": "accent",
+              "size": "2.4mm",
+              "weight": "bold"
+            },
+            {
+              "type": "group",
+              "x": "55%",
+              "w": "45%",
+              "children": [
+                {
+                  "type": "hline",
+                  "y": "50%",
+                  "stroke": "accent",
+                  "strokeWidth": "0.35mm"
+                },
+                {
+                  "type": "vline",
+                  "x": "50%",
+                  "stroke": "accent",
+                  "strokeWidth": "0.35mm"
+                },
+                {
+                  "type": "text",
+                  "text": "Autor",
+                  "x": "2mm",
+                  "y": "4mm",
+                  "fill": "accent",
+                  "size": "2.4mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "Data",
+                  "x": "50% + 2mm",
+                  "y": "4mm",
+                  "fill": "accent",
+                  "size": "2.4mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "Escala",
+                  "x": "2mm",
+                  "y": "50% + 4mm",
+                  "fill": "accent",
+                  "size": "2.4mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "Folha",
+                  "x": "50% + 2mm",
+                  "y": "50% + 4mm",
+                  "fill": "accent",
+                  "size": "2.4mm",
+                  "weight": "bold"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

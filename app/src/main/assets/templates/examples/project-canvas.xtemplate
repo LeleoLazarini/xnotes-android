@@ -1,0 +1,586 @@
+{
+  "xtemplate": 1,
+  "id": "com.xnotes.examples.project-canvas",
+  "name": "Project canvas",
+  "description": "Canvas de projeto: objetivo, escopo (dentro e fora), equipe, riscos, indicadores e uma linha do tempo de marcos, cada um em seu bloco.",
+  "license": "MIT",
+  "tags": [
+    "work",
+    "planner"
+  ],
+  "params": {
+    "linha": {
+      "type": "length",
+      "default": "7mm",
+      "min": "5mm",
+      "max": "10mm",
+      "label": "Espaço entre linhas",
+      "role": "spacing"
+    }
+  },
+  "items": [
+    {
+      "type": "group",
+      "inset": "12mm",
+      "children": [
+        {
+          "type": "text",
+          "text": "Canvas de projeto",
+          "x": 0,
+          "y": "7mm",
+          "fill": "accent",
+          "size": "5.5mm",
+          "weight": "bold"
+        },
+        {
+          "type": "text",
+          "text": "Projeto",
+          "x": 0,
+          "y": "18mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "18.5mm",
+          "x1": "18mm",
+          "x2": "62%"
+        },
+        {
+          "type": "text",
+          "text": "Início",
+          "x": "65%",
+          "y": "18mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "18.5mm",
+          "x1": "65% + 13mm",
+          "x2": "100%"
+        },
+        {
+          "type": "text",
+          "text": "Responsável",
+          "x": 0,
+          "y": "26mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "26.5mm",
+          "x1": "25mm",
+          "x2": "62%"
+        },
+        {
+          "type": "text",
+          "text": "Fim",
+          "x": "65%",
+          "y": "26mm",
+          "fill": "accent",
+          "size": "3mm"
+        },
+        {
+          "type": "hline",
+          "y": "26.5mm",
+          "x1": "65% + 13mm",
+          "x2": "100%"
+        },
+        {
+          "type": "hline",
+          "y": "33mm",
+          "strokeWidth": "0.35mm"
+        },
+        {
+          "type": "group",
+          "y": "36mm",
+          "h": "100% - 36mm",
+          "children": [
+            {
+              "type": "group",
+              "h": "16%",
+              "children": [
+                {
+                  "type": "rect",
+                  "x": "1mm",
+                  "y": "1mm",
+                  "w": "100% - 2mm",
+                  "h": "100% - 2mm",
+                  "rx": "2mm",
+                  "strokeWidth": "0.3mm"
+                },
+                {
+                  "type": "text",
+                  "text": "Objetivo",
+                  "x": "4mm",
+                  "y": "7.5mm",
+                  "fill": "accent",
+                  "size": "3.6mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "o que o projeto entrega e por quê",
+                  "x": "4mm",
+                  "y": "11.5mm",
+                  "fill": "accent",
+                  "size": "2.5mm",
+                  "italic": true
+                },
+                {
+                  "type": "group",
+                  "x": "4mm",
+                  "y": "13mm",
+                  "w": "100% - 8mm",
+                  "h": "100% - 15mm",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "period": "linha",
+                      "fit": "round",
+                      "children": [
+                        {
+                          "type": "hline",
+                          "y": "100%",
+                          "opacity": 0.6
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "16%",
+              "w": "50%",
+              "h": "28%",
+              "children": [
+                {
+                  "type": "rect",
+                  "x": "1mm",
+                  "y": "1mm",
+                  "w": "100% - 2mm",
+                  "h": "100% - 2mm",
+                  "rx": "2mm",
+                  "strokeWidth": "0.3mm"
+                },
+                {
+                  "type": "text",
+                  "text": "Escopo",
+                  "x": "4mm",
+                  "y": "7.5mm",
+                  "fill": "accent",
+                  "size": "3.6mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "o que entra e o que fica de fora",
+                  "x": "4mm",
+                  "y": "11.5mm",
+                  "fill": "accent",
+                  "size": "2.5mm",
+                  "italic": true
+                },
+                {
+                  "type": "group",
+                  "x": "4mm",
+                  "y": "13mm",
+                  "w": "100% - 8mm",
+                  "h": "100% - 15mm",
+                  "children": [
+                    {
+                      "type": "text",
+                      "text": "Dentro",
+                      "x": 0,
+                      "y": "3.5mm",
+                      "fill": "accent",
+                      "size": "2.8mm",
+                      "weight": "bold"
+                    },
+                    {
+                      "type": "text",
+                      "text": "Fora",
+                      "x": "50% + 2mm",
+                      "y": "3.5mm",
+                      "fill": "accent",
+                      "size": "2.8mm",
+                      "weight": "bold"
+                    },
+                    {
+                      "type": "group",
+                      "y": "5mm",
+                      "h": "100% - 5mm",
+                      "children": [
+                        {
+                          "type": "vline",
+                          "x": "50%",
+                          "opacity": 0.5
+                        },
+                        {
+                          "type": "repeat",
+                          "axis": "y",
+                          "period": "linha",
+                          "fit": "round",
+                          "children": [
+                            {
+                              "type": "hline",
+                              "y": "100%",
+                              "opacity": 0.6
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "x": "50%",
+              "y": "16%",
+              "w": "50%",
+              "h": "28%",
+              "children": [
+                {
+                  "type": "rect",
+                  "x": "1mm",
+                  "y": "1mm",
+                  "w": "100% - 2mm",
+                  "h": "100% - 2mm",
+                  "rx": "2mm",
+                  "strokeWidth": "0.3mm"
+                },
+                {
+                  "type": "text",
+                  "text": "Equipe",
+                  "x": "4mm",
+                  "y": "7.5mm",
+                  "fill": "accent",
+                  "size": "3.6mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "quem faz o quê",
+                  "x": "4mm",
+                  "y": "11.5mm",
+                  "fill": "accent",
+                  "size": "2.5mm",
+                  "italic": true
+                },
+                {
+                  "type": "group",
+                  "x": "4mm",
+                  "y": "13mm",
+                  "w": "100% - 8mm",
+                  "h": "100% - 15mm",
+                  "children": [
+                    {
+                      "type": "text",
+                      "text": "Pessoa",
+                      "x": 0,
+                      "y": "3.5mm",
+                      "fill": "accent",
+                      "size": "2.8mm",
+                      "weight": "bold"
+                    },
+                    {
+                      "type": "text",
+                      "text": "Papel",
+                      "x": "55% + 2mm",
+                      "y": "3.5mm",
+                      "fill": "accent",
+                      "size": "2.8mm",
+                      "weight": "bold"
+                    },
+                    {
+                      "type": "group",
+                      "y": "5mm",
+                      "h": "100% - 5mm",
+                      "children": [
+                        {
+                          "type": "vline",
+                          "x": "55%",
+                          "opacity": 0.5
+                        },
+                        {
+                          "type": "repeat",
+                          "axis": "y",
+                          "period": "linha",
+                          "fit": "round",
+                          "children": [
+                            {
+                              "type": "hline",
+                              "y": "100%",
+                              "opacity": 0.6
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "44%",
+              "w": "50%",
+              "h": "28%",
+              "children": [
+                {
+                  "type": "rect",
+                  "x": "1mm",
+                  "y": "1mm",
+                  "w": "100% - 2mm",
+                  "h": "100% - 2mm",
+                  "rx": "2mm",
+                  "strokeWidth": "0.3mm"
+                },
+                {
+                  "type": "text",
+                  "text": "Riscos",
+                  "x": "4mm",
+                  "y": "7.5mm",
+                  "fill": "accent",
+                  "size": "3.6mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "o que pode dar errado e como evitar",
+                  "x": "4mm",
+                  "y": "11.5mm",
+                  "fill": "accent",
+                  "size": "2.5mm",
+                  "italic": true
+                },
+                {
+                  "type": "group",
+                  "x": "4mm",
+                  "y": "13mm",
+                  "w": "100% - 8mm",
+                  "h": "100% - 15mm",
+                  "children": [
+                    {
+                      "type": "repeat",
+                      "axis": "y",
+                      "period": "linha",
+                      "fit": "round",
+                      "children": [
+                        {
+                          "type": "hline",
+                          "y": "100%",
+                          "opacity": 0.6
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "x": "50%",
+              "y": "44%",
+              "w": "50%",
+              "h": "28%",
+              "children": [
+                {
+                  "type": "rect",
+                  "x": "1mm",
+                  "y": "1mm",
+                  "w": "100% - 2mm",
+                  "h": "100% - 2mm",
+                  "rx": "2mm",
+                  "strokeWidth": "0.3mm"
+                },
+                {
+                  "type": "text",
+                  "text": "Indicadores",
+                  "x": "4mm",
+                  "y": "7.5mm",
+                  "fill": "accent",
+                  "size": "3.6mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "como saber que deu certo",
+                  "x": "4mm",
+                  "y": "11.5mm",
+                  "fill": "accent",
+                  "size": "2.5mm",
+                  "italic": true
+                },
+                {
+                  "type": "group",
+                  "x": "4mm",
+                  "y": "13mm",
+                  "w": "100% - 8mm",
+                  "h": "100% - 15mm",
+                  "children": [
+                    {
+                      "type": "text",
+                      "text": "Indicador",
+                      "x": 0,
+                      "y": "3.5mm",
+                      "fill": "accent",
+                      "size": "2.8mm",
+                      "weight": "bold"
+                    },
+                    {
+                      "type": "text",
+                      "text": "Meta",
+                      "x": "65% + 2mm",
+                      "y": "3.5mm",
+                      "fill": "accent",
+                      "size": "2.8mm",
+                      "weight": "bold"
+                    },
+                    {
+                      "type": "group",
+                      "y": "5mm",
+                      "h": "100% - 5mm",
+                      "children": [
+                        {
+                          "type": "vline",
+                          "x": "65%",
+                          "opacity": 0.5
+                        },
+                        {
+                          "type": "repeat",
+                          "axis": "y",
+                          "period": "linha",
+                          "fit": "round",
+                          "children": [
+                            {
+                              "type": "hline",
+                              "y": "100%",
+                              "opacity": 0.6
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "group",
+              "y": "72%",
+              "h": "28%",
+              "children": [
+                {
+                  "type": "rect",
+                  "x": "1mm",
+                  "y": "1mm",
+                  "w": "100% - 2mm",
+                  "h": "100% - 2mm",
+                  "rx": "2mm",
+                  "strokeWidth": "0.3mm"
+                },
+                {
+                  "type": "text",
+                  "text": "Marcos",
+                  "x": "4mm",
+                  "y": "7.5mm",
+                  "fill": "accent",
+                  "size": "3.6mm",
+                  "weight": "bold"
+                },
+                {
+                  "type": "text",
+                  "text": "entregas principais e datas",
+                  "x": "4mm",
+                  "y": "11.5mm",
+                  "fill": "accent",
+                  "size": "2.5mm",
+                  "italic": true
+                },
+                {
+                  "type": "group",
+                  "x": "4mm",
+                  "y": "13mm",
+                  "w": "100% - 8mm",
+                  "h": "100% - 15mm",
+                  "children": [
+                    {
+                      "type": "hline",
+                      "y": "40%",
+                      "x1": "2%",
+                      "x2": "98%",
+                      "strokeWidth": "0.4mm"
+                    },
+                    {
+                      "type": "repeat",
+                      "axis": "x",
+                      "count": 5,
+                      "children": [
+                        {
+                          "type": "circle",
+                          "cx": "50%",
+                          "cy": "40%",
+                          "r": "2mm",
+                          "stroke": "accent",
+                          "strokeWidth": "0.35mm"
+                        },
+                        {
+                          "type": "text",
+                          "text": "M{i + 1}",
+                          "x": "50%",
+                          "y": "40% - 4mm",
+                          "fill": "accent",
+                          "size": "2.8mm",
+                          "weight": "bold",
+                          "align": "middle"
+                        },
+                        {
+                          "type": "hline",
+                          "y": "40% + 8mm",
+                          "x1": "20%",
+                          "x2": "80%"
+                        },
+                        {
+                          "type": "text",
+                          "text": "data",
+                          "x": "50%",
+                          "y": "40% + 11.5mm",
+                          "fill": "accent",
+                          "size": "2.3mm",
+                          "italic": true,
+                          "align": "middle"
+                        },
+                        {
+                          "type": "hline",
+                          "y": "100% - 9mm",
+                          "x1": "6%",
+                          "x2": "94%",
+                          "opacity": 0.6
+                        },
+                        {
+                          "type": "hline",
+                          "y": "100% - 1mm",
+                          "x1": "6%",
+                          "x2": "94%",
+                          "opacity": 0.6
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
