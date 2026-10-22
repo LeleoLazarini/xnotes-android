@@ -1019,4 +1019,11 @@
     <string name="go_to_page_n">Ir para a página (%1$d / %2$d)</string>
     <string name="eyedropper">Conta-gotas (pegar cor da página)</string>
     <string name="eyedropper_hint">Toque numa cor da página</string>
+    <string name="folder_look_ellipsis">Aparência da pasta…</string>
+    <string name="folder_purpose">Propósito</string>
+    <string name="folder_colour">Cor da pasta</string>
+    <string name="folder_icon_colour">Cor do ícone</string>
+    <string name="greet_morning">Bom dia</string>
+    <string name="greet_afternoon">Boa tarde</string>
+    <string name="greet_evening">Boa noite</string>
 </resources>

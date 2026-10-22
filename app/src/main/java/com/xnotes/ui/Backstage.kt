@@ -930,6 +930,10 @@ private fun ExplorerSection(
     var timelineMonth by remember(root) { mutableStateOf<YearMonth?>(null) }
     var columnsPick by remember(root) { mutableStateOf<BrowseEntry?>(null) }
     var namingColor by remember(root) { mutableStateOf<Rgba?>(null) }
+    var styling by remember(root) { mutableStateOf<BrowseEntry?>(null) }
+    // The look picked in the New folder dialog, applied once the folder exists.
+    var newFolderColor by remember(root) { mutableStateOf<Rgba?>(null) }
+    var newFolderIcon by remember(root) { mutableStateOf<FolderIcon?>(null) }
     var metaTick by remember(root) { mutableIntStateOf(0) }
     fun clearUp() { selection.clear(); opError = null; columnsPick = null }
     // A sidebar pick either filters by a colour or replaces the path with a folder's chain from the root.
@@ -1228,6 +1232,7 @@ private fun ExplorerSection(
                 moveTo = { moving = listOf(it) },
                 delete = { remove(listOf(it)) },
                 color = { e, c -> recolor(listOf(e), c) },
+                look = { styling = it },
                 nameColor = { namingColor = it },
                 togglePin = { e -> if (editor.isPinned(e.documentUri)) editor.unpinFolder(e.documentUri) else editor.pinFolder(e.documentUri, e.name) },
                 share = { callsNow.value.shareFile(it.documentUri) },
@@ -1786,6 +1791,7 @@ private fun ExplorerSection(
                 pendingImport != null -> null
                 createMode == CreateMode.FILE -> { { NewNotePaperPicker(editor, newNotePaper) { newNotePaper = it } } }
                 createMode == CreateMode.AGENDA -> { { AgendaYearPicker(thisYear, agendaYear) { agendaYear = it } } }
+                isFolder -> { { Spacer(Modifier.height(12.dp)); FolderLookPicker(newFolderColor, newFolderIcon, onColor = { newFolderColor = it }, onIcon = { newFolderIcon = it }) } }
                 else -> null
             },
             onConfirm = { n ->
@@ -1803,7 +1809,16 @@ private fun ExplorerSection(
                         }
                     }
                     isFolder -> scope.launch {
-                        val ok = withContext(Dispatchers.IO) { editor.createFolder(root, currentDocId, n) }
+                        val ok = withContext(Dispatchers.IO) {
+                            editor.createFolder(root, currentDocId, n).also { made ->
+                                if (made) {
+                                    newFolderColor?.let { editor.setItemColor(root, currentDocId, n, it) }
+                                    newFolderIcon?.let { editor.setFolderIcon(root, currentDocId, n, it) }
+                                }
+                            }
+                        }
+                        newFolderColor = null
+                        newFolderIcon = null
                         if (ok) { onCreateMode(CreateMode.NONE); refreshKey++ } else fieldError = context.getString(R.string.err_create_folder)
                     }
                     createMode == CreateMode.AGENDA -> scope.launch {
@@ -1827,6 +1842,25 @@ private fun ExplorerSection(
 
     namingColor?.let { c -> ColorNameDialog(editor, c) { namingColor = null } }
 
+    styling?.let { e ->
+        FolderLookDialog(
+            name = e.name,
+            color = e.color,
+            icon = e.icon,
+            onSave = { c, i ->
+                styling = null
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        editor.setItemColor(root, e.parentDocId, e.name, c)
+                        editor.setFolderIcon(root, e.parentDocId, e.name, i)
+                    }
+                    refreshKey++
+                }
+            },
+            onDismiss = { styling = null },
+        )
+    }
+
     renaming?.let { entry ->
         NameDialog(
             title = if (entry.isDir) stringResource(R.string.rename_folder) else stringResource(R.string.rename_note),
@@ -1841,9 +1875,12 @@ private fun ExplorerSection(
                 renaming = null
                 if (ok) {
                     // Carry the colour code to the new name (sidecar is keyed by name), then re-list.
-                    if (entry.color != null) {
+                    if (entry.color != null || entry.icon != null) {
                         scope.launch {
-                            withContext(Dispatchers.IO) { editor.moveItemColor(root, entry.parentDocId, entry.name, newName) }
+                            withContext(Dispatchers.IO) {
+                                if (entry.color != null) editor.moveItemColor(root, entry.parentDocId, entry.name, newName)
+                                if (entry.icon != null) editor.moveFolderIcon(root, entry.parentDocId, entry.name, newName)
+                            }
                             refreshKey++
                         }
                     } else {
@@ -2048,6 +2085,7 @@ internal fun EntryMenu(
     onNameColor: (() -> Unit)? = null,
     onMoveTo: (() -> Unit)? = null,
     onPreview: (() -> Unit)? = null,
+    onLook: (() -> Unit)? = null,
     deleteLabel: String = stringResource(R.string.delete),
 ) {
     val palette = LocalPalette.current
@@ -2064,6 +2102,7 @@ internal fun EntryMenu(
             if (onMoveTo != null) DropdownMenuItem(text = { Text(stringResource(R.string.move_to_folder_ellipsis)) }, onClick = { onDismiss(); onMoveTo() })
             DropdownMenuItem(text = { Text(stringResource(R.string.copy)) }, onClick = { onDismiss(); onCopy?.invoke() })
             DropdownMenuItem(text = { Text(stringResource(R.string.cut)) }, onClick = { onDismiss(); onCut?.invoke() })
+            if (onLook != null) DropdownMenuItem(text = { Text(stringResource(R.string.folder_look_ellipsis)) }, onClick = { onDismiss(); onLook() })
             if (onColor != null) DropdownMenuItem(text = { Text(stringResource(R.string.colour_code)) }, onClick = { showColors = true })
             if (onNameColor != null) DropdownMenuItem(text = { Text(stringResource(R.string.name_colour_ellipsis)) }, onClick = { onDismiss(); onNameColor() })
             if (onTogglePin != null) {

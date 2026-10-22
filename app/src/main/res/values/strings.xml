@@ -1021,4 +1021,11 @@
     <string name="go_to_page_n">Go to page (%1$d / %2$d)</string>
     <string name="eyedropper">Eyedropper</string>
     <string name="eyedropper_hint">Tap a colour on the page</string>
+    <string name="folder_look_ellipsis">Folder look…</string>
+    <string name="folder_purpose">Purpose</string>
+    <string name="folder_colour">Folder colour</string>
+    <string name="folder_icon_colour">Icon colour</string>
+    <string name="greet_morning">Good morning</string>
+    <string name="greet_afternoon">Good afternoon</string>
+    <string name="greet_evening">Good evening</string>
 </resources>

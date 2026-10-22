@@ -153,6 +153,8 @@ data class BrowseEntry(
     val created: Long = 0,
     val parentDocId: String = "",
     val color: Rgba? = null,
+    /** A folder's purpose picture and its colour, when one was chosen. */
+    val icon: FolderIcon? = null,
 )
 
 /** Every note and canvas under a folder, and the names of the folders they sit in, by document id. */
@@ -179,6 +181,7 @@ data class ImportProgress(val done: Int, val total: Int)
 /** Per-folder colour sidecar: a hidden ".xnote" dir holding "colors.json" (item name -> hex). */
 private const val SIDECAR_DIR = ".xnote"
 private const val SIDECAR_FILE = "colors.json"
+private const val SIDECAR_ICONS = "icons.json"
 /** In the root folder's sidecar only: the names given to colour codes, so they sync with the notes. */
 private const val COLOR_NAMES_FILE = "color-names.json"
 
@@ -4892,12 +4895,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             }
         }
         val colors = sidecarDocId?.let { readSidecarColors(tree, it) }.orEmpty()
+        val icons = sidecarDocId?.let { readSidecarIcons(tree, it) }.orEmpty()
         // SAF reports no creation time, so an item seen for the first time is stamped with the earlier of
         // now and its modified time: nothing was created after its last edit, and a fresh item gets now.
         val now = System.currentTimeMillis()
         createdStore.stampMissing(out.associate { documentKey(it.documentUri) to (com.xnotes.core.util.DocKeys.inferCreated(now, it.modified) ?: now) })
         val withCreated = out.map {
-            it.copy(created = createdStore.get(documentKey(it.documentUri)) ?: now, color = colors[it.name])
+            it.copy(created = createdStore.get(documentKey(it.documentUri)) ?: now, color = colors[it.name], icon = icons[it.name])
         }
         val result = withCreated.sortedWith(explorerComparator(explorerView.sortKey, explorerView.descending) { it.created })
         browseCache["$treeUri|$parentDocId"] = result
@@ -5064,6 +5068,46 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     /** Carries a colour across a rename: moves key [oldName] -> [newName] in [parentDocId]'s sidecar. */
+    /** Folder pictures in sidecar dir [sidecarDocId]: icons.json, by item name. */
+    private fun readSidecarIcons(tree: android.net.Uri, sidecarDocId: String): Map<String, FolderIcon> {
+        val fileId = findChildDocId(tree, sidecarDocId, SIDECAR_ICONS, dir = false) ?: return emptyMap()
+        val fileUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, fileId)
+        val text = runCatching {
+            appContext.contentResolver.openInputStream(fileUri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+        }.getOrNull() ?: return emptyMap()
+        return runCatching {
+            val obj = org.json.JSONObject(text).optJSONObject("icons") ?: return emptyMap()
+            val map = HashMap<String, FolderIcon>()
+            for (k in obj.keys()) {
+                val o = obj.optJSONObject(k) ?: continue
+                val id = o.optString("id")
+                if (id.isEmpty()) continue
+                map[k] = FolderIcon(id, Rgba.fromHex(o.optString("color")))
+            }
+            map
+        }.getOrDefault(emptyMap())
+    }
+
+    /** Give folder [itemName] in [parentDocId] the picture [icon] (null clears it). One read-modify-write. */
+    fun setFolderIcon(treeUri: String, parentDocId: String, itemName: String, icon: FolderIcon?): Boolean = runCatching {
+        val tree = android.net.Uri.parse(treeUri)
+        val sidecarId = sidecarDir(tree, parentDocId, create = icon != null) ?: return@runCatching icon == null
+        val map = readSidecarIcons(tree, sidecarId).toMutableMap()
+        if (icon == null) map.remove(itemName) else map[itemName] = icon
+        val icons = org.json.JSONObject()
+        map.forEach { (k, v) -> icons.put(k, org.json.JSONObject().put("id", v.id).apply { v.color?.let { put("color", Rgba.toHex(it)) } }) }
+        writeSidecarJson(tree, sidecarId, SIDECAR_ICONS, org.json.JSONObject().put("version", 1).put("icons", icons))
+    }.getOrDefault(false)
+
+    /** Carry a folder's picture across a rename, as [moveItemColor] does its colour. */
+    fun moveFolderIcon(treeUri: String, parentDocId: String, oldName: String, newName: String): Boolean = runCatching {
+        val tree = android.net.Uri.parse(treeUri)
+        val sidecarId = findChildDocId(tree, parentDocId, SIDECAR_DIR, dir = true) ?: return@runCatching true
+        val icon = readSidecarIcons(tree, sidecarId)[oldName] ?: return@runCatching true
+        setFolderIcon(treeUri, parentDocId, oldName, null)
+        setFolderIcon(treeUri, parentDocId, newName, icon)
+    }.getOrDefault(false)
+
     fun moveItemColor(treeUri: String, parentDocId: String, oldName: String, newName: String): Boolean = runCatching {
         val tree = android.net.Uri.parse(treeUri)
         val sidecarId = findChildDocId(tree, parentDocId, SIDECAR_DIR, dir = true) ?: return@runCatching true

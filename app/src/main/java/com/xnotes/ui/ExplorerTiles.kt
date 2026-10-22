@@ -97,6 +97,7 @@ internal class EntryActions(
     val moveTo: (BrowseEntry) -> Unit,
     val delete: (BrowseEntry) -> Unit,
     val color: (BrowseEntry, Rgba?) -> Unit,
+    val look: (BrowseEntry) -> Unit,
     val nameColor: (Rgba) -> Unit,
     val togglePin: (BrowseEntry) -> Unit,
     val share: (BrowseEntry) -> Unit,
@@ -264,6 +265,7 @@ internal fun EntryMenuFor(b: ExplorerBody, e: BrowseEntry, expanded: Boolean, on
         onNameColor = e.color?.let { c -> { m.nameColor(c) } },
         onMoveTo = { m.moveTo(e) },
         onPreview = if (e.isDir) null else ({ m.preview(e) }),
+        onLook = if (e.isDir) ({ m.look(e) }) else null,
         deleteLabel = b.deleteLabel,
     )
 }
@@ -325,7 +327,7 @@ internal fun GridFileTile(b: ExplorerBody, e: BrowseEntry) {
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun FolderChipTile(b: ExplorerBody, e: BrowseEntry, height: Dp = 60.dp) {
+internal fun FolderChipTile(b: ExplorerBody, e: BrowseEntry, height: Dp = 68.dp) {
     val palette = LocalPalette.current
     val selecting = b.host.selecting()
     val active = b.host.isSelected(e) || b.host.isDropTarget(e)
@@ -341,7 +343,8 @@ internal fun FolderChipTile(b: ExplorerBody, e: BrowseEntry, height: Dp = 60.dp)
             b.host.onPulseDone(e)
         }
     }
-    val shape = MaterialTheme.shapes.small
+    // A card: the folder's badge carries its colour and purpose, so the card itself stays quiet.
+    val shape = MaterialTheme.shapes.medium
     Row(
         Modifier
             .fillMaxWidth()
@@ -349,9 +352,8 @@ internal fun FolderChipTile(b: ExplorerBody, e: BrowseEntry, height: Dp = 60.dp)
             .scale(pulse.value)
             .registered(b, e)
             .clip(shape)
-            .background(if (active) palette.selectionBackground.toComposeColor() else Color.Transparent)
-            .then(if (!active && code != null) Modifier.colorHatch(code) else Modifier)
-            .border(1.dp, if (active) accent else (code ?: palette.border.toComposeColor()), shape)
+            .background((if (active) palette.selectionBackground else palette.surface).toComposeColor())
+            .border(if (active) 2.dp else 1.dp, if (active) accent else palette.border.toComposeColor(), shape)
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -362,8 +364,8 @@ internal fun FolderChipTile(b: ExplorerBody, e: BrowseEntry, height: Dp = 60.dp)
             .padding(start = 12.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(XnotesIcons.folder, null, tint = if (active) onAccent else (code ?: palette.textDim.toComposeColor()), modifier = Modifier.size(22.dp))
-        Spacer(Modifier.width(10.dp))
+        FolderBadge(e.color, e.icon, 42.dp)
+        Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(b.label(e), color = if (active) onAccent else palette.text.toComposeColor(), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val meta = b.metaOverride?.invoke(e) ?: b.counts[e.documentUri]?.let { itemsLabel(b.words, it) }
@@ -408,7 +410,7 @@ internal fun FolderCardTile(b: ExplorerBody, e: BrowseEntry) {
                 .border(if (active) 2.dp else 1.dp, if (active) accent else (code ?: palette.border.toComposeColor()), shape),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(XnotesIcons.folder, null, tint = code ?: palette.textDim.toComposeColor(), modifier = Modifier.size(44.dp))
+            FolderBadge(e.color, e.icon, 64.dp)
             if (selecting) CheckRing(b.host.isSelected(e), Modifier.align(Alignment.TopStart).padding(8.dp))
         }
         Row(
@@ -461,7 +463,9 @@ internal fun ListRow(b: ExplorerBody, e: BrowseEntry, wide: Boolean) {
         }
         val box = if (compact) 28.dp else 40.dp
         val shape = MaterialTheme.shapes.small
-        if (e.isDir || compact) {
+        if (e.isDir) {
+            FolderBadge(e.color, e.icon, box)
+        } else if (compact) {
             Box(Modifier.size(box).clip(shape).background(palette.surface.toComposeColor()), contentAlignment = Alignment.Center) {
                 Icon(kindIcon(kind), null, tint = code ?: dim, modifier = Modifier.size(if (compact) 17.dp else 22.dp))
             }
@@ -609,21 +613,20 @@ internal fun GalleryFolderChip(b: ExplorerBody, e: BrowseEntry) {
             .height(44.dp)
             .registered(b, e)
             .clip(shape)
-            .background(if (active) palette.selectionBackground.toComposeColor() else Color.Transparent)
-            .then(if (!active && code != null) Modifier.colorHatch(code) else Modifier)
-            .border(1.dp, if (active) palette.accent.toComposeColor() else (code ?: palette.border.toComposeColor()), shape)
+            .background((if (active) palette.selectionBackground else palette.surface).toComposeColor())
+            .border(1.dp, if (active) palette.accent.toComposeColor() else palette.border.toComposeColor(), shape)
             .combinedClickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = { b.host.onClick(e) },
                 onLongClick = { b.host.onLongClick(e) },
             )
-            .padding(start = 12.dp, end = 16.dp),
+            .padding(start = 8.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         val fg = if (active) palette.selectionForeground.toComposeColor() else palette.text.toComposeColor()
-        Icon(XnotesIcons.folder, null, tint = if (active) fg else (code ?: palette.textDim.toComposeColor()), modifier = Modifier.size(20.dp))
+        FolderBadge(e.color, e.icon, 30.dp)
         Text(b.label(e), color = fg, fontSize = 14.sp, maxLines = 1)
         b.counts[e.documentUri]?.let { Text("$it", color = if (active) fg else palette.textDim.toComposeColor(), fontSize = 12.sp) }
     }
@@ -653,6 +656,17 @@ internal fun HomeShelves(
 ) {
     val palette = LocalPalette.current
     Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+        // A greeting for the time of day, today's date and what is here.
+        val hour = remember { java.time.LocalTime.now().hour }
+        val greet = stringResource(when (hour) { in 5..11 -> R.string.greet_morning; in 12..17 -> R.string.greet_afternoon; else -> R.string.greet_evening })
+        val today = remember {
+            java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM", java.util.Locale("pt", "BR")))
+                .replaceFirstChar { it.uppercase() }
+        }
+        Text(greet, color = palette.text.toComposeColor(), fontSize = 28.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+        Spacer(Modifier.height(2.dp))
+        Text("$today · $counts", color = palette.textDim.toComposeColor(), fontSize = 14.sp)
+        Spacer(Modifier.height(20.dp))
         if (recents.isNotEmpty()) {
             ShelfTitle(stringResource(R.string.recent), stringResource(R.string.see_all), onSeeAll)
             androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(16.dp)) {

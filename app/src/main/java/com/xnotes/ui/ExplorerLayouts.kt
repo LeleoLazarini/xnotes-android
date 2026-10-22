@@ -309,7 +309,7 @@ internal fun ColumnsBody(
                                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     ) {
                                         val fg = (if (sel) palette.selectionForeground else palette.text).toComposeColor()
-                                        Icon(
+                                        if (e.isDir) FolderBadge(e.color, e.icon, 24.dp) else Icon(
                                             kindIcon(b.kind(e)), null,
                                             tint = if (sel) fg else (code ?: palette.textDim.toComposeColor()),
                                             modifier = Modifier.size(18.dp),

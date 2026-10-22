@@ -99,7 +99,7 @@ data class Preferences(
     val sidebarColours: Boolean = true,
     val sidebarTrash: Boolean = true,
     /** Where Home opens: "top" (the notes folder), "last" (the folder last shown) or "shelves" (the notes folder under Recent and Pinned). */
-    val homeOpensTo: String = "top",
+    val homeOpensTo: String = "shelves",
     /** How the explorer writes dates: "relative" (2 days ago), "day" (Wed 17:30) or "date" (16 Sep 2026). */
     val dateStyle: String = "day",
     /** Tapping a file previews it instead of opening it. */
@@ -192,7 +192,8 @@ data class Preferences(
         .put("sidebar_pinned", sidebarPinned)
         .put("sidebar_colours", sidebarColours)
         .put("sidebar_trash", sidebarTrash)
-        .put("home_opens_to", homeOpensTo)
+        // v2 key: the home now opens on the shelves (greeting, recents, pins) unless chosen otherwise.
+        .put("home_opens_to2", homeOpensTo)
         .put("date_style", dateStyle)
         .put("tap_previews", tapPreviews)
         .put("trash_days", trashDays)
@@ -302,7 +303,7 @@ data class Preferences(
                 sidebarPinned = o.optBoolean("sidebar_pinned", true),
                 sidebarColours = o.optBoolean("sidebar_colours", true),
                 sidebarTrash = o.optBoolean("sidebar_trash", true),
-                homeOpensTo = o.optString("home_opens_to", "top").let { if (it == "last" || it == "shelves") it else "top" },
+                homeOpensTo = o.optString("home_opens_to2", "shelves").let { if (it == "last" || it == "shelves") it else "top" },
                 dateStyle = o.optString("date_style", "day").let { if (it == "relative" || it == "date") it else "day" },
                 tapPreviews = o.optBoolean("tap_previews", false),
                 trashDays = o.optInt("trash_days", 30).let { if (it == TRASH_FOREVER || it in 0..365) it else 30 },
