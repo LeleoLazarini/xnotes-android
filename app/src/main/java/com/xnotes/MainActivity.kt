@@ -1311,9 +1311,9 @@ private fun EditorPane(
                     onImportTemplate = actions.onImportTemplate,
                 )
             }
-            ToolbarAround(bar, onCover = editor::setToolbarCover) { floatingBar ->
+            ToolbarAround(bar, onCover = editor::setToolbarCover, hidden = editor.focusMode) { floatingBar ->
                 Row(modifier = Modifier.fillMaxSize()) {
-                    if (editor.sidebarVisible) {
+                    if (editor.sidebarVisible && !editor.focusMode) {
                         com.xnotes.ui.SidePanel(
                             editor,
                             onSharePages = { pages, asPdf -> actions.onSharePages(editor, pages, asPdf) },

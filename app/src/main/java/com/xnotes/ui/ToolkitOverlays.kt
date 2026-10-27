@@ -68,6 +68,9 @@ internal fun ToolkitOverlays(editor: Editor) {
     editor.translation?.let { TranslationDialog(editor, it) }
     editor.pageModelSaveFor?.let { SavePageModelDialog(editor, it) }
     editor.pageModelPickAfter?.let { PageModelPicker(editor, it) }
+    editor.reminder?.let { ReminderDialog(editor, it) }
+    if (editor.focusMode) FocusControls(editor)
+    editor.study?.let { StudyControls(editor, it) }
     RecordingControls(editor)
     TranscriptionControls(editor)
     editor.transcriptResult?.let { TranscriptDialog(editor, it) }
@@ -168,7 +171,12 @@ private fun TranscriptDialog(editor: Editor, text0: String) {
                 TextButton(onClick = { editor.placeTranscript(text, newPage = false) }) { Text(stringResource(R.string.meeting_this_page)) }
             }
         },
-        dismissButton = { CopyButton(text) { editor.transcriptResult = null } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { editor.summarizeWithClaude(text) }) { Text(stringResource(R.string.summary_with_claude)) }
+                CopyButton(text) { editor.transcriptResult = null }
+            }
+        },
     )
 }
 
@@ -394,5 +402,100 @@ private fun PageModelPicker(editor: Editor, after: Int) {
             }
         },
         confirmButton = { TextButton(onClick = close) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+/** A dark rounded button for the floating bars. */
+@Composable
+private fun BarButton(label: String, strong: Boolean = false, onClick: () -> Unit) {
+    Text(
+        label,
+        color = Color.White,
+        fontSize = 15.sp,
+        modifier = Modifier.padding(horizontal = 3.dp).clip(RoundedCornerShape(16.dp))
+            .background(if (strong) Color(0xFF2563EB) else Color(0x33FFFFFF)).clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun DarkBar(content: @Composable () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(24.dp)).background(Color(0xD9202124)).padding(horizontal = 6.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) { content() }
+}
+
+/** Focus and presentation: the way out, and in presentation the page arrows. */
+@Composable
+private fun FocusControls(editor: Editor) {
+    Box(Modifier.fillMaxSize().padding(12.dp), contentAlignment = Alignment.TopEnd) {
+        DarkBar {
+            if (editor.presenting) {
+                BarButton("‹") { editor.goToPage((editor.pageIndex - 1).coerceAtLeast(0)) }
+                Text("${editor.pageIndex + 1} / ${editor.pageCount}", color = Color.White, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 8.dp))
+                BarButton("›") { editor.goToPage((editor.pageIndex + 1).coerceAtMost(editor.pageCount - 1)) }
+            }
+            BarButton(stringResource(R.string.focus_exit)) { editor.exitFocus() }
+        }
+    }
+}
+
+/** The study run: which card, show the answer, score it; at the end the score and a retry. */
+@Composable
+private fun StudyControls(editor: Editor, s: Editor.StudySession) {
+    Box(Modifier.fillMaxSize().padding(bottom = 28.dp), contentAlignment = Alignment.BottomCenter) {
+        DarkBar {
+            if (s.done) {
+                Text(stringResource(R.string.study_done, s.right, s.cards.size), color = Color.White, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 10.dp))
+                if (s.missed.isNotEmpty()) BarButton(stringResource(R.string.study_retry, s.missed.size), strong = true) { editor.startStudy(s.missed.toList()) }
+                BarButton(stringResource(R.string.study_close)) { editor.endStudy() }
+            } else {
+                Text(stringResource(R.string.study_card, s.at + 1, s.cards.size), color = Color.White, fontSize = 15.sp, modifier = Modifier.padding(horizontal = 10.dp))
+                if (!s.shown) BarButton(stringResource(R.string.study_show), strong = true) { editor.studyReveal() }
+                else {
+                    BarButton(stringResource(R.string.study_wrong)) { editor.studyAnswer(false) }
+                    BarButton(stringResource(R.string.study_right), strong = true) { editor.studyAnswer(true) }
+                }
+                BarButton(stringResource(R.string.study_close)) { editor.endStudy() }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReminderDialog(editor: Editor, r: Editor.ReminderDraft) {
+    val context = LocalContext.current
+    val palette = LocalPalette.current
+    var title by remember(r) { mutableStateOf(r.title) }
+    var at by remember(r) { mutableStateOf(r.at.timeInMillis) }
+    fun cal() = java.util.Calendar.getInstance().apply { timeInMillis = at }
+    val shown = java.text.SimpleDateFormat("EEE, dd/MM 'às' HH:mm", java.util.Locale("pt", "BR")).format(java.util.Date(at))
+    AlertDialog(
+        onDismissRequest = { editor.reminder = null },
+        title = { Text(stringResource(R.string.reminder_title)) },
+        text = {
+            Column {
+                OutlinedTextField(value = title, onValueChange = { title = it }, minLines = 1)
+                Spacer(Modifier.size(10.dp))
+                Text(stringResource(R.string.reminder_when, shown), fontSize = 15.sp)
+                Spacer(Modifier.size(6.dp))
+                Row {
+                    TextButton(onClick = {
+                        val c = cal()
+                        android.app.DatePickerDialog(context, { _, y, m, d -> at = cal().apply { set(y, m, d) }.timeInMillis },
+                            c.get(java.util.Calendar.YEAR), c.get(java.util.Calendar.MONTH), c.get(java.util.Calendar.DAY_OF_MONTH)).show()
+                    }) { Text(stringResource(R.string.reminder_date)) }
+                    TextButton(onClick = {
+                        val c = cal()
+                        android.app.TimePickerDialog(context, { _, h, min -> at = cal().apply { set(java.util.Calendar.HOUR_OF_DAY, h); set(java.util.Calendar.MINUTE, min) }.timeInMillis },
+                            c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE), true).show()
+                    }) { Text(stringResource(R.string.reminder_time)) }
+                }
+                Text(stringResource(R.string.reminder_help), fontSize = 12.sp, color = palette.textDim.toComposeColor())
+            }
+        },
+        confirmButton = { TextButton(onClick = { editor.createReminder(title.trim(), cal()) }, enabled = title.isNotBlank()) { Text(stringResource(R.string.reminder_create)) } },
+        dismissButton = { TextButton(onClick = { editor.reminder = null }) { Text(stringResource(R.string.cancel)) } },
     )
 }

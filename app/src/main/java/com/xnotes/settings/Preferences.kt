@@ -50,9 +50,9 @@ data class Preferences(
     /** Whether the side-button tool also activates during hover (no contact needed); eraser/pan only. */
     val penButtonHover: Boolean = false,
     /** Action mapped to a clean two-finger tap; "none" (default) disables it. */
-    val twoFingerTap: String = "none",
+    val twoFingerTap: String = "undo",
     /** Action mapped to a clean three-finger tap; "none" (default) disables it. */
-    val threeFingerTap: String = "none",
+    val threeFingerTap: String = "redo",
     /** Action mapped to a stylus barrel double-tap (pens with no side button, e.g. Huawei M-Pencil
      *  whose double-tap arrives as keycode 718); "none" (default) disables it. */
     val stylusDoubleTap: String = "none",
@@ -145,8 +145,8 @@ data class Preferences(
         .put("detect_shapes", detectShapes)
         .put("pen_button_tool", penButtonTool)
         .put("pen_button_hover", penButtonHover)
-        .put("two_finger_tap", twoFingerTap)
-        .put("three_finger_tap", threeFingerTap)
+        .put("two_finger_tap2", twoFingerTap)
+        .put("three_finger_tap2", threeFingerTap)
         .put("stylus_double_tap", stylusDoubleTap)
         .put("stylus_button_tap", stylusButtonTap)
         .put("stylus_button_1_tap", stylusButton1Tap)
@@ -234,6 +234,8 @@ data class Preferences(
             val zoomLockPan = o.optString("zoom_lock_pan", "single").let { if (it == "double" || it == "none") it else "single" }
             val tapActions = setOf("none", "undo", "redo", "toggle_pan", "toggle_eraser", "toggle_previous")
             fun tapAction(key: String) = o.optString(key, "none").let { if (it in tapActions) it else "none" }
+            // Read under new keys: older builds saved "none", which would keep the new defaults away.
+            fun tapAction2(key: String, def: String) = o.optString(key, def).let { if (it in tapActions) it else def }
             val legacySeed = Rgba.fromHex(o.optString("material_seed"))
             val legacyDual = o.optBoolean("material_dual_tone", false)
             val materialMode = MaterialColourMode.fromId(o.optString("material_mode")) ?: when {
@@ -280,8 +282,8 @@ data class Preferences(
                 detectShapes = o.optBoolean("detect_shapes", true),
                 penButtonTool = o.optString("pen_button_tool", "eraser").ifEmpty { "eraser" },
                 penButtonHover = o.optBoolean("pen_button_hover", false),
-                twoFingerTap = tapAction("two_finger_tap"),
-                threeFingerTap = tapAction("three_finger_tap"),
+                twoFingerTap = tapAction2("two_finger_tap2", "undo"),
+                threeFingerTap = tapAction2("three_finger_tap2", "redo"),
                 stylusDoubleTap = tapAction("stylus_double_tap"),
                 stylusButtonTap = tapAction("stylus_button_tap"),
                 stylusButton1Tap = tapAction("stylus_button_1_tap"),

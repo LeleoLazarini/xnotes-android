@@ -84,10 +84,16 @@ internal val LocalToolbarCover = compositionLocalOf { PaddingValues(0.dp) }
 internal fun ColumnScope.ToolbarAround(
     bar: @Composable () -> Unit,
     onCover: (Double, Double, Double, Double) -> Unit,
+    hidden: Boolean = false,
     content: @Composable (floatingBar: @Composable BoxScope.() -> Unit) -> Unit,
 ) {
     val look = LocalToolbarLook.current
     val rest = Modifier.weight(1f).fillMaxWidth()
+    if (hidden) { // focus and presentation: just the page
+        SideEffect { onCover(0.0, 0.0, 0.0, 0.0) }
+        Box(rest) { content {} }
+        return
+    }
     if (!look.floating) {
         SideEffect { onCover(0.0, 0.0, 0.0, 0.0) }
         val docked: @Composable BoxScope.() -> Unit = {}

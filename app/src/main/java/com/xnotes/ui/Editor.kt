@@ -5806,6 +5806,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         saved[(from ?: com.xnotes.core.tools.PenFamily.PEN).id] = toolbarColors
         val next = saved[to.id] ?: com.xnotes.core.tools.FamilyPalettes.defaultFor(to, toolbarColors)
         settings = settings.copy(familyColors = saved)
+        saveSettingsSoon()
         toolbarColors = next
         pickColor(activeColorIndex.coerceIn(0, toolbarColorCount - 1))
     }
@@ -6520,12 +6521,54 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
      * Append a contents page: the note's bookmarks (or, with none, its pages) as rows that jump
      * where they point. It goes at the end so no page number it links to shifts.
      */
+    /** The contents page, found by its locked title; null when the note has none. */
+    private fun contentsPageIndex(): Int? {
+        val title = appContext.getString(R.string.contents_title)
+        return state.document.pages.indexOfFirst { p -> p.items.any { it is com.xnotes.core.model.TextItem && it.locked && it.text == title } }.takeIf { it >= 0 }
+    }
+
+    /** Move every bookmark and page link at or after [from] by [delta] pages. */
+    private fun shiftPageRefs(delta: Int, from: Int) {
+        state.document.bookmarks.forEach { if (it.page >= from) it.page += delta }
+        state.document.pages.forEach { p -> p.items.forEach { (it as? com.xnotes.core.model.Linkable)?.let { l -> l.linkPage?.let { lp -> if (lp >= from) l.linkPage = lp + delta } } } }
+        bookmarkVersion++
+    }
+
+    /**
+     * The note's contents: its bookmarks (titles marked with "Contents title" or the bookmark
+     * button), each a row that jumps to its page. The first time it goes in as page 1, moving every
+     * bookmark and link one page on; after that the same page is rewritten in place.
+     */
     fun insertContentsPage() {
         val doc = state.document
-        val entries = doc.bookmarks.sortedBy { it.page }.map { it.label to it.page }
-            .ifEmpty { doc.pages.indices.take(MAX_CONTENTS_ROWS).map { appContext.getString(R.string.page_n, it + 1) to it } }
-        val ref = doc.pages.last()
+        val existing = contentsPageIndex()
+        if (existing != null) {
+            val page = doc.pages[existing]
+            page.items.clear()
+            fillContents(page, existing)
+            state.invalidatePage(page)
+            afterPageEdit()
+            goToPage(existing)
+            message = appString(R.string.contents_updated)
+            return
+        }
+        val ref = doc.pages.first()
         val page = Page(ref.width, ref.height)
+        shiftPageRefs(1, 0)
+        doc.pages.add(0, page)
+        fillContents(page, 0)
+        history.push(object : Command {
+            override fun redo() { shiftPageRefs(1, 0); doc.pages.add(0, page) }
+            override fun undo() { doc.pages.removeAt(doc.pages.indexOfFirst { it === page }); shiftPageRefs(-1, 1) }
+        })
+        afterPageEdit()
+        goToPage(0)
+    }
+
+    private fun fillContents(page: Page, selfIndex: Int) {
+        val doc = state.document
+        val entries = doc.bookmarks.filter { it.page != selfIndex }.sortedBy { it.page }.map { it.label to it.page }
+            .ifEmpty { doc.pages.indices.filter { it != selfIndex }.take(MAX_CONTENTS_ROWS).map { appContext.getString(R.string.page_n, it + 1) to it } }
         val inset = 12.0 / 25.4 * doc.dpi
         val ink = Rgba(40, 40, 48)
         page.items += com.xnotes.core.model.TextItem(Pt(inset, inset), page.width - 2 * inset, 0.0, appContext.getString(R.string.contents_title), ink, 26.0, FontFace.SERIF, textMeasurer).also { it.locked = true }
@@ -6538,12 +6581,6 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
                 ink, 14.0, FontFace.SANS, textMeasurer,
             ).also { it.locked = true; it.linkPage = target }
         }
-        doc.pages.add(page)
-        history.push(com.xnotes.core.history.AddPage(doc, page, doc.pages.lastIndex))
-        doc.dirty = true
-        state.relayout()
-        goToPage(doc.pages.lastIndex)
-        refreshContent()
     }
 
     // Recording ----------------------------------------------------------------------------------
@@ -6890,6 +6927,161 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         state.invalidateAllCaches()
         refreshView()
         view.requestRender()
+    }
+
+    // Focus and presentation --------------------------------------------------------------------
+
+    /** Toolbar, side panel and system bars hidden: just the page. */
+    var focusMode by mutableStateOf(false)
+        private set
+
+    /** Focus plus the vanishing ink and page arrows, for showing the note on a TV. */
+    var presenting by mutableStateOf(false)
+        private set
+
+    private var fullscreenBeforeFocus = false
+    private var wandBeforePresenting = false
+
+    fun enterFocus(present: Boolean) {
+        if (!focusMode) fullscreenBeforeFocus = fullscreen
+        focusMode = true
+        fullscreen = true
+        if (present && !presenting) {
+            presenting = true
+            wandBeforePresenting = wandEnabled
+            if (!wandEnabled) toggleWand()
+            message = appString(R.string.present_hint)
+        }
+    }
+
+    fun exitFocus() {
+        if (presenting && wandEnabled != wandBeforePresenting) toggleWand()
+        presenting = false
+        focusMode = false
+        fullscreen = fullscreenBeforeFocus
+    }
+
+    // Study cards -------------------------------------------------------------------------------
+
+    class StudyCard(val pageIndex: Int, val tape: com.xnotes.core.model.ShapeItem)
+
+    /** A run through the note's study tapes: each one covered, shown on request, then scored. */
+    class StudySession(val cards: List<StudyCard>) {
+        var at by mutableStateOf(0)
+        var shown by mutableStateOf(false)
+        var right by mutableStateOf(0)
+        val missed = mutableStateListOf<StudyCard>()
+        val done: Boolean get() = at >= cards.size
+    }
+
+    var study by mutableStateOf<StudySession?>(null)
+
+    /** Start on every tape in the note, page by page and top to bottom (or on [only], to retry). */
+    fun startStudy(only: List<StudyCard>? = null) {
+        val cards = only ?: state.document.pages.flatMapIndexed { i, p ->
+            p.items.filterIsInstance<com.xnotes.core.model.ShapeItem>().filter { it.studyTape }
+                .sortedWith(compareBy({ it.bounds().top }, { it.bounds().left })).map { StudyCard(i, it) }
+        }
+        if (cards.isEmpty()) { message = appString(R.string.study_none); return }
+        cards.forEach { if (it.tape.tapeRevealed) toggleTape(it.tape) }
+        study = StudySession(cards)
+        goToPage(cards[0].pageIndex)
+    }
+
+    fun studyReveal() {
+        val s = study ?: return
+        val c = s.cards.getOrNull(s.at) ?: return
+        if (!c.tape.tapeRevealed) toggleTape(c.tape)
+        s.shown = true
+    }
+
+    fun studyAnswer(right: Boolean) {
+        val s = study ?: return
+        val c = s.cards.getOrNull(s.at) ?: return
+        if (right) s.right++ else s.missed.add(c)
+        if (c.tape.tapeRevealed) toggleTape(c.tape) // covered again, ready for the next round
+        s.at++
+        s.shown = false
+        s.cards.getOrNull(s.at)?.let { goToPage(it.pageIndex) }
+    }
+
+    fun endStudy() {
+        study?.cards?.forEach { if (it.tape.tapeRevealed) toggleTape(it.tape) }
+        study = null
+    }
+
+    // Reminders and titles from the selection ---------------------------------------------------
+
+    class ReminderDraft(val title: String, val at: java.util.Calendar)
+
+    var reminder by mutableStateOf<ReminderDraft?>(null)
+
+    override fun canRemind(): Boolean = controller.selectedItems.any { it.item is com.xnotes.core.model.Stroke || it.item is com.xnotes.core.model.TextItem }
+
+    /** The selection as words: typed text as is, handwriting read by the recognizer. */
+    private fun readSelection(then: (pageIndex: Int, text: String) -> Unit) {
+        val sel = controller.selectedItems
+        if (sel.isEmpty()) return
+        val pageIndex = sel.first().pageIndex
+        val texts = sel.mapNotNull { it.item as? com.xnotes.core.model.TextItem }
+        val strokes = selectedStrokes()
+        autosaveScope.launch {
+            val source = if (texts.isNotEmpty()) texts.joinToString(" ") { it.text } else {
+                message = appContext.getString(if (com.xnotes.platform.InkText.ready()) R.string.ink_reading else R.string.ink_downloading)
+                com.xnotes.platform.InkText.recognize(strokes).joinToString(" ") { it.text }.also { message = null }
+            }
+            if (source.isBlank()) { message = appContext.getString(R.string.ink_failed); return@launch }
+            then(pageIndex, source.trim())
+        }
+    }
+
+    override fun remindSelection() = readSelection { _, text ->
+        reminder = ReminderDraft(text, com.xnotes.platform.WhenParser.parse(text))
+    }
+
+    /** Hand the reminder to the calendar app, which keeps it and rings it. */
+    fun createReminder(title: String, at: java.util.Calendar) {
+        val i = android.content.Intent(android.content.Intent.ACTION_INSERT, android.provider.CalendarContract.Events.CONTENT_URI)
+            .putExtra(android.provider.CalendarContract.EXTRA_EVENT_BEGIN_TIME, at.timeInMillis)
+            .putExtra(android.provider.CalendarContract.EXTRA_EVENT_END_TIME, at.timeInMillis + 30L * 60 * 1000)
+            .putExtra(android.provider.CalendarContract.Events.TITLE, title)
+            .putExtra(android.provider.CalendarContract.Events.DESCRIPTION, appContext.getString(R.string.reminder_from_note, state.document.displayName.orEmpty()))
+            .putExtra(android.provider.CalendarContract.Events.HAS_ALARM, true)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { appContext.startActivity(i) }.onFailure { message = appString(R.string.reminder_no_calendar) }
+        reminder = null
+    }
+
+    override fun markTitle() = readSelection { pageIndex, text ->
+        state.document.bookmarks.add(Bookmark(pageIndex, text))
+        state.document.dirty = true
+        bookmarkVersion++
+        dirty = true
+        // A contents page already in the note picks the new title up at once.
+        contentsPageIndex()?.let { i ->
+            val page = state.document.pages[i]
+            page.items.clear()
+            fillContents(page, i)
+            state.invalidatePage(page)
+            afterPageEdit()
+        }
+        message = appContext.getString(R.string.title_marked, text)
+    }
+
+    // Meeting summary ---------------------------------------------------------------------------
+
+    /** Send the transcript to the Claude app with the summary request (also left on the clipboard). */
+    fun summarizeWithClaude(transcript: String) {
+        val text = appString(R.string.summary_prompt) + "\n\n" + transcript
+        runCatching {
+            val cm = appContext.getSystemService(android.content.ClipboardManager::class.java)
+            cm?.setPrimaryClip(android.content.ClipData.newPlainText("xnotes", text))
+        }
+        val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text)
+        val direct = android.content.Intent(send).setPackage("com.anthropic.claude").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { appContext.startActivity(direct) }.onFailure {
+            runCatching { appContext.startActivity(android.content.Intent.createChooser(send, appString(R.string.summary_with_claude)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
     }
 
     // Quick note --------------------------------------------------------------------------------

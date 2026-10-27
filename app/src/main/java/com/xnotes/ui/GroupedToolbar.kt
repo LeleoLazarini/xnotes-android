@@ -533,6 +533,9 @@ private fun MoreMenu(editor: Editor, onRename: () -> Unit, onToggleFullscreen: (
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             GroupMenuItem(stringResource(R.string.eyedropper), XnotesIcons.palette) { menuOpen = false; editor.eyedropperActive = true }
             GroupMenuItem(stringResource(R.string.insert_contents), XnotesIcons.contents) { menuOpen = false; editor.insertContentsPage() }
+            GroupMenuItem(stringResource(R.string.focus_mode), XnotesIcons.view) { menuOpen = false; editor.enterFocus(present = false) }
+            GroupMenuItem(stringResource(R.string.present_mode), XnotesIcons.magicWand) { menuOpen = false; editor.enterFocus(present = true) }
+            GroupMenuItem(stringResource(R.string.study_start), XnotesIcons.pages) { menuOpen = false; editor.startStudy() }
             val ctx = androidx.compose.ui.platform.LocalContext.current
             val scope = androidx.compose.runtime.rememberCoroutineScope()
             GroupMenuItem(stringResource(R.string.update_check), XnotesIcons.download) { menuOpen = false; scope.launch { Updater.check(ctx, manual = true) } }

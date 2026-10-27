@@ -156,6 +156,9 @@ interface SelectionMenuHost : SwatchHost {
 
     /** True when the selection holds text or handwriting to translate. */
     fun canTranslate(): Boolean = false
+    fun canRemind(): Boolean = false
+    fun remindSelection() {}
+    fun markTitle() {}
 
     /** Open the translation of the selection. */
     fun translateSelection() {}
@@ -223,6 +226,10 @@ fun SelectionMenu(host: SelectionMenuHost) {
                     }
                     if (host.canTranslate()) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.translate)) }, onClick = { overflowOpen = false; host.translateSelection() })
+                    }
+                    if (host.canRemind()) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.mark_title)) }, onClick = { overflowOpen = false; host.markTitle() })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.remind)) }, onClick = { overflowOpen = false; host.remindSelection() })
                     }
                     if (host.canLinkSelection()) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.link_to_page)) }, onClick = { overflowOpen = false; host.linkSelection() })
