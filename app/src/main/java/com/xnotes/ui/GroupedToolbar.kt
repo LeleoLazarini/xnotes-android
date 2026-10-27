@@ -533,6 +533,7 @@ private fun MoreMenu(editor: Editor, onRename: () -> Unit, onToggleFullscreen: (
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             GroupMenuItem(stringResource(R.string.eyedropper), XnotesIcons.palette) { menuOpen = false; editor.eyedropperActive = true }
             GroupMenuItem(stringResource(R.string.insert_contents), XnotesIcons.contents) { menuOpen = false; editor.insertContentsPage() }
+            if (editor.isAgenda) GroupMenuItem(stringResource(R.string.agenda_cal_sync), XnotesIcons.clock) { menuOpen = false; editor.calendarRequested = true }
             GroupMenuItem(stringResource(R.string.focus_mode), XnotesIcons.view) { menuOpen = false; editor.enterFocus(present = false) }
             GroupMenuItem(stringResource(R.string.present_mode), XnotesIcons.magicWand) { menuOpen = false; editor.enterFocus(present = true) }
             GroupMenuItem(stringResource(R.string.study_start), XnotesIcons.pages) { menuOpen = false; editor.startStudy() }

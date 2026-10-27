@@ -403,6 +403,7 @@ class DocumentCodec(
         if (t.face != TextItem.DEFAULT_FACE) j.name("font_face").value(t.face.id)
         if (t.locked) j.name("locked").value(true)
         t.linkPage?.let { j.name("link_page").value(it) }
+        if (t.fromCalendar) j.name("from_calendar").value(true)
         j.endObject()
     }
 
@@ -938,6 +939,7 @@ class DocumentCodec(
         var linkPage: Int? = null
         var stickyNote = false
         var studyTape = false
+        var fromCalendar = false
         var kind: String? = null
         var id: Int? = null
         var connector: ConnectorScratch? = null
@@ -1057,6 +1059,7 @@ class DocumentCodec(
                 "link_page" -> s.linkPage = intOrNull(p)
                 "sticky_note" -> s.stickyNote = boolOr(p, false)
                 "study_tape" -> s.studyTape = boolOr(p, false)
+                "from_calendar" -> s.fromCalendar = boolOr(p, false)
                 else -> p.skipValue()
             }
         }
@@ -1097,6 +1100,7 @@ class DocumentCodec(
         // Absent on every note written before locking existed, which reads back as unlocked.
         if (s.locked && items.size > before) items[before].locked = true
         s.linkPage?.let { lp -> (items.getOrNull(before) as? Linkable)?.linkPage = lp }
+        if (s.fromCalendar) (items.getOrNull(before) as? TextItem)?.fromCalendar = true
     }
 
     private fun buildStroke(s: ItemScratch): Stroke {

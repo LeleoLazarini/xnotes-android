@@ -1178,4 +1178,8 @@
     <string name="screen_rec_saved">Video saved in Movies/xnotes.</string>
     <string name="screen_rec_failed">Could not save the video.</string>
     <string name="tags_filter">Tags (tap the dot to change its colour)</string>
+    <string name="agenda_cal_sync">Bring in calendar events</string>
+    <string name="agenda_cal_done">%1$d calendar events on the agenda.</string>
+    <string name="agenda_cal_failed">Could not read the calendar.</string>
+    <string name="agenda_cal_permission">Without calendar access the agenda cannot show your events.</string>
 </resources>

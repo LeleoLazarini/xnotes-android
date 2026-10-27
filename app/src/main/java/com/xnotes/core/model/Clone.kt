@@ -11,7 +11,7 @@ import com.xnotes.core.pal.TextMeasurer
 fun CanvasItem.deepCopy(measurer: TextMeasurer): CanvasItem = when (this) {
     is Stroke -> Stroke(this) // the copy constructor carries the audio link too
     is ImageItem -> ImageItem(image, rect, orientation, angle, flip)
-    is TextItem -> TextItem(pos, width, height, text, rgba, pointSize, face, measurer).also { it.linkPage = linkPage }
+    is TextItem -> TextItem(pos, width, height, text, rgba, pointSize, face, measurer).also { it.linkPage = linkPage; it.fromCalendar = fromCalendar }
     is ShapeItem ->
         ShapeItem(
             shape, start, end, strokeRgba, strokeWidth, fillRgba, neon, neonStrength, path,

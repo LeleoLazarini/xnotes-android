@@ -71,6 +71,7 @@ internal fun ToolkitOverlays(editor: Editor) {
     editor.pageModelPickAfter?.let { PageModelPicker(editor, it) }
     editor.reminder?.let { ReminderDialog(editor, it) }
     ScreenRecordLauncher(editor)
+    AgendaCalendarSync(editor)
     if (editor.focusMode) FocusControls(editor)
     editor.study?.let { StudyControls(editor, it) }
     RecordingControls(editor)
@@ -561,5 +562,21 @@ private fun ScreenRecordLauncher(editor: Editor) {
     LaunchedEffect(finished) {
         if (finished == 0) return@LaunchedEffect
         editor.message = context.getString(if (com.xnotes.platform.ScreenRecorder.lastSaved) R.string.screen_rec_saved else R.string.screen_rec_failed)
+    }
+}
+
+/** An agenda fetches the calendar quietly when it opens (once allowed), and on request from the menu. */
+@Composable
+private fun AgendaCalendarSync(editor: Editor) {
+    val context = LocalContext.current
+    val granted = { ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALENDAR) == PackageManager.PERMISSION_GRANTED }
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) editor.syncAgendaCalendar(quiet = false) else editor.message = context.getString(R.string.agenda_cal_permission)
+    }
+    LaunchedEffect(editor.title) { if (editor.isAgenda && granted()) editor.syncAgendaCalendar(quiet = true) }
+    LaunchedEffect(editor.calendarRequested) {
+        if (!editor.calendarRequested) return@LaunchedEffect
+        editor.calendarRequested = false
+        if (granted()) editor.syncAgendaCalendar(quiet = false) else permission.launch(Manifest.permission.READ_CALENDAR)
     }
 }

@@ -33,6 +33,9 @@ class TextItem(
     override val resizable = true
     override var locked = false
 
+    /** Placed by the agenda from the tablet's calendar; replaced on each refresh. */
+    var fromCalendar = false
+
     val font get() = FontSpec(pointSize, face)
 
     /** Height the current text needs at the current width (empty ⇒ one line). */

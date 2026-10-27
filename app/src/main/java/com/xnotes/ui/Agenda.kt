@@ -141,5 +141,45 @@ internal object Agenda {
         return true
     }
 
+    private val CAL = Rgba(37, 99, 235)
+
+    /**
+     * Write [events] on [doc]'s pages: on each day page the timed ones in their hour row (7h to
+     * 22h) and the rest on a line under the date; on the month pages a few per cell. Whatever an
+     * earlier refresh placed is removed first, so this can run on every opening.
+     */
+    fun placeEvents(doc: Document, events: List<com.xnotes.platform.CalendarEvents.Event>, measurer: TextMeasurer) {
+        val year = doc.agendaYear ?: return
+        val dpi = doc.dpi
+        fun mm(v: Number) = v.toDouble() / 25.4 * dpi
+        for (p in doc.pages) p.items.removeAll { it is TextItem && it.fromCalendar }
+        fun put(page: Page, x: Double, y: Double, s: String, pt: Double, width: Double) {
+            page.items += TextItem(Pt(x, y), width, 0.0, s, CAL, pt, FontFace.SANS, measurer).also { it.locked = true; it.fromCalendar = true }
+        }
+        val byDay = events.filter { it.start.year == year }.groupBy { it.start.toLocalDate() }
+        val inset = mm(INSET_MM)
+        for ((date, list) in byDay) {
+            val dayPage = pageOf(year, date)?.let { doc.pages.getOrNull(it) } ?: continue
+            val innerW = dayPage.width - 2 * inset
+            val innerH = dayPage.height - 2 * inset
+            val rowH = (innerH - mm(27)) / 16
+            val (timed, other) = list.partition { !it.allDay && it.start.hour in 7..22 }
+            for ((hour, inHour) in timed.groupBy { it.start.hour }) {
+                val y = inset + mm(27) + (hour - 7) * rowH + mm(0.8)
+                put(dayPage, inset + mm(14.5), y, inHour.joinToString("  ·  ") { "%02d:%02d %s".format(it.start.hour, it.start.minute, it.title) }, 9.5, innerW * 0.62 - mm(15))
+            }
+            if (other.isNotEmpty()) {
+                put(dayPage, inset, inset + mm(11.5), other.joinToString("  ·  ") { e -> if (e.allDay) e.title else "%02d:%02d %s".format(e.start.hour, e.start.minute, e.title) }, 8.5, innerW - mm(34))
+            }
+            val monthPage = doc.pages.getOrNull(monthPage(year, date.monthValue)) ?: continue
+            val g = Grid(monthPage, dpi)
+            val idx = firstColumn(date.withDayOfMonth(1)) + date.dayOfMonth - 1
+            val fit = ((g.cellH - mm(7)) / mm(3.3)).toInt().coerceAtLeast(1)
+            val lines = list.map { it.title }
+            val shown = if (lines.size <= fit) lines else lines.take(fit - 1) + "+${lines.size - fit + 1}"
+            put(monthPage, g.x0 + (idx % 7) * g.cellW + mm(1.2), g.y0 + (idx / 7) * g.cellH + mm(6.2), shown.joinToString("\n"), 7.0, g.cellW - mm(2))
+        }
+    }
+
     private fun String.cap() = replaceFirstChar { it.titlecase(PT) }
 }

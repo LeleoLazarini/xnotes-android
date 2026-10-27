@@ -1176,4 +1176,8 @@
     <string name="screen_rec_saved">Vídeo salvo em Filmes/xnotes.</string>
     <string name="screen_rec_failed">Não consegui salvar o vídeo.</string>
     <string name="tags_filter">Etiquetas (toque na bolinha para mudar a cor)</string>
+    <string name="agenda_cal_sync">Trazer compromissos do calendário</string>
+    <string name="agenda_cal_done">%1$d compromissos do calendário na agenda.</string>
+    <string name="agenda_cal_failed">Não consegui ler o calendário.</string>
+    <string name="agenda_cal_permission">Sem acesso ao calendário a agenda não mostra seus compromissos.</string>
 </resources>

@@ -7013,6 +7013,25 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     /** Set from the More menu; the overlay asks for the screen and the microphone, then starts. */
     var screenRecordRequested by mutableStateOf(false)
 
+    // Agenda and calendar -----------------------------------------------------------------------
+
+    val isAgenda: Boolean get() { title; return state.document.agendaYear != null }
+
+    /** Set from the More menu; the overlay asks for calendar access, then refreshes. */
+    var calendarRequested by mutableStateOf(false)
+
+    fun syncAgendaCalendar(quiet: Boolean) {
+        val year = state.document.agendaYear ?: return
+        autosaveScope.launch {
+            val events = withContext(Dispatchers.IO) { runCatching { com.xnotes.platform.CalendarEvents.read(appContext, year) }.getOrNull() }
+            if (events == null) { if (!quiet) message = appString(R.string.agenda_cal_failed); return@launch }
+            Agenda.placeEvents(state.document, events, textMeasurer)
+            state.invalidateAllCaches()
+            afterPageEdit()
+            if (!quiet) message = appContext.getString(R.string.agenda_cal_done, events.count { it.start.year == year })
+        }
+    }
+
     // Focus and presentation --------------------------------------------------------------------
 
     /** Toolbar, side panel and system bars hidden: just the page. */
