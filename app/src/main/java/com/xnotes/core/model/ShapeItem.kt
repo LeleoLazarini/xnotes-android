@@ -357,6 +357,9 @@ class ShapeItem(
 
     override fun paintBounds(): Rect =
         if (neon) bounds().outset(Outline.glowRadius(strokeWidth, neonStrength) * 2.0 + 4.0)
+        // The post-it's shadow falls below and beside the sheet: without it here, moving the note
+        // repainted only the sheet's old spot and left the shadow behind.
+        else if (stickyNote) min(box.w, box.h).let { s -> bounds().outset(s * (STICKY_SHADOW_SHIFT * 2.0 + STICKY_SHADOW_BLUR * 3.0) + 4.0) }
         else bounds()
 
     override fun bounds(): Rect {
