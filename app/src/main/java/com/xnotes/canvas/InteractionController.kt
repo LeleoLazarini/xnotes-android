@@ -542,9 +542,6 @@ class InteractionController(
     /** The last loop drawn, waiting a moment for the tap that turns it into a selection. */
     private var pendingLoop: Triple<Stroke, Int, Long>? = null
 
-    /** Where the hovering pen is, in viewport px, with the nib's radius there; null when not hovering. */
-    private var penCursor: Pair<Pt, Double>? = null
-
     fun configFor(t: Tool): ToolConfig = toolConfigs[t] ?: ToolDefaults.configFor(t)
 
     fun setToolConfig(t: Tool, config: ToolConfig) {
@@ -631,13 +628,6 @@ class InteractionController(
         if (handleHoverAction(e)) return true
         if (hoverConnect(e)) return true
         val isEraserPointer = e.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER
-        // A pen hovering over the page shows where its nib will land and how wide it will draw.
-        if (tool.isStroke && !isEraserPointer && e.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS) {
-            penCursor = if (e.actionMasked == MotionEvent.ACTION_HOVER_EXIT) null
-            else Pt(e.x.toDouble(), e.y.toDouble()) to (configFor(tool).baseWidth / 2.0 * state.zoom).coerceAtLeast(1.5)
-            requestRender()
-            return true
-        }
         if (tool != Tool.ERASER && !isEraserPointer) return false
         eraserCursor = if (e.actionMasked == MotionEvent.ACTION_HOVER_EXIT) {
             null
@@ -4269,11 +4259,6 @@ class InteractionController(
 
         // Note icons: chrome of one size at any zoom, so in viewport space.
         noteIcons?.draw(r)
-
-        penCursor?.let { (at, radius) ->
-            r.fillEllipse(at, radius, radius, inkColor.withAlpha(150))
-            r.strokeEllipse(at, radius + 2.0, radius + 2.0, Pen(state.palette.textDim, 1.0, cosmetic = true))
-        }
 
         // Eraser cursor (viewport space, after the transform is restored).
         eraserCursor?.let {

@@ -1080,4 +1080,21 @@
     <string name="search_ink_indexing">Lendo a escrita das páginas… %1$d de %2$d</string>
     <string name="search_ink_none">Nada encontrado na escrita à mão.</string>
     <string name="search_ink_title">Na escrita à mão</string>
+    <string name="pref_backup">Backup automático (diário)</string>
+    <string name="backup_off">desligado</string>
+    <string name="backup_never">nunca</string>
+    <string name="backup_status">Pasta: %1$s · último: %2$s</string>
+    <string name="backup_choose">Escolher pasta</string>
+    <string name="backup_now">Fazer backup agora</string>
+    <string name="backup_running">Fazendo backup…</string>
+    <string name="backup_turn_off">Desligar</string>
+    <string name="backup_done">Backup feito.</string>
+    <string name="backup_failed">O backup falhou. Confira a pasta escolhida.</string>
+    <string name="update_check">Procurar atualização</string>
+    <string name="update_title">Nova versão disponível</string>
+    <string name="update_now">Atualizar agora</string>
+    <string name="update_later">Depois</string>
+    <string name="update_none">Você já está com a versão mais nova.</string>
+    <string name="update_failed">Não consegui procurar atualização.</string>
+    <string name="update_allow_install">Permita que o xnotes instale apps e toque em Atualizar de novo.</string>
 </resources>

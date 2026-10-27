@@ -173,6 +173,10 @@ class MainActivity : ComponentActivity() {
             XnotesTheme(ed.palette, ed.cornerStyle) {
                 CompositionLocalProvider(com.xnotes.ui.LocalToolbarLook provides ed.toolbarLook) {
                     Box(modifier = Modifier.fillMaxSize()) {
+                        if (ready) {
+                            com.xnotes.ui.UpdateOverlay(ed)
+                            com.xnotes.ui.DailyBackup(ed)
+                        }
                         if (ready) EditorScreen(
                             ed,
                             fullscreen = ed.fullscreen,

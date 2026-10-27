@@ -564,6 +564,7 @@ fun PreferencesPane(
                 Chip(stringResource(R.string.toolbar_docked), !look.floating) { updateHome(prefs.copy(toolbarLook = look.copy(floating = false))) }
                 Chip(stringResource(R.string.toolbar_floating), look.floating) { updateHome(prefs.copy(toolbarLook = look.copy(floating = true))) }
             }
+            BackupSection(editor, prefs) { updateHome(it) }
             FieldLabel(stringResource(R.string.pref_page_turn))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Chip(stringResource(R.string.page_turn_on), prefs.pageTurnAnimation) { updateHome(prefs.copy(pageTurnAnimation = true)) }
@@ -729,7 +730,7 @@ private fun SectionTitle(text: String) {
 }
 
 @Composable
-private fun FieldLabel(text: String) {
+internal fun FieldLabel(text: String) {
     Text(text, color = LocalPalette.current.accent.toComposeColor(), fontSize = 13.sp)
 }
 
@@ -778,7 +779,7 @@ private fun CustomMaterialControls(prefs: Preferences, update: (Preferences) -> 
 }
 
 @Composable
-private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
+internal fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
     val palette = LocalPalette.current
     Box(
         Modifier

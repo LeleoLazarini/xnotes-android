@@ -4,4 +4,6 @@
     <cache-path name="shared" path="share/" />
     <!-- Screenshot-tool captures are written here before going on the system clipboard. -->
     <cache-path name="clipboard" path="clipboard/" />
+    <!-- A downloaded update waits here for the system installer. -->
+    <cache-path name="updates" path="updates/" />
 </paths>

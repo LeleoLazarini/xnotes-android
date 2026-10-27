@@ -23,6 +23,10 @@ data class Preferences(
     val toolbarLook: ToolbarLook = ToolbarLook(),
     /** A page folds over like paper when the note turns to another page. */
     val pageTurnAnimation: Boolean = true,
+    /** The folder (a SAF tree) the daily backup copies the notes into; null when backup is off. */
+    val backupFolder: String? = null,
+    /** When the last backup finished (epoch ms), 0 for never. */
+    val lastBackupAt: Long = 0L,
     val hideWindowDecoration: Boolean = false,
     val pageColor: Rgba? = null, // null ⇒ follow theme paper
     val pageTemplatePdf: String? = null,
@@ -178,6 +182,8 @@ data class Preferences(
             if (toolbarLook.size != ToolbarSize.REGULAR) put("toolbar_size", toolbarLook.size.id)
             put("toolbar_floating", toolbarLook.floating)
             put("page_turn_animation", pageTurnAnimation)
+            backupFolder?.let { put("backup_folder", it) }
+            put("last_backup_at", lastBackupAt)
             if (!toolbarLook.grouped) put("toolbar_grouped", false)
             startFullscreen?.let { put("start_fullscreen", it) }
             codeThemePath?.let { put("code_theme_path", it) }
@@ -256,6 +262,8 @@ data class Preferences(
                 ),
                 hideWindowDecoration = o.optBoolean("hide_window_decoration", false),
                 pageTurnAnimation = o.optBoolean("page_turn_animation", true),
+                backupFolder = o.optString("backup_folder").ifEmpty { null },
+                lastBackupAt = o.optLong("last_backup_at", 0L),
                 pageColor = if (o.isNull("page_color")) null else Rgba.fromHex(o.optString("page_color")),
                 pageTemplatePdf = if (o.isNull("page_template_pdf")) null else o.optString("page_template_pdf").ifEmpty { null },
                 defaultTemplate = template,

@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.xnotes.R
+import kotlinx.coroutines.launch
 import com.xnotes.core.tools.PenFamily
 import com.xnotes.core.tools.Tool
 import androidx.compose.ui.res.vectorResource
@@ -526,6 +527,9 @@ private fun MoreMenu(editor: Editor, onRename: () -> Unit, onToggleFullscreen: (
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             GroupMenuItem(stringResource(R.string.eyedropper), XnotesIcons.palette) { menuOpen = false; editor.eyedropperActive = true }
             GroupMenuItem(stringResource(R.string.insert_contents), XnotesIcons.contents) { menuOpen = false; editor.insertContentsPage() }
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            GroupMenuItem(stringResource(R.string.update_check), XnotesIcons.download) { menuOpen = false; scope.launch { Updater.check(ctx, manual = true) } }
             val fingerDraws = editor.preferences.fingerDraws
             GroupMenuItem(stringResource(R.string.finger_draws_toggle), XnotesIcons.pan, active = fingerDraws) { menuOpen = false; editor.applyPreferences(editor.preferences.copy(fingerDraws = !fingerDraws)) }
             // Book-style turning versus one long scroll, for this note.

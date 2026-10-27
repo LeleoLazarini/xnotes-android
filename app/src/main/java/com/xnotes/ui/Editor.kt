@@ -6578,6 +6578,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         }
     }
 
+    /** A string from the app's resources, for helpers outside composition. */
+    fun appString(id: Int): String = appContext.getString(id)
+
     /** Set by the toolbar; the overlay launches the system document scanner. */
     var scanRequested by mutableStateOf(false)
 

@@ -1082,4 +1082,21 @@
     <string name="search_ink_indexing">Reading handwriting… %1$d of %2$d</string>
     <string name="search_ink_none">Nothing found in the handwriting.</string>
     <string name="search_ink_title">In handwriting</string>
+    <string name="pref_backup">Backup</string>
+    <string name="backup_off">off</string>
+    <string name="backup_never">never</string>
+    <string name="backup_status">Folder: %1$s · last: %2$s</string>
+    <string name="backup_choose">Choose folder</string>
+    <string name="backup_now">Back up now</string>
+    <string name="backup_running">Backing up…</string>
+    <string name="backup_turn_off">Turn off</string>
+    <string name="backup_done">Backup done.</string>
+    <string name="backup_failed">Backup failed. Check the backup folder.</string>
+    <string name="update_check">Check for update</string>
+    <string name="update_title">New version available</string>
+    <string name="update_now">Update now</string>
+    <string name="update_later">Later</string>
+    <string name="update_none">You have the latest version.</string>
+    <string name="update_failed">Couldn\'t check for updates.</string>
+    <string name="update_allow_install">Allow xnotes to install apps, then tap Update again.</string>
 </resources>

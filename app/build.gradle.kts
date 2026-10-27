@@ -25,7 +25,9 @@ android {
         applicationId = "com.xnotes"
         minSdk = 26
         targetSdk = 36
-        versionCode = 63
+        // Personal builds count commits so every published build is newer than the last (the
+        // in-app updater compares this); upstream F-Droid builds keep their own numbering.
+        versionCode = 1000 + (runCatching { providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }.standardOutput.asText.get().trim().toInt() }.getOrDefault(0))
         versionName = "0.9.2"
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -59,6 +61,14 @@ android {
     }
 
     signingConfigs {
+        // The personal build signs with the same key the installed test builds were signed with,
+        // so it installs over them and the notes stay. A copy of the key lives in C:/dev/xnotes-keys.
+        create("pessoal") {
+            storeFile = file("C:/dev/xnotes-keys/xnotes-assinatura.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (hasReleaseSigning) {
             create("release") {
                 storeFile = file(keystoreProperties.getProperty("storeFile"))
@@ -73,6 +83,16 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+        }
+        // Leonardo's everyday build: release code (no debugger, faster), the installed app's id and key.
+        create("pessoal") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-pessoal"
+            signingConfig = signingConfigs.getByName("pessoal")
+            isMinifyEnabled = false
+            isShrinkResources = false
+            matchingFallbacks += listOf("release")
         }
         release {
             if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
@@ -95,6 +115,11 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    // The release lint pass takes most of a personal build and needs disk it may not have.
+    lint {
+        checkReleaseBuilds = false
     }
 
     // Lists every values-* translation in the manifest so Android 13+ offers a per-app language.

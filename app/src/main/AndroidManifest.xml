@@ -9,6 +9,10 @@
          selection's menu; Android 11 and later hide them from apps that do not ask. -->
     <!-- Meeting mode: records the room and transcribes it with the device speech recogniser. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- The handwriting model downloads once, and the updater checks GitHub for new builds. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The updater hands a downloaded build to the system installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <queries>
         <!-- The speech recogniser service, which Android 11 and later hide from apps that do not ask. -->
