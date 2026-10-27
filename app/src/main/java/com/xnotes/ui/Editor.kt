@@ -665,6 +665,9 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             // The new-canvas background lives in the settings file this editor owns.
             it.newCanvasBackground = newCanvasBackground
             it.onSaveNewCanvasBackground = { bg -> saveNewCanvasBackground(bg) }
+            // Wired here, not in init: touching [infinite] there built it before the settings it reads.
+            it.onInkCommitted = { s -> recording?.let { clip -> s.audioClip = clip.id; s.audioAt = android.os.SystemClock.uptimeMillis() - recordingStartedAt } }
+            it.interaction.onTapItem = { item -> audioOf(item)?.let { (clip, at) -> playAudio(clip, at); true } ?: false }
             it.onColorRemembered = { color ->
                 settings = settings.rememberColor(color)
                 it.recentColors = recentColors
@@ -1549,8 +1552,6 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         controller.motionPredictor = runCatching { androidx.input.motionprediction.MotionEventPredictor.newInstance(view) }.getOrNull()
         // Ink drawn while recording remembers when, so a tap on it plays that moment back.
         controller.onStrokeFiled = { s -> recording?.let { clip -> s.audioClip = clip.id; s.audioAt = android.os.SystemClock.uptimeMillis() - recordingStartedAt } }
-        infinite.onInkCommitted = { s -> recording?.let { clip -> s.audioClip = clip.id; s.audioAt = android.os.SystemClock.uptimeMillis() - recordingStartedAt } }
-        infinite.interaction.onTapItem = { item -> audioOf(item)?.let { (clip, at) -> playAudio(clip, at); true } ?: false }
         controller.onLinkTap = onLinkTap@{ pageIndex, pageLocal ->
             // A finger tap on a linked box jumps to its page; on ink drawn while recording, plays that moment.
             state.document.pages.getOrNull(pageIndex)?.items?.asReversed()?.forEach { item ->
