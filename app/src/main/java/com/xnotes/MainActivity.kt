@@ -154,6 +154,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.xnotes.ui.CrashReport.install(this)
+        // After a crash, show what broke instead of walking into it again.
+        com.xnotes.ui.CrashReport.pending(this)?.let { report ->
+            setContent { com.xnotes.ui.CrashScreen(this, report) }
+            return
+        }
         com.xnotes.platform.FontCatalog.init(this)
         com.xnotes.platform.TemplateLibrary.init(this)
         setTheme(com.xnotes.R.style.Theme_Xnotes) // leave the dark launch/splash theme behind
