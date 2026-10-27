@@ -82,6 +82,7 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
             // the manifest means it can be replaced in place later without moving the assets.
             // Each image streams straight from its temp file into the bundle, never as a byte[].
             for ((name, file) in assets) zos.putStored(name, file, isCancelled)
+            for (clip in doc.audio) if (clip.file.isFile) zos.putStored("assets/audio-%03d.m4a".format(clip.id), clip.file, isCancelled)
             // The manifest streams straight into the deflater, so a dense canvas's JSON is never
             // materialized as a DOM, a String, or a byte[].
             zos.putNextEntry(ZipEntry("manifest.json").apply { method = ZipEntry.DEFLATED })
@@ -240,6 +241,7 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
         if (s.smoothScale != 1.0) j.name("smooth_scale").value(s.smoothScale)
         // Straight-line strokes must reload un-smoothed, else the EMA pulls their far end inward.
         if (s.straight) j.name("straight").value(true)
+        s.audioClip?.let { j.name("audio").beginArray().value(it).value(s.audioAt.toDouble()).endArray() }
         if (s.locked) j.name("locked").value(true)
         j.endObject()
     }
@@ -412,6 +414,7 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
     fun read(input: InputStream, imageDir: File? = null): InfiniteDocument {
         var manifest: ParsedManifest? = null
         val imageFiles = HashMap<String, File>()
+        val audioFiles = HashMap<Int, File>()
         ZipInputStream(input).use { zis ->
             var entry: ZipEntry? = zis.nextEntry
             while (entry != null) {
@@ -426,6 +429,13 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
                             } catch (_: JsonPullException) {
                                 throw XCanvasFormatException(NOT_XCANVAS)
                             }
+                        }
+                    } else if (name.startsWith("assets/audio-")) {
+                        val id = name.removePrefix("assets/audio-").substringBefore('.').toIntOrNull()
+                        if (imageDir != null && id != null) {
+                            val f = File.createTempFile("aud", ".m4a", imageDir)
+                            FileOutputStream(f).use { zis.copyTo(it) }
+                            audioFiles[id] = f
                         }
                     } else if (name.startsWith("assets/image-")) {
                         if (imageDir != null) {
@@ -446,6 +456,7 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
 
         val doc = InfiniteDocument(dpi = m.dpi)
         doc.created = m.created
+        audioFiles.toSortedMap().forEach { (id, f) -> doc.audio += com.xnotes.core.model.AudioClip(id, f) }
         doc.background = m.background
         doc.lastView = m.view
         doc.waypoints.addAll(m.waypoints)
@@ -624,6 +635,7 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
     /** Union of every kind's fields, so an item parses in one pass whatever its key order. */
     private class ItemScratch {
         var locked = false
+        var audio: DoubleArray? = null
         var kind: String? = null
         var id: Int? = null
         var connector: ConnectorScratch? = null
@@ -724,6 +736,7 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
                 "dash_length" -> s.dashLength = doubleOr(p, 10.0)
                 "dash_gap" -> s.dashGap = doubleOr(p, 8.0)
                 "locked" -> s.locked = boolOr(p, false)
+                "audio" -> s.audio = doublesOrNull(p)
                 else -> p.skipValue()
             }
         }
@@ -775,6 +788,7 @@ class CanvasCodec(private val imageCodec: ImageCodec, private val textMeasurer: 
             brush = Brush.fromId(c?.brush) ?: def.brush,
         )
         val stroke = Stroke(tool, config, emptyList(), s.speedScale, s.straight, s.smoothScale)
+        s.audio?.takeIf { it.size >= 2 }?.let { stroke.audioClip = it[0].toInt(); stroke.audioAt = it[1].toLong() }
         s.samples?.let { stroke.setSamples(it.xs, it.ys, it.ps, it.ts, it.n) }
         return stroke
     }

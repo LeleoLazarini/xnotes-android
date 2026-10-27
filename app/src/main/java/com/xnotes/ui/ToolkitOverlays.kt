@@ -66,6 +66,9 @@ internal fun ToolkitOverlays(editor: Editor) {
     editor.imageTextResult?.let { ImageTextDialog(editor, it) }
     if (editor.linkPicking) LinkPickerDialog(editor)
     RecordingControls(editor)
+    TranscriptionControls(editor)
+    editor.transcriptResult?.let { TranscriptDialog(editor, it) }
+    if (editor.transcribing) TranscriptPanel(editor)
     ScannerLauncher(editor)
     Box(Modifier.fillMaxSize().padding(top = 64.dp), contentAlignment = Alignment.TopCenter) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -102,6 +105,68 @@ private fun Pill(dot: Color, label: String, action: String, onAction: () -> Unit
             modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(Color(0x33FFFFFF)).clickable(onClick = onAction).padding(horizontal = 12.dp, vertical = 6.dp),
         )
     }
+}
+
+/** Asks for the microphone when a transcription is requested, then starts it. */
+@Composable
+private fun TranscriptionControls(editor: Editor) {
+    val context = LocalContext.current
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        editor.transcribeRequested = false
+        if (ok) editor.startTranscription() else editor.message = context.getString(R.string.audio_permission)
+    }
+    LaunchedEffect(editor.transcribeRequested) {
+        if (!editor.transcribeRequested) return@LaunchedEffect
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            editor.transcribeRequested = false
+            editor.startTranscription()
+        } else {
+            permission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+}
+
+/** The live transcript at the bottom of the page: the last lines said, and Stop. */
+@Composable
+private fun TranscriptPanel(editor: Editor) {
+    Box(Modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.BottomCenter) {
+        Column(
+            Modifier.clip(RoundedCornerShape(18.dp)).background(Color(0xEE202124)).padding(14.dp).heightIn(max = 200.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(10.dp).clip(CircleShape).background(Color(0xFF22C55E)))
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(R.string.meeting_listening), color = Color.White, fontSize = 13.sp)
+                Spacer(Modifier.size(12.dp))
+                Text(
+                    stringResource(R.string.audio_stop),
+                    color = Color.White,
+                    fontSize = 13.sp,
+                    modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(Color(0x33FFFFFF)).clickable { editor.stopTranscription() }.padding(horizontal = 12.dp, vertical = 5.dp),
+                )
+            }
+            Spacer(Modifier.size(8.dp))
+            val shown = (editor.transcriptSoFar + " " + editor.transcriptPartial).trim().takeLast(420)
+            Text(shown.ifEmpty { "…" }, color = Color(0xFFE5E7EB), fontSize = 15.sp)
+        }
+    }
+}
+
+@Composable
+private fun TranscriptDialog(editor: Editor, text0: String) {
+    var text by remember(text0) { mutableStateOf(text0) }
+    AlertDialog(
+        onDismissRequest = { editor.transcriptResult = null },
+        title = { Text(stringResource(R.string.meeting_done_title)) },
+        text = { Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) { OutlinedTextField(value = text, onValueChange = { text = it }, minLines = 4) } },
+        confirmButton = {
+            Row {
+                TextButton(onClick = { editor.placeTranscript(text, newPage = true) }) { Text(stringResource(R.string.meeting_new_page)) }
+                TextButton(onClick = { editor.placeTranscript(text, newPage = false) }) { Text(stringResource(R.string.meeting_this_page)) }
+            }
+        },
+        dismissButton = { CopyButton(text) { editor.transcriptResult = null } },
+    )
 }
 
 /** Asks for the microphone when a recording is requested, then starts it. */

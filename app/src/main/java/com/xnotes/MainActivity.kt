@@ -1245,6 +1245,8 @@ private fun EditorPane(
                     onOpenBackstage = actions.onOpenBackstage,
                     onInsertImage = { actions.onInsertCanvasImage(editor, null) },
                     onClosePane = onClose,
+                    recording = editor.recording != null,
+                    onToggleRecord = { if (editor.recording != null) editor.stopRecording() else editor.recordRequested = true },
                 )
             }
             ToolbarAround(bar, onCover = canvas::setToolbarCover) { floatingBar ->
@@ -1260,6 +1262,7 @@ private fun EditorPane(
                     floatingBar()
                     com.xnotes.ui.SelectionMenu(canvas)
                     com.xnotes.ui.TextStyleBar(canvas)
+                    com.xnotes.ui.ToolkitOverlays(editor)
                     com.xnotes.ui.LongPressMenu(canvas, onInsertImageAt = { c -> actions.onInsertCanvasImage(editor, c) })
                     com.xnotes.ui.CanvasDebugOverlay(canvas)
                 }

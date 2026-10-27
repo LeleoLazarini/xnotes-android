@@ -1546,6 +1546,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         controller.motionPredictor = runCatching { androidx.input.motionprediction.MotionEventPredictor.newInstance(view) }.getOrNull()
         // Ink drawn while recording remembers when, so a tap on it plays that moment back.
         controller.onStrokeFiled = { s -> recording?.let { clip -> s.audioClip = clip.id; s.audioAt = android.os.SystemClock.uptimeMillis() - recordingStartedAt } }
+        infinite.onInkCommitted = { s -> recording?.let { clip -> s.audioClip = clip.id; s.audioAt = android.os.SystemClock.uptimeMillis() - recordingStartedAt } }
+        infinite.interaction.onTapItem = { item -> audioOf(item)?.let { (clip, at) -> playAudio(clip, at); true } ?: false }
         controller.onLinkTap = onLinkTap@{ pageIndex, pageLocal ->
             // A finger tap on a linked box jumps to its page; on ink drawn while recording, plays that moment.
             state.document.pages.getOrNull(pageIndex)?.items?.asReversed()?.forEach { item ->
@@ -4245,6 +4247,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             val name = copyDocumentAs(treeUri, e.documentUri, targetParentDocId) ?: continue
             copied++
             e.color?.let { colors[name] = it }
+            e.icon?.let { setFolderIcon(treeUri, targetParentDocId, name, it) }
         }
         setItemColors(treeUri, targetParentDocId, colors)
         return copied
@@ -4264,6 +4267,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             if (e.isDir && com.xnotes.core.util.DocKeys.within(targetParentDocId, browseDocId(e.documentUri))) continue
             if (!moveDocumentInto(treeUri, e.documentUri, e.parentDocId, targetParentDocId)) continue
             moved++
+            // A folder's picture moves with it, from the old parent's sidecar to the new one's.
+            e.icon?.let {
+                setFolderIcon(treeUri, targetParentDocId, e.name, it)
+                setFolderIcon(treeUri, e.parentDocId, e.name, null)
+            }
             val c = e.color ?: continue
             carried[e.name] = c
             cleared.getOrPut(e.parentDocId) { HashMap() }[e.name] = null
@@ -5301,6 +5309,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
                     .put("path", org.json.JSONArray(path))
                     .put("deleted", java.time.Instant.ofEpochMilli(now).toString())
                     .apply { e.color?.let { put("colour", Rgba.toHex(it)) } }
+                    .apply { e.icon?.let { i -> put("icon", i.id); i.color?.let { put("icon_colour", Rgba.toHex(it)) } } }
                 val moved = if (writeSidecarJson(tree, wrapperId, TRASH_INFO, info)) {
                     runCatching {
                         android.provider.DocumentsContract.moveDocument(
@@ -5325,6 +5334,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             } else {
                 trashed.add(item)
                 if (e.color != null) cleared.getOrPut(e.parentDocId) { HashMap() }[e.name] = null
+                // The picture went into the trash info; a new folder of the same name starts plain.
+                if (e.icon != null) setFolderIcon(treeUri, e.parentDocId, e.name, null)
             }
         }
         for ((parent, changes) in cleared) setItemColors(treeUri, parent, changes)
@@ -5360,6 +5371,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
                 size = stamp?.size?.coerceAtLeast(0) ?: 0, modified = stamp?.modified?.coerceAtLeast(0) ?: 0,
                 created = createdStore.get(documentKey(itemUri)) ?: 0, parentDocId = wrapperId,
                 color = info?.optString("colour")?.let { Rgba.fromHex(it) },
+                icon = info?.optString("icon")?.takeIf { it.isNotEmpty() }?.let { FolderIcon(it, Rgba.fromHex(info.optString("icon_colour"))) },
             )
             out.add(TrashItem(wrapperId, entry, path, deleted))
         }
@@ -5395,6 +5407,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         ) ?: return@runCatching false
         onDocumentMoved(item.entry.documentUri, moved.toString(), name.takeIf { it != item.entry.name })
         item.entry.color?.let { setItemColor(treeUri, dest, name, it) }
+        item.entry.icon?.let { setFolderIcon(treeUri, dest, name, it) }
         runCatching { android.provider.DocumentsContract.deleteDocument(resolver, android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, item.wrapperDocId)) }
         refreshTrashCount(treeUri)
         true
@@ -6448,7 +6461,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     fun startRecording(): Boolean {
         if (recording != null) return true
-        val id = (state.document.audio.maxOfOrNull { it.id } ?: 0) + 1
+        val id = (clips().maxOfOrNull { it.id } ?: 0) + 1
         val dir = java.io.File(appContext.cacheDir, "audio").apply { mkdirs() }
         val file = java.io.File.createTempFile("rec", ".m4a", dir)
         val r = if (android.os.Build.VERSION.SDK_INT >= 31) android.media.MediaRecorder(appContext) else @Suppress("DEPRECATION") android.media.MediaRecorder()
@@ -6480,8 +6493,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         recorder = null
         recording = null
         if (clip.file.length() > 0) {
-            state.document.audio += clip
-            state.document.dirty = true
+            clips() += clip
+            if (canvasOpen) infinite.document.dirty = true else state.document.dirty = true
             dirty = true
             message = appContext.getString(R.string.audio_saved)
         }
@@ -6518,11 +6531,14 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         playing = null
     }
 
+    /** The recordings of what is open: the canvas's when a canvas is, else the note's. */
+    private fun clips(): MutableList<com.xnotes.core.model.AudioClip> = if (canvasOpen) infinite.document.audio else state.document.audio
+
     /** The clip a finger tap on [item] should play, and from where; null when it has none. */
     private fun audioOf(item: com.xnotes.core.model.CanvasItem): Pair<com.xnotes.core.model.AudioClip, Long>? {
         val s = item as? com.xnotes.core.model.Stroke ?: return null
         val id = s.audioClip ?: return null
-        val clip = state.document.audio.firstOrNull { it.id == id } ?: return null
+        val clip = clips().firstOrNull { it.id == id } ?: return null
         return clip to s.audioAt
     }
 
@@ -6576,6 +6592,70 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             insertPageAfter(state.currentPageIndex())
             insertImageAt(bytes, null, fill = SCAN_FILL)
         }
+    }
+
+    // Meeting transcription -------------------------------------------------------------------
+
+    private var transcriber: com.xnotes.platform.LiveTranscriber? = null
+
+    /** True while the meeting is being transcribed. */
+    var transcribing by mutableStateOf(false)
+        private set
+
+    /** What has been said so far, and the phrase still being heard. */
+    var transcriptSoFar by mutableStateOf("")
+        private set
+    var transcriptPartial by mutableStateOf("")
+        private set
+
+    /** The finished transcript, waiting to be placed or copied. */
+    var transcriptResult by mutableStateOf<String?>(null)
+
+    /** Set by the toolbar; the overlay asks for the microphone, then calls [startTranscription]. */
+    var transcribeRequested by mutableStateOf(false)
+
+    fun startTranscription() {
+        if (transcribing) return
+        if (recording != null) { message = appContext.getString(R.string.meeting_stop_recording_first); return }
+        transcriptSoFar = ""
+        transcriptPartial = ""
+        val t = com.xnotes.platform.LiveTranscriber(
+            appContext,
+            onText = { done, partial -> transcriptSoFar = done; transcriptPartial = partial },
+            onProblem = { p ->
+                transcribing = false
+                message = appContext.getString(if (p == "permission") R.string.audio_permission else R.string.meeting_failed)
+            },
+        )
+        transcriber = t
+        transcribing = true
+        t.start()
+    }
+
+    fun stopTranscription() {
+        val text = transcriber?.stop().orEmpty()
+        transcriber = null
+        transcribing = false
+        val all = listOf(text, transcriptPartial).filter { it.isNotBlank() }.joinToString(" ").trim()
+        transcriptPartial = ""
+        if (all.isNotBlank()) transcriptResult = all else message = appContext.getString(R.string.meeting_empty)
+    }
+
+    /** Place the transcript as a text box: on a fresh page after this one, or on this page. */
+    fun placeTranscript(text: String, newPage: Boolean) {
+        transcriptResult = null
+        if (text.isBlank()) return
+        if (newPage) insertPageAfter(state.currentPageIndex())
+        val pi = state.currentPageIndex()
+        val page = state.document.pages[pi]
+        val inset = 14.0 / 25.4 * state.document.dpi
+        val header = appContext.getString(R.string.meeting_header, java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale("pt", "BR")).format(java.util.Date()))
+        val item = com.xnotes.core.model.TextItem(
+            Pt(inset, inset), page.width - 2 * inset, 0.0, "$header\n\n$text",
+            controller.inkColor.withAlpha(255), 12.0, FontFace.SANS, textMeasurer,
+        )
+        page.items.add(item); state.appendToCache(page, item); history.push(AddItem(page, item))
+        state.document.dirty = true; refreshContent(); view.requestRender()
     }
 
     /** A string from the app's resources, for helpers outside composition. */

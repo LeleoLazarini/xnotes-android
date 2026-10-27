@@ -351,10 +351,19 @@ class InfiniteInteraction(
             onDoubleTap(at, e.getToolType(0), lastTapSelected)
             return
         }
+        // A finger tap on an item the editor wants to act on (ink with a recording behind it).
+        if (e.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER) {
+            itemAt(viewport.viewportToContent(at))?.let { item ->
+                if (onTapItem?.invoke(item) == true) { lastTapAt = null; return }
+            }
+        }
         lastTapAt = at
         lastTapTime = e.eventTime
         lastTapSelected = tapDownSelected
     }
+
+    /** Offered every single finger tap's topmost item; true when it handled the tap. */
+    var onTapItem: ((CanvasItem) -> Boolean)? = null
 
     /**
      * The topmost unlocked shape at viewport [vp] that takes a label, for a double tap with the

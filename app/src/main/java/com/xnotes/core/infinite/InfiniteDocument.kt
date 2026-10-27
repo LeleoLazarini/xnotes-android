@@ -51,6 +51,9 @@ class InfiniteDocument(
     /** When the canvas was created (epoch ms), or null for files written before this was recorded. */
     var created: Long? = null,
 ) {
+    /** Recordings made on this canvas, saved inside it as assets/audio-NNN.m4a. */
+    val audio: MutableList<com.xnotes.core.model.AudioClip> = mutableListOf()
+
 
     /** Something that must be patched when the item list changes: the GL geometry store. */
     interface Listener {

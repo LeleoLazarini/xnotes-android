@@ -1099,4 +1099,14 @@
     <string name="update_none">You have the latest version.</string>
     <string name="update_failed">Couldn\'t check for updates.</string>
     <string name="update_allow_install">Allow xnotes to install apps, then tap Update again.</string>
+    <string name="meeting_start">Transcribe meeting live</string>
+    <string name="meeting_stop">Stop transcribing</string>
+    <string name="meeting_listening">Listening…</string>
+    <string name="meeting_done_title">Meeting transcript</string>
+    <string name="meeting_new_page">New page</string>
+    <string name="meeting_this_page">This page</string>
+    <string name="meeting_header">Meeting · %1$s</string>
+    <string name="meeting_failed">Transcription stopped. Check the internet or try again.</string>
+    <string name="meeting_empty">Nothing was transcribed.</string>
+    <string name="meeting_stop_recording_first">Stop the audio recording first: both use the microphone.</string>
 </resources>

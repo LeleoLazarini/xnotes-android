@@ -14,6 +14,9 @@ CODE=$("$BT/aapt2.exe" dump badging "$APK" | grep -oE "versionCode='[0-9]+'" | g
 OUT="/c/dev/xnotes-release/xnotes-pessoal-$CODE.apk"
 mkdir -p /c/dev/xnotes-release && cp "$APK" "$OUT"
 git push -q
-gh release create "v$CODE" "$OUT" --target "$(git rev-parse --abbrev-ref HEAD)" --title "xnotes pessoal $CODE" --notes "$NOTES"
+# The tag goes up with git (gh lacks the workflow scope to create it), and the release names the
+# fork explicitly: left to itself, gh picks the upstream repository.
+git tag "v$CODE" && git push -q origin "v$CODE"
+gh release create "v$CODE" "$OUT" --repo LeleoLazarini/xnotes-android --verify-tag --title "xnotes pessoal $CODE" --notes "$NOTES"
 cp "$OUT" "/c/Users/leona/Diamante/Soluções Integradas - Documentos/App Anotações Tablet/"
 echo "Publicado v$CODE"

@@ -442,6 +442,11 @@ private fun InsertGroupButton(
             GroupMenuItem(stringResource(R.string.insert_image_ellipsis), XnotesIcons.image) { menuOpen = false; onInsertImage() }
             GroupMenuItem(stringResource(R.string.paste_image), XnotesIcons.paste) { menuOpen = false; editor.pasteImage() }
             GroupMenuItem(stringResource(R.string.scan_document), XnotesIcons.importDoc) { menuOpen = false; editor.scanRequested = true }
+            if (!editor.transcribing) {
+                GroupMenuItem(stringResource(R.string.meeting_start), XnotesIcons.list) { menuOpen = false; editor.transcribeRequested = true }
+            } else {
+                GroupMenuItem(stringResource(R.string.meeting_stop), XnotesIcons.list, active = true) { menuOpen = false; editor.stopTranscription() }
+            }
             if (editor.recording == null) {
                 GroupMenuItem(stringResource(R.string.audio_record), XnotesIcons.clock) { menuOpen = false; editor.recordRequested = true }
             } else {
@@ -555,8 +560,6 @@ private fun MoreMenu(editor: Editor, onRename: () -> Unit, onToggleFullscreen: (
             ) { menuOpen = false; editor.toggleZoomLock() }
             MenuDivider()
             GroupMenuItem(stringResource(R.string.toolbar_fullscreen), XnotesIcons.fullscreen) { menuOpen = false; onToggleFullscreen() }
-            // Temporary: checks this device's speech recognition before meeting mode is built on it.
-            GroupMenuItem("Teste de transcrição", XnotesIcons.info) { menuOpen = false; popup = MorePopup.TRANSCRIBE }
             // One tap between light and dark; System and OLED stay in Preferences.
             val dark = LocalPalette.current.isDark
             GroupMenuItem(stringResource(R.string.dark_theme), XnotesIcons.palette, active = dark) {

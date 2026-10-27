@@ -1097,4 +1097,14 @@
     <string name="update_none">Você já está com a versão mais nova.</string>
     <string name="update_failed">Não consegui procurar atualização.</string>
     <string name="update_allow_install">Permita que o xnotes instale apps e toque em Atualizar de novo.</string>
+    <string name="meeting_start">Transcrever reunião ao vivo</string>
+    <string name="meeting_stop">Parar a transcrição</string>
+    <string name="meeting_listening">Ouvindo…</string>
+    <string name="meeting_done_title">Transcrição da reunião</string>
+    <string name="meeting_new_page">Página nova</string>
+    <string name="meeting_this_page">Esta página</string>
+    <string name="meeting_header">Reunião · %1$s</string>
+    <string name="meeting_failed">A transcrição parou. Confira a internet ou tente de novo.</string>
+    <string name="meeting_empty">Nada foi transcrito.</string>
+    <string name="meeting_stop_recording_first">Pare a gravação de áudio antes: as duas usam o microfone.</string>
 </resources>

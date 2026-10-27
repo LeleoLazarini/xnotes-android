@@ -3287,7 +3287,29 @@ class InteractionController(
 
     // --- selection management ---
 
-    private fun setSelection(items: List<Selected>) {
+    /**
+     * A sticky note brings what is written on it: every unlocked item whose middle lies on a
+     * selected note joins the selection, so moving, turning or deleting the note takes its words.
+     */
+    private fun withStickyContents(items: List<Selected>): List<Selected> {
+        val notes = items.filter { (it.item as? com.xnotes.core.model.ShapeItem)?.stickyNote == true }
+        if (notes.isEmpty()) return items
+        val out = items.toMutableList()
+        for (n in notes) {
+            val page = state.document.pages.getOrNull(n.pageIndex) ?: continue
+            val box = n.item.bounds()
+            for (item in page.items) {
+                if (item === n.item || item.locked || out.any { it.item === item }) continue
+                if ((item as? com.xnotes.core.model.ShapeItem)?.stickyNote == true) continue
+                val b = item.bounds()
+                if (box.contains(Pt(b.centerX, b.centerY))) out += Selected(n.pageIndex, item)
+            }
+        }
+        return out
+    }
+
+    private fun setSelection(picked: List<Selected>) {
+        val items = withStickyContents(picked)
         // Items whose lifted state flips: those leaving the old selection (repainted back
         // into the cache) and those entering it (lifted out of it). Update the selection
         // first so the in-place repair below sees the new lifted set.

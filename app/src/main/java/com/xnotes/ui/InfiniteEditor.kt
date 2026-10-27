@@ -1458,7 +1458,11 @@ class InfiniteEditor(context: Context) : ToolPopupHost, SelectionMenuHost, LongP
     }
 
     /** Pen up: the finished stroke joins the document, and the edit joins the undo stack. */
+    /** Told of each stroke as it becomes ink, so the editor can stamp it (audio time). */
+    var onInkCommitted: ((Stroke) -> Unit)? = null
+
     private fun commitStroke(stroke: Stroke) {
+        if (!(wandEnabled && stroke.tool.isStroke)) onInkCommitted?.invoke(stroke)
         // The commit message releases the wet buffers on the GL thread, so forget what was in them.
         val tail = wetTail
         forgetWetStroke()

@@ -49,6 +49,8 @@ fun InfiniteToolbar(
     onOpenBackstage: () -> Unit,
     onInsertImage: () -> Unit = {},
     onClosePane: (() -> Unit)? = null,
+    recording: Boolean = false,
+    onToggleRecord: (() -> Unit)? = null,
 ) {
     // The stroke tools use the same designed drawables the paged toolbar does, so a pen looks like
     // a pen on either canvas rather than like a generic glyph.
@@ -125,7 +127,11 @@ fun InfiniteToolbar(
                         active = editor.wandEnabled,
                     ) { editor.toggleWand() }
 
-                    ToolbarItem.IMAGE -> ToolbarIcon(XnotesIcons.image, stringResource(R.string.insert_image)) { onInsertImage() }
+                    ToolbarItem.IMAGE -> {
+                        ToolbarIcon(XnotesIcons.image, stringResource(R.string.insert_image)) { onInsertImage() }
+                        // Record a conversation over the canvas; tapping ink later plays that moment.
+                        if (onToggleRecord != null) ToolbarIcon(XnotesIcons.clock, stringResource(if (recording) R.string.audio_stop_recording else R.string.audio_record), active = recording) { onToggleRecord() }
+                    }
 
                     ToolbarItem.COLORS ->
                         editor.toolbarColors.take(editor.toolbarColorCount).forEachIndexed { i, color ->
