@@ -1552,6 +1552,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             // A finger tap on a linked box jumps to its page; on ink drawn while recording, plays that moment.
             state.document.pages.getOrNull(pageIndex)?.items?.asReversed()?.forEach { item ->
                 if (!item.contains(pageLocal)) return@forEach
+                (item as? com.xnotes.core.model.ShapeItem)?.takeIf { it.studyTape }?.let { toggleTape(it); return@onLinkTap true }
                 (item as? com.xnotes.core.model.Linkable)?.linkPage?.takeIf { it in state.document.pages.indices }?.let { goToPage(it); return@onLinkTap true }
                 audioOf(item)?.let { (clip, at) -> playAudio(clip, at); return@onLinkTap true }
             }
@@ -6658,6 +6659,150 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         state.document.dirty = true; refreshContent(); view.requestRender()
     }
 
+    // Straighten, calculate, translate -----------------------------------------------------------
+
+    private fun selectedStrokes(): List<com.xnotes.core.model.Stroke> =
+        controller.selectedItems.mapNotNull { it.item as? com.xnotes.core.model.Stroke }.filter { it.tool != Tool.HIGHLIGHTER }
+
+    override fun canStraighten(): Boolean = selectedStrokes().isNotEmpty()
+
+    /**
+     * Level the selected handwriting: each line's slope is fitted through its ink, the lines are
+     * averaged by width, and the selection turns by the opposite angle. Already-level ink stays put.
+     */
+    override fun straightenSelection() {
+        val lines = com.xnotes.platform.InkText.lines(selectedStrokes())
+        var sum = 0.0
+        var weight = 0.0
+        for (line in lines) {
+            var n = 0; var sx = 0.0; var sy = 0.0; var sxx = 0.0; var sxy = 0.0
+            for (s in line) for (i in 0 until s.sampleCount) {
+                val x = s.xAt(i); val y = s.yAt(i)
+                n++; sx += x; sy += y; sxx += x * x; sxy += x * y
+            }
+            val den = n * sxx - sx * sx
+            if (n < 8 || den <= 0.0) continue
+            val slope = (n * sxy - sx * sy) / den
+            val w = line.maxOf { it.bounds().right } - line.minOf { it.bounds().left }
+            sum += kotlin.math.atan(slope) * w
+            weight += w
+        }
+        if (weight <= 0.0) return
+        val angle = sum / weight
+        if (kotlin.math.abs(angle) < STRAIGHT_ENOUGH || kotlin.math.abs(angle) > TOO_STEEP) {
+            message = appContext.getString(R.string.straighten_none)
+            return
+        }
+        controller.rotateSelection(-angle)
+    }
+
+    override fun canCalculate(): Boolean = selectedStrokes().isNotEmpty()
+
+    override fun calculateSelection() {
+        val sel = controller.selectedItems.filter { it.item is com.xnotes.core.model.Stroke }
+        if (sel.isEmpty()) return
+        val pageIndex = sel.first().pageIndex
+        val strokes = sel.filter { it.pageIndex == pageIndex }.map { it.item as com.xnotes.core.model.Stroke }
+        autosaveScope.launch {
+            message = appContext.getString(if (com.xnotes.platform.InkText.ready()) R.string.ink_reading else R.string.ink_downloading)
+            val lines = com.xnotes.platform.InkText.recognize(strokes)
+            val written = lines.joinToString(" ") { it.text }
+            val value = com.xnotes.platform.HandMath.evaluate(written)
+            if (value == null) {
+                message = appContext.getString(R.string.calculate_failed, written)
+                return@launch
+            }
+            message = null
+            val b = Rect.bounding(lines.flatMap { listOf(it.bounds.topLeft, Pt(it.bounds.right, it.bounds.bottom)) })
+            val points = (lines.map { it.bounds.h }.average() * TEXT_FROM_INK_SCALE / state.document.dpi * 72.0).coerceIn(9.0, 48.0)
+            val shown = (if (written.trimEnd().endsWith("=")) "" else "= ") + com.xnotes.platform.HandMath.format(value)
+            val item = com.xnotes.core.model.TextItem(Pt(b.right + 8.0, b.top), 400.0, 0.0, shown, strokes.first().config.rgba.withAlpha(255), points, FontFace.SANS, textMeasurer)
+            controller.replaceSelection(pageIndex, item, keepSelected = true)
+            refreshContent(); view.requestRender()
+        }
+    }
+
+    /** A translation being set up or shown: the source, where to put the result, and the result. */
+    class TranslationJob(val pageIndex: Int, val source: String, val near: Rect, val color: Rgba, val result: String? = null, val busy: Boolean = false)
+
+    var translation by mutableStateOf<TranslationJob?>(null)
+
+    override fun canTranslate(): Boolean =
+        controller.selectedItems.any { it.item is com.xnotes.core.model.TextItem } || selectedStrokes().isNotEmpty()
+
+    override fun translateSelection() {
+        val sel = controller.selectedItems
+        if (sel.isEmpty()) return
+        val pageIndex = sel.first().pageIndex
+        val texts = sel.mapNotNull { it.item as? com.xnotes.core.model.TextItem }
+        val strokes = selectedStrokes()
+        val all = sel.map { it.item.bounds() }
+        val near = Rect.bounding(all.flatMap { listOf(it.topLeft, Pt(it.right, it.bottom)) })
+        autosaveScope.launch {
+            val source = if (texts.isNotEmpty()) texts.joinToString("\n") { it.text } else {
+                message = appContext.getString(if (com.xnotes.platform.InkText.ready()) R.string.ink_reading else R.string.ink_downloading)
+                com.xnotes.platform.InkText.recognize(strokes).joinToString("\n") { it.text }.also { message = null }
+            }
+            if (source.isBlank()) { message = appContext.getString(R.string.ink_failed); return@launch }
+            translation = TranslationJob(pageIndex, source, near, texts.firstOrNull()?.rgba ?: strokes.firstOrNull()?.config?.rgba ?: controller.inkColor)
+        }
+    }
+
+    fun runTranslation(target: String) {
+        val job = translation ?: return
+        translation = TranslationJob(job.pageIndex, job.source, job.near, job.color, null, busy = true)
+        autosaveScope.launch {
+            val out = com.xnotes.platform.Translate.run(job.source, target)
+            translation = TranslationJob(job.pageIndex, job.source, job.near, job.color, out ?: appContext.getString(R.string.translate_failed), busy = false)
+        }
+    }
+
+    fun placeTranslation(text: String) {
+        val job = translation ?: return
+        translation = null
+        val item = com.xnotes.core.model.TextItem(Pt(job.near.left, job.near.bottom + 12.0), maxOf(job.near.w, MIN_CONVERTED_WIDTH), 0.0, text, job.color.withAlpha(255), 12.0, FontFace.SANS, textMeasurer)
+        controller.replaceSelection(job.pageIndex, item, keepSelected = true)
+        refreshContent(); view.requestRender()
+    }
+
+    // Study tape --------------------------------------------------------------------------------
+
+    /** Lay a strip of tape across the middle of the view; a finger tap peels it back and forth. */
+    fun insertStudyTape(fill: Rgba) {
+        val c = visibleCenter()
+        val pi = (state.pageIndexAtContent(c) ?: state.currentPageIndex()).coerceIn(0, state.document.pages.lastIndex)
+        val page = state.document.pages[pi]
+        val local = state.toPageSpace(pi, c)
+        val w = page.width * 0.42
+        val h = 12.0 / 25.4 * state.document.dpi
+        val item = com.xnotes.core.model.ShapeItem(
+            com.xnotes.core.shapes.ShapeKind.RECTANGLE, Pt(local.x - w / 2, local.y - h / 2), Pt(local.x + w / 2, local.y + h / 2),
+            strokeRgba = fill, strokeWidth = 1.0, fillRgba = fill,
+        ).also { it.studyTape = true }
+        page.items.add(item); state.appendToCache(page, item); history.push(AddItem(page, item))
+        state.document.dirty = true; refreshContent(); view.requestRender()
+    }
+
+    /** Peel a study tape back (or stick it down again) without touching history. */
+    private fun toggleTape(item: com.xnotes.core.model.ShapeItem) {
+        item.tapeRevealed = !item.tapeRevealed
+        state.invalidateAllCaches()
+        refreshView()
+        view.requestRender()
+    }
+
+    // Quick note --------------------------------------------------------------------------------
+
+    /** Create "Nota rápida <date>" in the notes folder and open it, for the launcher shortcut. */
+    suspend fun openQuickNote() {
+        if (browseRoot == null) useInternalStorage()
+        val root = browseRoot ?: return
+        val rootId = android.provider.DocumentsContract.getTreeDocumentId(android.net.Uri.parse(root))
+        val name = appContext.getString(R.string.quick_note_name, java.text.SimpleDateFormat("dd-MM HH'h'mm", java.util.Locale("pt", "BR")).format(java.util.Date()))
+        val uri = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { createBlankNoteFile(root, rootId, name) } ?: return
+        openAsync(uri, name)
+    }
+
     /** A string from the app's resources, for helpers outside composition. */
     fun appString(id: Int): String = appContext.getString(id)
 
@@ -8089,3 +8234,9 @@ private const val AUDIO_LEAD_MS = 1500L
 
 /** A scanned page fills this share of its note page. */
 private const val SCAN_FILL = 0.94
+
+/** Handwriting within this angle of level is left alone (radians, about 1.5°). */
+private const val STRAIGHT_ENOUGH = 0.026
+
+/** Steeper than this (about 35°) is not a slanted line but a drawing: leave it. */
+private const val TOO_STEEP = 0.61

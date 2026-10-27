@@ -2999,6 +2999,34 @@ class InteractionController(
         requestRender()
     }
 
+    /** Turn the selection by [radians] about its centre, as one undo step (straightening handwriting). */
+    fun rotateSelection(radians: Double) {
+        val box = selObb ?: return
+        if (selection.isEmpty()) return
+        val world = Affine.rotateAbout(box.center, radians)
+        val members = selection.toList()
+        val before = members.map { it.item.snapshotGeometry() }
+        beginFollow(rigid = true, pin = true)
+        for (sel in members) {
+            if (state.pageRects.getOrNull(sel.pageIndex) == null) continue
+            sel.item.applyTransform(state.affineToPageSpace(sel.pageIndex, world))
+        }
+        for ((pi, f) in follows) {
+            if (state.pageRects.getOrNull(pi) == null) continue
+            f.follow(state.affineToPageSpace(pi, world))
+        }
+        for ((_, f) in follows) f.settle()
+        val tx = TransformItems(members.map { it.item }, before, members.map { it.item.snapshotGeometry() })
+        val cmds = listOfNotNull(tx, followCommand(), reassignSelectionPages())
+        history.push(cmds.singleOrNull() ?: CompositeCommand(cmds))
+        endFollow()
+        state.document.dirty = true
+        selObb = box.copy(angle = box.angle + radians)
+        onContentChanged()
+        refreshSelectionMenu()
+        requestRender()
+    }
+
     /** A lone connector's own chrome: its ends (solid when glued), middle segments, waypoints and stretch middles. */
     private fun drawConnectorChrome(r: Renderer) {
         if (mode == PointerMode.MOVE) return

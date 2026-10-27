@@ -21,6 +21,7 @@ fun CanvasItem.deepCopy(measurer: TextMeasurer): CanvasItem = when (this) {
             it.label = label
             it.labelAt = labelAt
             it.stickyNote = stickyNote
+            it.studyTape = studyTape
             it.linkPage = linkPage
         }
     is ConnectorItem ->

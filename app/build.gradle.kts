@@ -165,6 +165,8 @@ dependencies {
     // (Play services). Motion prediction draws the live stroke a little ahead of the pen.
     implementation("com.google.mlkit:digital-ink-recognition:19.0.0")
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("com.google.mlkit:language-id:17.0.6")
     implementation("com.google.android.gms:play-services-mlkit-document-scanner:16.0.0")
     implementation("androidx.input:input-motionprediction:1.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")

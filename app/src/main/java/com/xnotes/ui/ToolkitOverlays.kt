@@ -65,6 +65,7 @@ internal fun ToolkitOverlays(editor: Editor) {
     editor.inkConversion?.let { InkConversionDialog(editor, it) }
     editor.imageTextResult?.let { ImageTextDialog(editor, it) }
     if (editor.linkPicking) LinkPickerDialog(editor)
+    editor.translation?.let { TranslationDialog(editor, it) }
     RecordingControls(editor)
     TranscriptionControls(editor)
     editor.transcriptResult?.let { TranscriptDialog(editor, it) }
@@ -267,6 +268,35 @@ private fun ImageTextDialog(editor: Editor, r: Editor.ImageTextResult) {
                 TextButton(onClick = { editor.dismissImageText() }) { Text(stringResource(R.string.cancel)) }
             }
         },
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TranslationDialog(editor: Editor, job: Editor.TranslationJob) {
+    val palette = LocalPalette.current
+    var result by remember(job.result) { mutableStateOf(job.result.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = { editor.translation = null },
+        title = { Text(stringResource(R.string.translate)) },
+        text = {
+            Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
+                Text(job.source, color = palette.textDim.toComposeColor(), fontSize = 13.sp)
+                Spacer(Modifier.size(10.dp))
+                Text(stringResource(R.string.translate_to), color = palette.textDim.toComposeColor(), fontSize = 12.sp)
+                Spacer(Modifier.size(4.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    com.xnotes.platform.Translate.targets.forEach { (code, label) -> ModeChip(label, false) { editor.runTranslation(code) } }
+                }
+                Spacer(Modifier.size(10.dp))
+                when {
+                    job.busy -> Text(stringResource(R.string.translate_busy), color = palette.textDim.toComposeColor(), fontSize = 13.sp)
+                    job.result != null -> OutlinedTextField(value = result, onValueChange = { result = it }, minLines = 2)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { editor.placeTranslation(result) }, enabled = job.result != null && !job.busy) { Text(stringResource(R.string.ink_place)) } },
+        dismissButton = { CopyButton(result) { editor.translation = null } },
     )
 }
 

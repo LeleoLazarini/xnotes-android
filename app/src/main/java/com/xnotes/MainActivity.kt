@@ -146,6 +146,9 @@ class MainActivity : ComponentActivity() {
     // A PDF handed to us by another app ("Open with" / Share); consumed once the editor is ready.
     private var pendingPdfImport by mutableStateOf<Uri?>(null)
 
+    /** Set by the launcher's "Quick note" shortcut: make a note and open it. */
+    private var pendingQuickNote by mutableStateOf(false)
+
     /** Images or text shared in from another app, waiting for an open note. */
     private var pendingShare by mutableStateOf<com.xnotes.ui.SharedIn?>(null)
 
@@ -157,6 +160,18 @@ class MainActivity : ComponentActivity() {
         applyFullscreen(!deviceHasDisplayCutout(this)) // provisional; reconciled once the editor loads prefs
         pendingPdfImport = pdfImportUri(intent)
         pendingShare = sharedIn(intent)
+        pendingQuickNote = intent?.action == ACTION_QUICK_NOTE
+        // Long-press the app icon: "Quick note" opens a fresh note straight away.
+        runCatching {
+            val sm = getSystemService(android.content.pm.ShortcutManager::class.java)
+            sm?.dynamicShortcuts = listOf(
+                android.content.pm.ShortcutInfo.Builder(this, "quick-note")
+                    .setShortLabel(getString(R.string.quick_note))
+                    .setIcon(android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_kit_pen))
+                    .setIntent(Intent(this, MainActivity::class.java).setAction(ACTION_QUICK_NOTE))
+                    .build(),
+            )
+        }
         setContent {
             val context = LocalContext.current
             val ed = remember { Editor(context).also { editor = it } }
@@ -185,6 +200,8 @@ class MainActivity : ComponentActivity() {
                             onImportConsumed = { pendingPdfImport = null },
                             sharedIn = pendingShare,
                             onSharedConsumed = { pendingShare = null },
+                            quickNote = pendingQuickNote,
+                            onQuickNoteConsumed = { pendingQuickNote = false },
                         )
                         androidx.compose.animation.AnimatedVisibility(
                             visible = !ready,
@@ -232,6 +249,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         pdfImportUri(intent)?.let { pendingPdfImport = it }
         sharedIn(intent)?.let { pendingShare = it }
+        if (intent.action == ACTION_QUICK_NOTE) pendingQuickNote = true
     }
 
     // Pictures or text shared from another app ("Share" → xnotes), else null. PDFs go to [pdfImportUri].
@@ -308,6 +326,8 @@ private fun EditorScreen(
     onImportConsumed: () -> Unit = {},
     sharedIn: com.xnotes.ui.SharedIn? = null,
     onSharedConsumed: () -> Unit = {},
+    quickNote: Boolean = false,
+    onQuickNoteConsumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
@@ -839,6 +859,12 @@ private fun EditorScreen(
         }
         onSharedConsumed()
         editor.acceptShared(share.uris, share.text, context.contentResolver)
+    }
+
+    LaunchedEffect(quickNote) {
+        if (!quickNote) return@LaunchedEffect
+        onQuickNoteConsumed()
+        editor.openQuickNote()
     }
 
     LaunchedEffect(importPdfUri) {
@@ -1727,3 +1753,6 @@ private fun displayNameOf(resolver: android.content.ContentResolver, uri: Uri): 
         } else null
     }
 }.getOrNull()
+
+/** The launcher shortcut's action: make a note and open it. */
+private const val ACTION_QUICK_NOTE = "com.xnotes.action.QUICK_NOTE"

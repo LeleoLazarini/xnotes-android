@@ -97,6 +97,13 @@ class ShapeItem(
     /** Drawn as a paper sticky note (shadow, glue band, curled corner) instead of a plain fill and outline. */
     var stickyNote: Boolean = false
 
+    /** A study tape: an opaque strip that hides what is under it until a finger tap peels it. */
+    var studyTape: Boolean = false
+
+    /** A peeled study tape shows through. Not saved: a note always opens with its tapes down. */
+    @Volatile
+    var tapeRevealed: Boolean = false
+
     /** Normalized AABB of the two drag points: the shape's frame before [rotation] turns it. */
     val box: Rect get() = Rect.fromPoints(start, end)
 
@@ -203,6 +210,7 @@ class ShapeItem(
     /** Everything but the label: fills, then the outline, glowing when neon. */
     fun paintBody(r: Renderer) {
         if (stickyNote) return paintStickyNote(r)
+        if (studyTape) return paintStudyTape(r)
         val paths = paths()
         if (neon) return Outline.paintNeon(r, paths, fillRgba, pen(), neonStrength, paintBounds())
         ShapePainter.fill(r, paths, fillRgba, strokeRgba)
@@ -233,6 +241,27 @@ class ShapeItem(
         r.fillPolygon(listOf(at(b.right - curl, b.bottom), at(b.right, b.bottom - curl), at(b.right - curl * 1.05, b.bottom - curl * 1.05)), Stroke.lighten(paper, STICKY_CURL_LIGHTEN))
         // A barely-there edge so the note reads against paper of its own colour.
         r.strokePolygon(sheet, Pen(color = Stroke.darken(paper, STICKY_EDGE_DARKEN).withAlpha(STICKY_EDGE_ALPHA), width = 0.8, cosmetic = false))
+    }
+
+    /** The tape: opaque, faintly striped, with torn-looking ends; nearly clear once peeled back. */
+    private fun paintStudyTape(r: Renderer) {
+        val b = box
+        val color = (fillRgba ?: strokeRgba).withAlpha(if (tapeRevealed) 40 else 255)
+        fun at(x: Double, y: Double) = toPage(Pt(x, y))
+        val notch = b.h * 0.18
+        val outline = listOf(
+            at(b.left, b.top), at(b.right, b.top), at(b.right - notch, b.top + b.h * 0.33), at(b.right, b.top + b.h * 0.66), at(b.right - notch, b.bottom),
+            at(b.left, b.bottom), at(b.left + notch, b.top + b.h * 0.66), at(b.left, b.top + b.h * 0.33),
+        )
+        r.fillPolygon(outline, color)
+        if (!tapeRevealed) {
+            val stripe = Stroke.lighten(color, 0.18)
+            var x = b.left + b.h * 0.5
+            while (x < b.right - b.h * 0.5) {
+                r.fillPolygon(listOf(at(x, b.top), at(x + b.h * 0.25, b.top), at(x - b.h * 0.25, b.bottom), at(x - b.h * 0.5, b.bottom)), stripe)
+                x += b.h * 0.9
+            }
+        }
     }
 
     private fun packed(pts: List<Pt>): FloatArray = FloatArray(pts.size * 2).also { a ->

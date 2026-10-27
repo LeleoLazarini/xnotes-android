@@ -442,6 +442,7 @@ private fun InsertGroupButton(
             GroupMenuItem(stringResource(R.string.insert_image_ellipsis), XnotesIcons.image) { menuOpen = false; onInsertImage() }
             GroupMenuItem(stringResource(R.string.paste_image), XnotesIcons.paste) { menuOpen = false; editor.pasteImage() }
             GroupMenuItem(stringResource(R.string.scan_document), XnotesIcons.importDoc) { menuOpen = false; editor.scanRequested = true }
+            GroupMenuItem(stringResource(R.string.study_tape), XnotesIcons.lock) { menuOpen = false; editor.insertStudyTape(com.xnotes.core.model.Rgba(124, 58, 237)) }
             if (!editor.transcribing) {
                 GroupMenuItem(stringResource(R.string.meeting_start), XnotesIcons.list) { menuOpen = false; editor.transcribeRequested = true }
             } else {

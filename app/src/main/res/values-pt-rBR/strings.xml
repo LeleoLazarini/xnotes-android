@@ -1107,4 +1107,15 @@
     <string name="meeting_failed">A transcrição parou. Confira a internet ou tente de novo.</string>
     <string name="meeting_empty">Nada foi transcrito.</string>
     <string name="meeting_stop_recording_first">Pare a gravação de áudio antes: as duas usam o microfone.</string>
+    <string name="straighten">Endireitar escrita</string>
+    <string name="straighten_none">Essa escrita já está reta.</string>
+    <string name="calculate">Calcular</string>
+    <string name="calculate_failed">Não encontrei uma conta em \"%1$s\".</string>
+    <string name="translate">Traduzir</string>
+    <string name="translate_to">Traduzir para</string>
+    <string name="translate_busy">Traduzindo (na primeira vez baixa o idioma)…</string>
+    <string name="translate_failed">Não consegui traduzir. Na primeira vez é preciso internet.</string>
+    <string name="study_tape">Fita de estudo (toque para revelar)</string>
+    <string name="quick_note">Nota rápida</string>
+    <string name="quick_note_name">Nota rápida %1$s</string>
 </resources>

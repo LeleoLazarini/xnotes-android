@@ -420,6 +420,7 @@ class DocumentCodec(
         j.name("end").beginArray().value(drawn?.right ?: s.end.x).value(drawn?.bottom ?: s.end.y).endArray()
         // Only sticky notes carry it, so every other shape is written as before.
         if (s.stickyNote) j.name("sticky_note").value(true)
+        if (s.studyTape) j.name("study_tape").value(true)
         j.name("stroke_rgba")
         writeRgba(j, s.strokeRgba)
         j.name("stroke_width").value(s.strokeWidth)
@@ -936,6 +937,7 @@ class DocumentCodec(
         var audio: DoubleArray? = null
         var linkPage: Int? = null
         var stickyNote = false
+        var studyTape = false
         var kind: String? = null
         var id: Int? = null
         var connector: ConnectorScratch? = null
@@ -1054,6 +1056,7 @@ class DocumentCodec(
                 "audio" -> s.audio = doublesOrNull(p)
                 "link_page" -> s.linkPage = intOrNull(p)
                 "sticky_note" -> s.stickyNote = boolOr(p, false)
+                "study_tape" -> s.studyTape = boolOr(p, false)
                 else -> p.skipValue()
             }
         }
@@ -1141,6 +1144,7 @@ class DocumentCodec(
         s.headStart?.let { shape.headStart = Head.fromId(it) }
         s.headEnd?.let { shape.headEnd = Head.fromId(it) }
         shape.stickyNote = s.stickyNote
+        shape.studyTape = s.studyTape
         s.label?.takeIf { it.text.isNotEmpty() }?.let { l ->
             shape.label = ShapeLabel(l.text, TextStyle(l.rgba ?: shape.strokeRgba, l.pointSize, FontFace.fromId(l.fontFace)), textMeasurer)
             l.at?.takeIf { it.isFinite() }?.let { shape.labelAt = it.coerceIn(0.0, 1.0) }

@@ -141,6 +141,24 @@ interface SelectionMenuHost : SwatchHost {
 
     /** Open the page picker to link the selection. */
     fun linkSelection() {}
+
+    /** True when the selection holds handwriting that could be levelled. */
+    fun canStraighten(): Boolean = false
+
+    /** Turn the selected handwriting so its lines run level. */
+    fun straightenSelection() {}
+
+    /** True when the selection holds a handwritten sum. */
+    fun canCalculate(): Boolean = false
+
+    /** Work out the handwritten sum and write the result beside it. */
+    fun calculateSelection() {}
+
+    /** True when the selection holds text or handwriting to translate. */
+    fun canTranslate(): Boolean = false
+
+    /** Open the translation of the selection. */
+    fun translateSelection() {}
 }
 
 /**
@@ -196,6 +214,15 @@ fun SelectionMenu(host: SelectionMenuHost) {
                     }
                     if (host.canReadImageText()) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.read_image_text)) }, onClick = { overflowOpen = false; host.readImageText() })
+                    }
+                    if (host.canStraighten()) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.straighten)) }, onClick = { overflowOpen = false; host.straightenSelection() })
+                    }
+                    if (host.canCalculate()) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.calculate)) }, onClick = { overflowOpen = false; host.calculateSelection() })
+                    }
+                    if (host.canTranslate()) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.translate)) }, onClick = { overflowOpen = false; host.translateSelection() })
                     }
                     if (host.canLinkSelection()) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.link_to_page)) }, onClick = { overflowOpen = false; host.linkSelection() })

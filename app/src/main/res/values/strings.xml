@@ -1109,4 +1109,15 @@
     <string name="meeting_failed">Transcription stopped. Check the internet or try again.</string>
     <string name="meeting_empty">Nothing was transcribed.</string>
     <string name="meeting_stop_recording_first">Stop the audio recording first: both use the microphone.</string>
+    <string name="straighten">Straighten handwriting</string>
+    <string name="straighten_none">This handwriting is already level.</string>
+    <string name="calculate">Calculate</string>
+    <string name="calculate_failed">Couldn\'t read a sum in \"%1$s\".</string>
+    <string name="translate">Translate</string>
+    <string name="translate_to">Translate to</string>
+    <string name="translate_busy">Translating (the first time downloads the language)…</string>
+    <string name="translate_failed">Couldn\'t translate. Check the internet for the first download.</string>
+    <string name="study_tape">Study tape (tap to reveal)</string>
+    <string name="quick_note">Quick note</string>
+    <string name="quick_note_name">Quick note %1$s</string>
 </resources>
