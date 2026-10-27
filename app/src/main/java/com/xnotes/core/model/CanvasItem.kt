@@ -32,6 +32,11 @@ interface CanvasItem {
      */
     var locked: Boolean
 
+    /** The note layer this item is on (see [Document.layers]); 0 for anything that has no layers. */
+    var layer: Int
+        get() = 0
+        set(_) {}
+
     /** Draw the item; [r] is already translated to the page origin and scaled. */
     fun paint(r: Renderer)
 

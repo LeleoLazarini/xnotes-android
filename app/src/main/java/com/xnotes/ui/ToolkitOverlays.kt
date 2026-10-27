@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -72,6 +73,7 @@ internal fun ToolkitOverlays(editor: Editor) {
     editor.reminder?.let { ReminderDialog(editor, it) }
     ScreenRecordLauncher(editor)
     AgendaCalendarSync(editor)
+    if (editor.layersOpen) LayersDialog(editor)
     if (editor.focusMode) FocusControls(editor)
     editor.study?.let { StudyControls(editor, it) }
     RecordingControls(editor)
@@ -579,4 +581,48 @@ private fun AgendaCalendarSync(editor: Editor) {
         editor.calendarRequested = false
         if (granted()) editor.syncAgendaCalendar(quiet = false) else permission.launch(Manifest.permission.READ_CALENDAR)
     }
+}
+
+/** The note's layers, top first: which one you draw on, and each one's eye, lock, name and removal. */
+@Composable
+private fun LayersDialog(editor: Editor) {
+    val palette = LocalPalette.current
+    var renaming by remember { mutableStateOf<Int?>(null) }
+    var name by remember { mutableStateOf("") }
+    val layers = editor.layers
+    AlertDialog(
+        onDismissRequest = { editor.layersOpen = false },
+        title = { Text(stringResource(R.string.layers_title)) },
+        text = {
+            Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState())) {
+                for (i in layers.indices.reversed()) {
+                    val l = layers[i]
+                    val active = i == editor.activeLayer
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                            .background(if (active) palette.accent.withAlpha(40).toComposeColor() else Color.Transparent)
+                            .clickable { editor.setActiveLayer(i) }.padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(if (active) "●" else "○", fontSize = 16.sp, color = palette.accent.toComposeColor())
+                        Spacer(Modifier.size(8.dp))
+                        if (renaming == i) {
+                            OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, modifier = Modifier.weight(1f))
+                            TextButton(onClick = { editor.renameLayer(i, name.trim()); renaming = null }) { Text(stringResource(R.string.save)) }
+                        } else {
+                            Text(l.name, fontSize = 15.sp, color = if (l.hidden) palette.textDim.toComposeColor() else palette.text.toComposeColor(),
+                                modifier = Modifier.weight(1f).clickable { renaming = i; name = l.name })
+                            TextButton(onClick = { editor.toggleLayerHidden(i) }) { Text(stringResource(if (l.hidden) R.string.layer_show else R.string.layer_hide)) }
+                            TextButton(onClick = { editor.toggleLayerLocked(i) }) { Text(stringResource(if (l.locked) R.string.layer_unlock else R.string.layer_lock)) }
+                            if (layers.size > 1) TextButton(onClick = { editor.mergeLayerDown(i) }) { Text(stringResource(R.string.layer_remove), color = palette.textDim.toComposeColor()) }
+                        }
+                    }
+                }
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(R.string.layers_help), fontSize = 12.sp, color = palette.textDim.toComposeColor())
+            }
+        },
+        confirmButton = { TextButton(onClick = { editor.addLayer() }) { Text(stringResource(R.string.layer_add)) } },
+        dismissButton = { TextButton(onClick = { editor.layersOpen = false }) { Text(stringResource(R.string.study_close)) } },
+    )
 }

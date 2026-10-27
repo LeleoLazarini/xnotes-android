@@ -1187,4 +1187,15 @@
     <string name="tasks_none">Nenhuma tarefa ainda. Selecione algo escrito e escolha Virar tarefa.</string>
     <string name="tasks_show_done">Mostrar feitas</string>
     <string name="tasks_hide_done">Esconder feitas</string>
+    <string name="layers_title">Camadas</string>
+    <string name="layer_n">Camada %1$d</string>
+    <string name="layer_add">Nova camada</string>
+    <string name="layer_show">Mostrar</string>
+    <string name="layer_hide">Ocultar</string>
+    <string name="layer_lock">Travar</string>
+    <string name="layer_unlock">Destravar</string>
+    <string name="layer_remove">Excluir</string>
+    <string name="layer_move_here">Mover para a camada ativa</string>
+    <string name="layer_moved">Movido para %1$s.</string>
+    <string name="layers_help">Você escreve na camada marcada (toque numa para escolher; toque no nome para renomear). Excluir uma camada mantém o que está nela, na camada de baixo. Ocultar, excluir ou mover entre camadas limpa o desfazer.</string>
 </resources>

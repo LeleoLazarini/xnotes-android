@@ -44,6 +44,9 @@ class Document(
     /** Recordings made in this note, saved inside it as assets/audio-NNN.m4a. */
     val audio: MutableList<AudioClip> = mutableListOf()
 
+    /** The note's layers, bottom first; a single one until the user adds more. */
+    var layers: MutableList<LayerInfo> = mutableListOf(LayerInfo("Camada 1"))
+
     /** Transient: set by the codec when legacy ink was compacted at load (debug overlay readout). */
     var compactedOnLoad = false
 

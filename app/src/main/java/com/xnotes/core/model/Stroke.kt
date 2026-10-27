@@ -56,6 +56,7 @@ class Stroke(
     override val kind = KIND
     override val resizable = false
     override var locked = false
+    override var layer = Layers.active
 
     /**
      * The samples, frozen (see [Samples]). Volatile, and every edit publishes a whole new tuple in
@@ -95,6 +96,7 @@ class Stroke(
         pts = src.pts.detached()
         audioClip = src.audioClip
         audioAt = src.audioAt
+        layer = src.layer
     }
 
     /** The recording ([AudioClip.id]) running when this stroke was drawn, or null. */

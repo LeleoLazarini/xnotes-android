@@ -24,6 +24,12 @@ class Page(
      */
     val uid: Long = nextUid()
 
+    /** Items of hidden layers: off the page (not drawn, not touched) but still saved with it. */
+    val parked: MutableList<CanvasItem> = mutableListOf()
+
+    /** Everything the page holds, shown or hidden: what a save writes. */
+    fun allItems(): List<CanvasItem> = if (parked.isEmpty()) items else items + parked
+
     companion object {
         private val uidCounter = java.util.concurrent.atomic.AtomicLong(0L)
         private fun nextUid(): Long = uidCounter.incrementAndGet()

@@ -77,6 +77,7 @@ class ShapeItem(
     override val kind = KIND
     override val resizable = true
     override var locked = false
+    override var layer = Layers.active
 
     /** Drawn text is words, which a mirror would turn backwards. */
     override val mirrorable: Boolean get() = shape != ShapeKind.GLYPHS

@@ -12,6 +12,7 @@ import com.xnotes.core.model.ConnectorItem
 import com.xnotes.core.model.Document
 import com.xnotes.core.model.ImageData
 import com.xnotes.core.model.ImageItem
+import com.xnotes.core.model.LayerInfo
 import com.xnotes.core.model.Orientation
 import com.xnotes.core.model.Page
 import com.xnotes.core.model.PagePattern
@@ -238,7 +239,7 @@ class DocumentCodec(
     internal fun imageAssets(doc: Document): List<Pair<String, File>> {
         val out = ArrayList<Pair<String, File>>()
         for (page in doc.pages) {
-            for (item in page.items) {
+            for (item in page.allItems()) {
                 if (item !is ImageItem) continue
                 // Readers match assets by manifest name (any extension); .svg keeps the bundle
                 // honest and older readers skip the item they can't decode.
@@ -258,6 +259,9 @@ class DocumentCodec(
         j.name("writer").value(WRITER)
         doc.created?.let { j.name("created").value(java.time.Instant.ofEpochMilli(it).toString()) }
         doc.agendaYear?.let { j.name("agenda_year").value(it) }
+        if (doc.layers.size > 1 || doc.layers.any { it.hidden || it.locked }) {
+            j.name("layers_json").value(org.json.JSONArray().apply { doc.layers.forEach { l -> put(org.json.JSONObject().put("name", l.name).put("hidden", l.hidden).put("locked", l.locked)) } }.toString())
+        }
         j.name("dpi").value(doc.dpi)
         j.name("has_pdf").value(doc.pdfFile != null)
         j.name("bookmarks").beginArray()
@@ -290,8 +294,8 @@ class DocumentCodec(
         page.pdfPage?.let { j.value(it) } ?: j.nullValue()
         j.name("items").beginArray()
         // Ids only for what a connector on this page glues to; a page without connectors writes none.
-        val ids = GlueIds.of(page.items)
-        for (item in page.items) {
+        val ids = GlueIds.of(page.allItems())
+        for (item in page.allItems()) {
             when (item) {
                 is Stroke -> writeStroke(j, item)
                 is ImageItem -> {
@@ -367,6 +371,7 @@ class DocumentCodec(
         if (s.straight) j.name("straight").value(true)
         s.audioClip?.let { j.name("audio").beginArray().value(it).value(s.audioAt.toDouble()).endArray() }
         if (s.locked) j.name("locked").value(true)
+        if (s.layer != 0) j.name("layer").value(s.layer)
         j.endObject()
     }
 
@@ -384,6 +389,7 @@ class DocumentCodec(
         if (item.angle != 0.0) j.name("angle").value(item.angle)
         if (item.flip != Flip.NONE) j.name("flip").value(item.flip.id)
         if (item.locked) j.name("locked").value(true)
+        if (item.layer != 0) j.name("layer").value(item.layer)
         j.endObject()
     }
 
@@ -402,6 +408,7 @@ class DocumentCodec(
         if (t.height > 0.0) j.name("height").value(t.height)
         if (t.face != TextItem.DEFAULT_FACE) j.name("font_face").value(t.face.id)
         if (t.locked) j.name("locked").value(true)
+        if (t.layer != 0) j.name("layer").value(t.layer)
         t.linkPage?.let { j.name("link_page").value(it) }
         if (t.fromCalendar) j.name("from_calendar").value(true)
         j.endObject()
@@ -478,6 +485,7 @@ class DocumentCodec(
             j.endObject()
         }
         if (s.locked) j.name("locked").value(true)
+        if (s.layer != 0) j.name("layer").value(s.layer)
         s.linkPage?.let { j.name("link_page").value(it) }
         j.endObject()
     }
@@ -542,6 +550,7 @@ class DocumentCodec(
             j.endObject()
         }
         if (c.locked) j.name("locked").value(true)
+        if (c.layer != 0) j.name("layer").value(c.layer)
         j.endObject()
     }
 
@@ -696,6 +705,11 @@ class DocumentCodec(
         val doc = Document(dpi = m.dpi)
         doc.created = m.created
         doc.agendaYear = m.agendaYear
+        runCatching {
+            val arr = org.json.JSONArray(m.layersJson)
+            val list = (0 until arr.length()).map { i -> arr.getJSONObject(i).let { o -> LayerInfo(o.optString("name"), o.optBoolean("hidden"), o.optBoolean("locked")) } }
+            if (list.isNotEmpty()) doc.layers = list.toMutableList()
+        }
         audioFiles.toSortedMap().forEach { (id, file) -> doc.audio += AudioClip(id, file) }
         doc.templates = templates
         doc.style = m.style
@@ -765,6 +779,7 @@ class DocumentCodec(
         var writer = 0
         var created: Long? = null
         var agendaYear: Int? = null
+        var layersJson = ""
         var dpi = PageSize.DEFAULT_DPI
         var hasPdf = false
         var style = PageStyle()
@@ -847,6 +862,7 @@ class DocumentCodec(
                 }
                 "writer" -> m.writer = intOr(p, 0)
                 "agenda_year" -> m.agendaYear = intOrNull(p)
+                "layers_json" -> m.layersJson = stringOr(p, "")
                 "created" -> m.created = stringOrNull(p)?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() }
                 "dpi" -> m.dpi = intOr(p, PageSize.DEFAULT_DPI)
                 "has_pdf" -> m.hasPdf = boolOr(p, false)
@@ -945,6 +961,7 @@ class DocumentCodec(
         var stickyNote = false
         var studyTape = false
         var fromCalendar = false
+        var layer = 0
         var taskBox = false
         var taskDone = false
         var taskText = ""
@@ -1068,6 +1085,7 @@ class DocumentCodec(
                 "sticky_note" -> s.stickyNote = boolOr(p, false)
                 "study_tape" -> s.studyTape = boolOr(p, false)
                 "from_calendar" -> s.fromCalendar = boolOr(p, false)
+                "layer" -> s.layer = intOrNull(p) ?: 0
                 "task_box" -> s.taskBox = boolOr(p, false)
                 "task_done" -> s.taskDone = boolOr(p, false)
                 "task_text" -> s.taskText = stringOr(p, "")
@@ -1112,6 +1130,8 @@ class DocumentCodec(
         if (s.locked && items.size > before) items[before].locked = true
         s.linkPage?.let { lp -> (items.getOrNull(before) as? Linkable)?.linkPage = lp }
         if (s.fromCalendar) (items.getOrNull(before) as? TextItem)?.fromCalendar = true
+        // Always set: a new item starts on the active layer, which is not where a saved one was.
+        if (items.size > before) items[before].layer = s.layer
     }
 
     private fun buildStroke(s: ItemScratch): Stroke {

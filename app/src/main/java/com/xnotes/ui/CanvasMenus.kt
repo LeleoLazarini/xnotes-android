@@ -160,6 +160,8 @@ interface SelectionMenuHost : SwatchHost {
     fun remindSelection() {}
     fun markTitle() {}
     fun makeTask() {}
+    fun canMoveToLayer(): Boolean = false
+    fun moveSelectionToActiveLayer() {}
 
     /** Open the translation of the selection. */
     fun translateSelection() {}
@@ -227,6 +229,9 @@ fun SelectionMenu(host: SelectionMenuHost) {
                     }
                     if (host.canTranslate()) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.translate)) }, onClick = { overflowOpen = false; host.translateSelection() })
+                    }
+                    if (host.canMoveToLayer()) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.layer_move_here)) }, onClick = { overflowOpen = false; host.moveSelectionToActiveLayer() })
                     }
                     if (host.canRemind()) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.mark_title)) }, onClick = { overflowOpen = false; host.markTitle() })

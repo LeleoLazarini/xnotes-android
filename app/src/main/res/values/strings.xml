@@ -1189,4 +1189,15 @@
     <string name="tasks_none">No tasks yet. Select something written and choose Make it a task.</string>
     <string name="tasks_show_done">Show done</string>
     <string name="tasks_hide_done">Hide done</string>
+    <string name="layers_title">Layers</string>
+    <string name="layer_n">Layer %1$d</string>
+    <string name="layer_add">New layer</string>
+    <string name="layer_show">Show</string>
+    <string name="layer_hide">Hide</string>
+    <string name="layer_lock">Lock</string>
+    <string name="layer_unlock">Unlock</string>
+    <string name="layer_remove">Remove</string>
+    <string name="layer_move_here">Move to the active layer</string>
+    <string name="layer_moved">Moved to %1$s.</string>
+    <string name="layers_help">You draw on the marked layer (tap one to choose it; tap a name to rename it). Removing a layer keeps what is on it, in the layer below. Hiding, removing or moving between layers clears undo.</string>
 </resources>

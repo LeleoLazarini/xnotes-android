@@ -32,6 +32,7 @@ class TextItem(
     override val mirrorable = false
     override val resizable = true
     override var locked = false
+    override var layer = Layers.active
 
     /** Placed by the agenda from the tablet's calendar; replaced on each refresh. */
     var fromCalendar = false

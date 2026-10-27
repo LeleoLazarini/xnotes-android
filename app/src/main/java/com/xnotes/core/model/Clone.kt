@@ -8,7 +8,9 @@ import com.xnotes.core.pal.TextMeasurer
  * immutable. [measurer] is needed to lay out a copied text box. Used for copy/paste/duplicate of
  * both items and whole pages (see [Page.deepCopy]).
  */
-fun CanvasItem.deepCopy(measurer: TextMeasurer): CanvasItem = when (this) {
+fun CanvasItem.deepCopy(measurer: TextMeasurer): CanvasItem = deepCopyOf(measurer).also { it.layer = layer }
+
+private fun CanvasItem.deepCopyOf(measurer: TextMeasurer): CanvasItem = when (this) {
     is Stroke -> Stroke(this) // the copy constructor carries the audio link too
     is ImageItem -> ImageItem(image, rect, orientation, angle, flip)
     is TextItem -> TextItem(pos, width, height, text, rgba, pointSize, face, measurer).also { it.linkPage = linkPage; it.fromCalendar = fromCalendar }

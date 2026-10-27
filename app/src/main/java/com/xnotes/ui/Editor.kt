@@ -4880,6 +4880,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         val wanted = openAtPage?.takeIf { it in state.document.pages.indices }
         openAtPage = null
         runCatching { updateTaskIndex() }
+        openLayers()
         state.pendingInitialView = when {
             wanted != null -> InitialView.GoToPage(wanted)
             today != null -> InitialView.GoToPage(today)
@@ -6277,7 +6278,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         val page = doc?.pages?.firstOrNull()
         if (page == null) { message = appContext.getString(R.string.page_model_failed, name); return }
         // Locked, so writing over the model never drags its titles and boxes along (long-press unlocks).
-        page.items.forEach { it.locked = true }
+        page.items.forEach { it.locked = true; it.layer = activeLayer }
         val missing = doc.templates.filterKeys { it !in state.document.templates }
         if (missing.isNotEmpty()) state.document.templates = state.document.templates + missing
         val pages = state.document.pages
@@ -7018,6 +7019,110 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     /** Set from the More menu; the overlay asks for the screen and the microphone, then starts. */
     var screenRecordRequested by mutableStateOf(false)
+
+    // Layers ------------------------------------------------------------------------------------
+
+    var layersOpen by mutableStateOf(false)
+
+    /** Bumped on every layer change, so the panel redraws. */
+    var layerVersion by mutableStateOf(0)
+        private set
+
+    val layers: List<com.xnotes.core.model.LayerInfo>
+        get() { layerVersion; return state.document.layers.toList() }
+
+    val activeLayer: Int
+        get() { layerVersion; return com.xnotes.core.model.Layers.active.coerceIn(0, state.document.layers.lastIndex) }
+
+    private fun layerOf(item: com.xnotes.core.model.CanvasItem) = item.layer.coerceIn(0, state.document.layers.lastIndex)
+
+    /** On opening a note: draw on its top layer, and take hidden layers' items off the page. */
+    private fun openLayers() {
+        com.xnotes.core.model.Layers.active = state.document.layers.lastIndex.coerceAtLeast(0)
+        // A layer number the note does not have (an item made while another note was open) means the bottom one.
+        for (p in state.document.pages) (p.items + p.parked).forEach { if (it.layer !in state.document.layers.indices) it.layer = 0 }
+        if (state.document.layers.any { it.hidden }) repark(markDirty = false)
+        layerVersion++
+    }
+
+    /**
+     * Lay every page out again by layer: bottom layers first, hidden ones parked. The undo history
+     * is cleared, since its steps point at items that may have just left the page.
+     */
+    private fun repark(markDirty: Boolean = true) {
+        val hidden = state.document.layers.indices.filter { state.document.layers[it].hidden }.toSet()
+        for (p in state.document.pages) {
+            val all = (p.items + p.parked).sortedBy { layerOf(it) }
+            p.items.clear(); p.parked.clear()
+            all.forEach { if (layerOf(it) in hidden) p.parked.add(it) else p.items.add(it) }
+        }
+        controller.clearSelection()
+        history.clear()
+        state.invalidateAllCaches()
+        if (markDirty) { state.document.dirty = true; dirty = true }
+        state.relayout()
+        refreshContent()
+        view.requestRender()
+        layerVersion++
+    }
+
+    fun setActiveLayer(i: Int) {
+        com.xnotes.core.model.Layers.active = i.coerceIn(0, state.document.layers.lastIndex)
+        layerVersion++
+    }
+
+    fun addLayer() {
+        state.document.layers.add(com.xnotes.core.model.LayerInfo(appContext.getString(R.string.layer_n, state.document.layers.size + 1)))
+        setActiveLayer(state.document.layers.lastIndex)
+        state.document.dirty = true; dirty = true
+    }
+
+    fun renameLayer(i: Int, name: String) {
+        state.document.layers.getOrNull(i)?.name = name.ifBlank { return }
+        state.document.dirty = true; dirty = true
+        layerVersion++
+    }
+
+    fun toggleLayerHidden(i: Int) {
+        val l = state.document.layers.getOrNull(i) ?: return
+        l.hidden = !l.hidden
+        repark()
+    }
+
+    /** Lock or unlock every item on layer [i], so nothing on it can be erased, selected or moved. */
+    fun toggleLayerLocked(i: Int) {
+        val l = state.document.layers.getOrNull(i) ?: return
+        l.locked = !l.locked
+        for (p in state.document.pages) (p.items + p.parked).forEach { if (layerOf(it) == i) it.locked = l.locked }
+        controller.clearSelection()
+        state.invalidateAllCaches()
+        state.document.dirty = true; dirty = true
+        refreshView(); view.requestRender()
+        layerVersion++
+    }
+
+    /** Remove layer [i]; what was on it joins the layer below (or the one above, for the bottom one). */
+    fun mergeLayerDown(i: Int) {
+        val layers = state.document.layers
+        if (layers.size <= 1 || i !in layers.indices) return
+        val into = if (i == 0) 0 else i - 1
+        for (p in state.document.pages) (p.items + p.parked).forEach { item ->
+            val l = layerOf(item)
+            item.layer = when { l == i -> into; l > i -> l - 1; else -> l }
+        }
+        layers.removeAt(i)
+        com.xnotes.core.model.Layers.active = com.xnotes.core.model.Layers.active.let { if (it >= i) (it - 1).coerceAtLeast(0) else it }.coerceIn(0, layers.lastIndex)
+        repark()
+    }
+
+    override fun canMoveToLayer(): Boolean = state.document.layers.size > 1 && controller.selectedItems.isNotEmpty()
+
+    override fun moveSelectionToActiveLayer() {
+        val target = activeLayer
+        controller.selectedItems.forEach { it.item.layer = target; it.item.locked = state.document.layers[target].locked }
+        repark()
+        message = appContext.getString(R.string.layer_moved, state.document.layers[target].name)
+    }
 
     // Tasks -------------------------------------------------------------------------------------
 
