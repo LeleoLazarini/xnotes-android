@@ -1084,7 +1084,7 @@ class InteractionController(
         val straight = drawTool == Tool.HIGHLIGHTER && cfg.straightLine
         val stroke = Stroke(
             drawTool, cfg, speedScale = speedScale, straight = straight,
-            smoothScale = smoothScaleFor(state.zoom),
+            smoothScale = smoothScaleFor(state.zoom) * (1.0 + cfg.stabilizer.coerceIn(0.0, 1.0) * STABILIZER_SPAN),
         )
         // Live until pen-up, so lift-time rules (the calligraphy dot swell) can't fire mid-draw.
         stroke.finished = false
@@ -1160,8 +1160,10 @@ class InteractionController(
         return Pt(lx + (local.x - lx) * k, ly + (local.y - ly) * k)
     }
 
-    private fun addStrokePoint(vx: Double, vy: Double, pressure: Double, timeMs: Long, force: Boolean) {
+    private fun addStrokePoint(vx: Double, vy: Double, rawPressure: Double, timeMs: Long, force: Boolean) {
         val stroke = liveStroke ?: return
+        val curve = stroke.config.pressureCurve
+        val pressure = if (curve == 0.0) rawPressure else Math.pow(rawPressure.coerceIn(0.0, 1.0), Math.pow(2.0, curve.coerceIn(-1.0, 1.0) * PRESSURE_CURVE_SPAN))
         val pi = strokePageIndex ?: return
         if (state.pageRects.getOrNull(pi) == null) return
         val vp = magnetize(Pt(vx, vy))
@@ -1311,6 +1313,7 @@ class InteractionController(
                 }
                 loopTapSelect(stroke, pi) -> Unit
                 scribbleErase(stroke, pi) -> Unit
+                stroke.config.fillArea && fillStroke(stroke, pi) -> Unit
                 else -> {
                     pushStrokeEdit(fileStroke(stroke, pi))
                     rememberLoop(stroke, pi)
@@ -1378,6 +1381,25 @@ class InteractionController(
         if (stroke.samples.size < SHAPE_MIN_SAMPLES) return // not enough yet; the next move re-arms
         val rec = ShapeRecognizer.recognize(stroke.samples) ?: return // not a shape; the next move re-arms
         commitRecognizedShape(stroke, pi, rec)
+    }
+
+    /** The fill brush: the outline just drawn becomes a shape painted solid inside, in the ink's colour. */
+    private fun fillStroke(stroke: Stroke, pageIndex: Int): Boolean {
+        val page = state.document.pages.getOrNull(pageIndex) ?: return false
+        val s = stroke.samples
+        if (s.size < 6) return false
+        val step = maxOf(1, s.size / 240)
+        val pts = (s.indices step step).map { com.xnotes.core.geometry.Pt(s[it].x, s[it].y) }
+        val contour = com.xnotes.core.vector.VectorContour(pts.first(), pts.drop(1).map { com.xnotes.core.vector.VectorSeg.Line(it) }, true)
+        val color = stroke.config.rgba
+        val shape = com.xnotes.core.model.ShapeItem.free(com.xnotes.core.shapes.ShapeKind.POLYGON, listOf(contour), color, 0.6).also { it.fillRgba = color }
+        page.items.add(shape)
+        state.appendToCache(page, shape)
+        history.push(AddItem(page, shape))
+        state.document.dirty = true
+        onContentChanged()
+        requestRender()
+        return true
     }
 
     /** Replace the (uncommitted) live stroke with a recognized [ShapeItem], as one undoable add. */
@@ -4604,6 +4626,12 @@ class InteractionController(
          *  the smoothing hides the digitizer's jitter, which is a fixed size on screen, so writing
          *  small at high zoom must not be smoothed as if it were written large. Capped at 1 so
          *  zooming out cannot smear content detail the page will keep. */
+        /** A full stabilizer runs the ink's low-pass this many times longer than plain ink. */
+        const val STABILIZER_SPAN = 4.0
+
+        /** A full pressure curve raises pressure to 2^±this before it sets the width. */
+        const val PRESSURE_CURVE_SPAN = 1.3
+
         fun smoothScaleFor(zoom: Double): Double =
             if (zoom.isFinite() && zoom > 0.0) (1.0 / zoom).coerceAtMost(1.0) else 1.0
 

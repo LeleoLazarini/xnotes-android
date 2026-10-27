@@ -1198,4 +1198,7 @@
     <string name="layer_move_here">Mover para a camada ativa</string>
     <string name="layer_moved">Movido para %1$s.</string>
     <string name="layers_help">Você escreve na camada marcada (toque numa para escolher; toque no nome para renomear). Excluir uma camada mantém o que está nela, na camada de baixo. Ocultar, excluir ou mover entre camadas limpa o desfazer.</string>
+    <string name="caption_pressure_curve">Força: leve ← → firme</string>
+    <string name="caption_stabilizer">Estabilizador</string>
+    <string name="caption_fill_area">Pintar por dentro do contorno</string>
 </resources>

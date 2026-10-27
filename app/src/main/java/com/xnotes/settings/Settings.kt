@@ -380,6 +380,9 @@ data class Settings(
             .put("highlighter_alpha", c.highlighterAlpha)
             .put("highlighter_inverse", c.highlighterInverse)
             .put("brush", c.brush.id)
+            .put("stabilizer", c.stabilizer)
+            .put("pressure_curve", c.pressureCurve)
+            .put("fill_area", c.fillArea)
             .put("markup_mode", c.markupMode.id)
             .put("markup_intensity", c.markupIntensity)
             .put("rgba", rgbaArr(c.rgba))
@@ -410,6 +413,9 @@ data class Settings(
                 highlighterAlpha = o.optDouble("highlighter_alpha", d.highlighterAlpha),
                 highlighterInverse = o.optBoolean("highlighter_inverse", d.highlighterInverse),
                 brush = Brush.fromId(o.optString("brush")) ?: d.brush,
+                stabilizer = o.optDouble("stabilizer", d.stabilizer),
+                pressureCurve = o.optDouble("pressure_curve", d.pressureCurve),
+                fillArea = o.optBoolean("fill_area", d.fillArea),
                 markupMode = if (o.has("markup_mode")) MarkupMode.fromId(o.optString("markup_mode")) else d.markupMode,
                 markupIntensity = o.optDouble("markup_intensity", d.markupIntensity)
                     .coerceIn(ToolConfig.MARKUP_INTENSITY_MIN, 1.0),

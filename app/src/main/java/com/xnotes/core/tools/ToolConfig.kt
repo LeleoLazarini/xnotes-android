@@ -94,6 +94,12 @@ data class ToolConfig(
     val scribbleErase: Boolean = false,
     /** What the textured pen lays down. Only used by [Tool.BRUSH]. */
     val brush: Brush = Brush.PENCIL,
+    /** How much the line is steadied while drawing, in [0, 1]: a longer low-pass, so handwriting comes out firmer. */
+    val stabilizer: Double = 0.0,
+    /** How pressure turns into width, in [-1, 1]: below 0 a light hand already draws full width, above 0 it takes a firm one. */
+    val pressureCurve: Double = 0.0,
+    /** Fill brush: the outline drawn becomes a shape painted solid inside. */
+    val fillArea: Boolean = false,
 ) {
     companion object {
         const val DEFAULT_MARKUP_INTENSITY = 0.5

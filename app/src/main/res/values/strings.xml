@@ -1200,4 +1200,7 @@
     <string name="layer_move_here">Move to the active layer</string>
     <string name="layer_moved">Moved to %1$s.</string>
     <string name="layers_help">You draw on the marked layer (tap one to choose it; tap a name to rename it). Removing a layer keeps what is on it, in the layer below. Hiding, removing or moving between layers clears undo.</string>
+    <string name="caption_pressure_curve">Pressure: light ← → firm</string>
+    <string name="caption_stabilizer">Stabilizer</string>
+    <string name="caption_fill_area">Fill what you outline</string>
 </resources>

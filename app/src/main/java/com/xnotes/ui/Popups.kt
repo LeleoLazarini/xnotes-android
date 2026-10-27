@@ -101,6 +101,9 @@ fun ToolConfigPopup(editor: ToolPopupHost, tool: Tool, onDismiss: () -> Unit) {
     var inverse by remember { mutableStateOf(base.highlighterInverse) }
     var colorOverride by remember { mutableStateOf(base.colorOverride) }
     var brush by remember { mutableStateOf(base.brush) }
+    var stabilizer by remember { mutableStateOf((base.stabilizer * 100).toFloat()) }
+    var curve by remember { mutableStateOf((base.pressureCurve * 100).toFloat()) }
+    var fillArea by remember { mutableStateOf(base.fillArea) }
 
     fun emit() {
         val m = ToolConversions.sensitivityToMinFactor(sensitivity.toDouble())
@@ -127,6 +130,9 @@ fun ToolConfigPopup(editor: ToolPopupHost, tool: Tool, onDismiss: () -> Unit) {
                 highlighterInverse = inverse,
                 colorOverride = colorOverride,
                 brush = brush,
+                stabilizer = stabilizer / 100.0,
+                pressureCurve = curve / 100.0,
+                fillArea = fillArea,
             ),
         )
     }
@@ -215,6 +221,9 @@ fun ToolConfigPopup(editor: ToolPopupHost, tool: Tool, onDismiss: () -> Unit) {
                 Card(stringResource(R.string.section_pressure)) {
                     ToggleRow(stringResource(R.string.caption_pressure), pressure) { pressure = it; emitAll() }
                     SliderRow(stringResource(R.string.caption_sensitivity), sensitivity, 0f..100f, enabled = pressure) { sensitivity = it; emitAll() }
+                    SliderRow(stringResource(R.string.caption_pressure_curve), curve, -100f..100f, enabled = pressure) { curve = it; emitAll() }
+                    SliderRow(stringResource(R.string.caption_stabilizer), stabilizer, 0f..100f) { stabilizer = it; emitAll() }
+                    ToggleRow(stringResource(R.string.caption_fill_area), fillArea) { fillArea = it; emitAll() }
                     if (tool == Tool.CALLIGRAPHY) SliderRow(stringResource(R.string.caption_multiplier), multiplier, 1f..5f) { multiplier = it; emitAll() }
                     if (tool == Tool.SPEED) SliderRow(stringResource(R.string.caption_speed), speed, 0f..100f) { speed = it; emitAll() }
                     if (tool == Tool.TAPER) SliderRow(stringResource(R.string.caption_tip_width), taperTip, 0f..100f) { taperTip = it; emitAll() }

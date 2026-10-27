@@ -77,6 +77,7 @@ object BuiltInPens {
         // Canetas
         pen(F, "ballpoint-fine", "Esferográfica fina", Tool.PEN, d(Tool.PEN).copy(baseWidth = 1.2, pressureMinFactor = 0.75)),
         pen(F, "ballpoint", "Esferográfica", Tool.PEN, d(Tool.PEN).copy(baseWidth = 1.6, pressureMinFactor = 0.70)),
+        pen(F, "steady", "Caneta estável (letra firme)", Tool.PEN, d(Tool.PEN).copy(baseWidth = 1.8, pressureMinFactor = 0.70, stabilizer = 0.6)),
         pen(F, "gel-05", "Gel 0.5", Tool.PEN, d(Tool.PEN).copy(baseWidth = 2.2, pressureMinFactor = 0.55)),
         pen(F, "gel", "Gel 0.7", Tool.PEN, d(Tool.PEN).copy(baseWidth = 3.0, pressureMinFactor = 0.50)),
         pen(F, "fountain", "Tinteiro", Tool.CALLIGRAPHY, d(Tool.CALLIGRAPHY).copy(baseWidth = 3.6, pressureMinFactor = 0.50, directionStrength = 0.45)),
@@ -104,6 +105,10 @@ object BuiltInPens {
         pen(M, "felt-tip", "Canetinha hidrocor", Tool.PEN, flat(3.2)),
         pen(M, "fine-marker", "Marcador fino", Tool.PEN, flat(2.4)),
         pen(M, "whiteboard", "Marcador de quadro", Tool.PEN, flat(8.5)),
+        // Copic: translucent, darker wherever two strokes cross, like an alcohol marker.
+        pen(M, "copic", "Marcador Copic", Tool.HIGHLIGHTER, d(Tool.HIGHLIGHTER).copy(baseWidth = 9.0, highlighterAlpha = 0.55)),
+        pen(M, "copic-fine", "Copic fino", Tool.HIGHLIGHTER, d(Tool.HIGHLIGHTER).copy(baseWidth = 4.0, highlighterAlpha = 0.60)),
+        pen(M, "copic-wide", "Copic largo", Tool.HIGHLIGHTER, d(Tool.HIGHLIGHTER).copy(baseWidth = 16.0, highlighterAlpha = 0.45)),
 
         // Marca-textos
         pen(H, "hl-yellow", "Amarelo", Tool.HIGHLIGHTER, hl(16.0, 0.50, Rgba(255, 235, 59))),
@@ -131,6 +136,7 @@ object BuiltInPens {
         pen(B, "watercolor-wide", "Aquarela larga", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 22.0, pressureMinFactor = 0.40, brush = Brush.WATERCOLOR)),
         pen(B, "spray", "Spray", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 10.0, pressureMinFactor = 0.60, brush = Brush.SPRAY)),
         pen(B, "spray-fine", "Spray fino", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 5.0, pressureMinFactor = 0.60, brush = Brush.SPRAY)),
+        pen(B, "fill", "Pincel de preenchimento", Tool.PEN, d(Tool.PEN).copy(baseWidth = 2.0, pressureEnabled = false, fillArea = true)),
         pen(B, "neon", "Neon", Tool.PEN, d(Tool.PEN).copy(baseWidth = 2.5, neon = true, neonStrength = 0.6)),
         pen(B, "neon-bold", "Neon forte", Tool.PEN, d(Tool.PEN).copy(baseWidth = 4.0, neon = true, neonStrength = 0.9)),
         pen(B, "rainbow", "Arco-íris", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 4.0, pressureMinFactor = 0.50, brush = Brush.RAINBOW)),
