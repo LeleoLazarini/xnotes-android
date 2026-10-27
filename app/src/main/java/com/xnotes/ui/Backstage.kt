@@ -2114,6 +2114,8 @@ internal fun EntryMenu(
     onLook: (() -> Unit)? = null,
     lookLabel: Int = R.string.folder_look_ellipsis,
     onTags: (() -> Unit)? = null,
+    onLock: (() -> Unit)? = null,
+    lockLabel: Int = R.string.lock_note_on,
     deleteLabel: String = stringResource(R.string.delete),
 ) {
     val palette = LocalPalette.current
@@ -2132,6 +2134,7 @@ internal fun EntryMenu(
             DropdownMenuItem(text = { Text(stringResource(R.string.cut)) }, onClick = { onDismiss(); onCut?.invoke() })
             if (onLook != null) DropdownMenuItem(text = { Text(stringResource(lookLabel)) }, onClick = { onDismiss(); onLook() })
             if (onTags != null) DropdownMenuItem(text = { Text(stringResource(R.string.tags_ellipsis)) }, onClick = { onDismiss(); onTags() })
+            if (onLock != null) DropdownMenuItem(text = { Text(stringResource(lockLabel)) }, onClick = { onDismiss(); onLock() })
             if (onColor != null) DropdownMenuItem(text = { Text(stringResource(R.string.colour_code)) }, onClick = { showColors = true })
             if (onNameColor != null) DropdownMenuItem(text = { Text(stringResource(R.string.name_colour_ellipsis)) }, onClick = { onDismiss(); onNameColor() })
             if (onTogglePin != null) {

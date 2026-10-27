@@ -1159,4 +1159,20 @@
     <string name="contents_updated">Índice atualizado.</string>
     <string name="summary_with_claude">Resumir com o Claude</string>
     <string name="summary_prompt">Resuma esta transcrição de reunião em: 1) principais tópicos, 2) decisões, 3) tarefas com responsável e prazo quando houver. Responda em português.</string>
+    <string name="lock_note_on">Trancar com digital</string>
+    <string name="lock_note_off">Tirar o cadeado</string>
+    <string name="lock_prompt_title">Nota trancada</string>
+    <string name="lock_prompt_subtitle">Use a digital ou o bloqueio de tela</string>
+    <string name="lock_added">Nota trancada. Abre com a digital ou o bloqueio de tela.</string>
+    <string name="lock_removed">Cadeado removido.</string>
+    <string name="lock_needs_screen_lock">Configure antes um bloqueio de tela no tablet (PIN, padrão ou digital).</string>
+    <string name="lock_veil_text">Esta nota está trancada</string>
+    <string name="lock_open">Desbloquear</string>
+    <string name="screen_rec_start">Gravar a tela</string>
+    <string name="screen_rec_stop">Parar gravação de tela</string>
+    <string name="screen_rec_on">Gravando a tela</string>
+    <string name="screen_rec_channel">Gravação de tela</string>
+    <string name="screen_rec_pill">Gravando tela %1$s</string>
+    <string name="screen_rec_saved">Vídeo salvo em Filmes/xnotes.</string>
+    <string name="screen_rec_failed">Não consegui salvar o vídeo.</string>
 </resources>

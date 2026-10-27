@@ -182,13 +182,21 @@ internal fun kindLabel(k: EntryKind): String = when (k) {
 internal fun EntryThumb(editor: Editor, entry: BrowseEntry, shape: ThumbShape, modifier: Modifier = Modifier) {
     // A notebook given a cover shows it, like a book on a shelf, instead of its first page.
     if (!entry.isDir && entry.icon != null) return NoteCover(entry.color, entry.icon, modifier)
+    if (!entry.isDir && editor.isLocked(entry.documentUri)) return LockedCover(modifier)
     val whole = shape == ThumbShape.PAGE
     ThumbImage(rememberThumb(editor, entry, whole), whole, modifier)
 }
 
 /** The top of [entry]'s first page as a square, or with [whole] the page entire; seeded from memory, null until loaded. */
 @Composable
-internal fun rememberThumb(editor: Editor, entry: BrowseEntry, whole: Boolean): ImageBitmap? = key(editor, editor.thumbnailVersion) {
+internal fun rememberThumb(editor: Editor, entry: BrowseEntry, whole: Boolean): ImageBitmap? {
+    // A locked note shows no page, not even its first one.
+    if (editor.isLocked(entry.documentUri)) return null
+    return rememberThumbOf(editor, entry, whole)
+}
+
+@Composable
+private fun rememberThumbOf(editor: Editor, entry: BrowseEntry, whole: Boolean): ImageBitmap? = key(editor, editor.thumbnailVersion) {
     val thumb by produceState<ImageBitmap?>(
         if (whole) editor.cachedPageThumb(entry.documentUri) else editor.cachedNoteTile(entry.documentUri),
         entry.documentUri, entry.modified, whole,
@@ -257,6 +265,8 @@ private fun EntryMenuButton(b: ExplorerBody, e: BrowseEntry, tint: Color, size: 
 @Composable
 internal fun EntryMenuFor(b: ExplorerBody, e: BrowseEntry, expanded: Boolean, onDismiss: () -> Unit) {
     val m = b.host.menu
+    val activity = androidx.compose.ui.platform.LocalContext.current as? android.app.Activity
+    val lockable = !e.isDir && com.xnotes.core.util.DocumentKind.isDocument(e.name)
     EntryMenu(
         expanded, onDismiss,
         onRename = { m.rename(e) }, onCopy = { m.copy(e) }, onCut = { m.cut(e) }, onDelete = { m.delete(e) },
@@ -272,6 +282,8 @@ internal fun EntryMenuFor(b: ExplorerBody, e: BrowseEntry, expanded: Boolean, on
         onLook = { m.look(e) },
         lookLabel = if (e.isDir) R.string.folder_look_ellipsis else R.string.cover_look_ellipsis,
         onTags = { m.tags(e) },
+        onLock = if (lockable) ({ LockGate.toggle(activity, b.editor, e.documentUri) }) else null,
+        lockLabel = if (b.editor.isLocked(e.documentUri)) R.string.lock_note_off else R.string.lock_note_on,
         deleteLabel = b.deleteLabel,
     )
 }

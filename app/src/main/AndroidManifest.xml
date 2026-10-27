@@ -9,6 +9,10 @@
          selection's menu; Android 11 and later hide them from apps that do not ask. -->
     <!-- Meeting mode: records the room and transcribes it with the device speech recogniser. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- The handwriting model downloads once, and the updater checks GitHub for new builds. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- The updater hands a downloaded build to the system installer. -->
@@ -93,6 +97,10 @@
             android:exported="true"
             android:grantUriPermissions="true"
             android:permission="android.permission.MANAGE_DOCUMENTS" />
+        <service
+            android:name=".platform.ScreenRecorder"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection|microphone" />
     </application>
 
 </manifest>

@@ -240,3 +240,11 @@ internal fun NoteCover(color: Rgba?, icon: FolderIcon?, modifier: Modifier = Mod
         Icon(FolderPurposes.of(icon?.id).icon, contentDescription = null, tint = ink, modifier = Modifier.fillMaxSize(0.42f))
     }
 }
+
+/** A locked note's tile: no page, just the lock. */
+@Composable
+internal fun LockedCover(modifier: Modifier = Modifier) {
+    Box(modifier.background(Color(0xFF475569)), contentAlignment = Alignment.Center) {
+        Icon(XnotesIcons.lock, contentDescription = null, tint = Color.White, modifier = Modifier.fillMaxSize(0.38f))
+    }
+}

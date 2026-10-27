@@ -38,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -69,6 +70,7 @@ internal fun ToolkitOverlays(editor: Editor) {
     editor.pageModelSaveFor?.let { SavePageModelDialog(editor, it) }
     editor.pageModelPickAfter?.let { PageModelPicker(editor, it) }
     editor.reminder?.let { ReminderDialog(editor, it) }
+    ScreenRecordLauncher(editor)
     if (editor.focusMode) FocusControls(editor)
     editor.study?.let { StudyControls(editor, it) }
     RecordingControls(editor)
@@ -84,8 +86,15 @@ internal fun ToolkitOverlays(editor: Editor) {
                 Pill(Color(0xFFE53935), stringResource(R.string.audio_recording, clock(now - editor.recordingStartedAt)), stringResource(R.string.audio_stop)) { editor.stopRecording() }
             }
             editor.playing?.let { Pill(Color(0xFF2563EB), stringResource(R.string.audio_playing), stringResource(R.string.audio_stop)) { editor.stopAudio() } }
+            if (com.xnotes.platform.ScreenRecorder.running) {
+                val ctx = LocalContext.current
+                var now by remember { mutableLongStateOf(android.os.SystemClock.uptimeMillis()) }
+                LaunchedEffect(Unit) { while (true) { now = android.os.SystemClock.uptimeMillis(); delay(500) } }
+                Pill(Color(0xFFE53935), stringResource(R.string.screen_rec_pill, clock(now - com.xnotes.platform.ScreenRecorder.startedAt)), stringResource(R.string.audio_stop)) { com.xnotes.platform.ScreenRecorder.stop(ctx) }
+            }
         }
     }
+    if (editor.veiled) LockVeil(editor)
 }
 
 private fun clock(ms: Long): String {
@@ -498,4 +507,59 @@ private fun ReminderDialog(editor: Editor, r: Editor.ReminderDraft) {
         confirmButton = { TextButton(onClick = { editor.createReminder(title.trim(), cal()) }, enabled = title.isNotBlank()) { Text(stringResource(R.string.reminder_create)) } },
         dismissButton = { TextButton(onClick = { editor.reminder = null }) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+/** Over a locked note: nothing of the page, one button to open it with the fingerprint. */
+@Composable
+private fun LockVeil(editor: Editor) {
+    val activity = LocalContext.current as? Activity
+    val palette = LocalPalette.current
+    fun open() { activity?.let { LockGate.authenticate(it, { editor.unlockCurrent() }) } }
+    LaunchedEffect(editor.title) { open() } // asks at once on opening; the button is there if it is dismissed
+    Box(
+        Modifier.fillMaxSize().background(palette.surface.toComposeColor())
+            .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } },
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("🔒", fontSize = 48.sp)
+            Spacer(Modifier.size(12.dp))
+            Text(stringResource(R.string.lock_veil_text), fontSize = 16.sp, color = palette.text.toComposeColor())
+            Spacer(Modifier.size(16.dp))
+            BarButton(stringResource(R.string.lock_open), strong = true) { open() }
+        }
+    }
+}
+
+/** Asks for the microphone (optional) and the screen, then starts the recording service. */
+@Composable
+private fun ScreenRecordLauncher(editor: Editor) {
+    val context = LocalContext.current
+    val capture = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val data = res.data
+        if (res.resultCode != Activity.RESULT_OK || data == null) return@rememberLauncherForActivityResult
+        val i = android.content.Intent(context, com.xnotes.platform.ScreenRecorder::class.java)
+            .putExtra(com.xnotes.platform.ScreenRecorder.EXTRA_CODE, res.resultCode)
+            .putExtra(com.xnotes.platform.ScreenRecorder.EXTRA_DATA, data)
+        ContextCompat.startForegroundService(context, i)
+    }
+    fun askScreen() {
+        val mpm = context.getSystemService(android.media.projection.MediaProjectionManager::class.java)
+        capture.launch(mpm.createScreenCaptureIntent())
+    }
+    val perms = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { askScreen() }
+    LaunchedEffect(editor.screenRecordRequested) {
+        if (!editor.screenRecordRequested) return@LaunchedEffect
+        editor.screenRecordRequested = false
+        val wanted = buildList {
+            add(Manifest.permission.RECORD_AUDIO)
+            if (android.os.Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+        }.filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }
+        if (wanted.isEmpty()) askScreen() else perms.launch(wanted.toTypedArray())
+    }
+    val finished = com.xnotes.platform.ScreenRecorder.finishedCount
+    LaunchedEffect(finished) {
+        if (finished == 0) return@LaunchedEffect
+        editor.message = context.getString(if (com.xnotes.platform.ScreenRecorder.lastSaved) R.string.screen_rec_saved else R.string.screen_rec_failed)
+    }
 }

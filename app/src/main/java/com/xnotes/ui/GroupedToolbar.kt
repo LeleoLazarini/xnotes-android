@@ -536,6 +536,9 @@ private fun MoreMenu(editor: Editor, onRename: () -> Unit, onToggleFullscreen: (
             GroupMenuItem(stringResource(R.string.focus_mode), XnotesIcons.view) { menuOpen = false; editor.enterFocus(present = false) }
             GroupMenuItem(stringResource(R.string.present_mode), XnotesIcons.magicWand) { menuOpen = false; editor.enterFocus(present = true) }
             GroupMenuItem(stringResource(R.string.study_start), XnotesIcons.pages) { menuOpen = false; editor.startStudy() }
+            val ctxRec = androidx.compose.ui.platform.LocalContext.current
+            if (com.xnotes.platform.ScreenRecorder.running) GroupMenuItem(stringResource(R.string.screen_rec_stop), XnotesIcons.download, active = true) { menuOpen = false; com.xnotes.platform.ScreenRecorder.stop(ctxRec) }
+            else GroupMenuItem(stringResource(R.string.screen_rec_start), XnotesIcons.download) { menuOpen = false; editor.screenRecordRequested = true }
             val ctx = androidx.compose.ui.platform.LocalContext.current
             val scope = androidx.compose.runtime.rememberCoroutineScope()
             GroupMenuItem(stringResource(R.string.update_check), XnotesIcons.download) { menuOpen = false; scope.launch { Updater.check(ctx, manual = true) } }

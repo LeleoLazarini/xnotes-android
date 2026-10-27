@@ -1161,4 +1161,20 @@
     <string name="contents_updated">Contents updated.</string>
     <string name="summary_with_claude">Summarize with Claude</string>
     <string name="summary_prompt">Summarize this meeting transcript into: 1) main topics, 2) decisions, 3) tasks with owner and deadline when there is one.</string>
+    <string name="lock_note_on">Lock with fingerprint</string>
+    <string name="lock_note_off">Remove lock</string>
+    <string name="lock_prompt_title">Locked note</string>
+    <string name="lock_prompt_subtitle">Use your fingerprint or screen lock</string>
+    <string name="lock_added">Note locked. It opens with your fingerprint or screen lock.</string>
+    <string name="lock_removed">Lock removed.</string>
+    <string name="lock_needs_screen_lock">Set a screen lock (PIN, pattern or fingerprint) on the tablet first.</string>
+    <string name="lock_veil_text">This note is locked</string>
+    <string name="lock_open">Unlock</string>
+    <string name="screen_rec_start">Record the screen</string>
+    <string name="screen_rec_stop">Stop screen recording</string>
+    <string name="screen_rec_on">Recording the screen</string>
+    <string name="screen_rec_channel">Screen recording</string>
+    <string name="screen_rec_pill">Recording screen %1$s</string>
+    <string name="screen_rec_saved">Video saved in Movies/xnotes.</string>
+    <string name="screen_rec_failed">Could not save the video.</string>
 </resources>

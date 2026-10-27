@@ -6929,6 +6929,55 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         view.requestRender()
     }
 
+    // Locked notes ------------------------------------------------------------------------------
+
+    /** Bumped when a lock changes, so whatever shows a lock redraws. */
+    var lockVersion by mutableStateOf(0)
+        private set
+
+    private val unlockedNow = mutableSetOf<String>()
+
+    private fun lockKey(uri: String): String =
+        runCatching { android.provider.DocumentsContract.getDocumentId(android.net.Uri.parse(uri)) }.getOrDefault(uri)
+
+    fun isLocked(uri: String?): Boolean {
+        lockVersion
+        return uri != null && lockKey(uri) in settings.lockedNotes
+    }
+
+    fun setLocked(uri: String, on: Boolean) {
+        val k = lockKey(uri)
+        settings = settings.copy(lockedNotes = if (on) settings.lockedNotes + k else settings.lockedNotes - k)
+        saveSettingsSoon()
+        if (on) unlockedNow.remove(k)
+        lockVersion++
+        thumbnailVersion++
+    }
+
+    /** The open note is locked and not yet opened with the fingerprint or screen lock. */
+    val veiled: Boolean
+        get() {
+            lockVersion
+            title // read so a different note re-asks
+            val p = state.document.path ?: return false
+            return noteOpen && isLocked(p) && lockKey(p) !in unlockedNow
+        }
+
+    fun unlockCurrent() {
+        state.document.path?.let { unlockedNow.add(lockKey(it)) }
+        lockVersion++
+    }
+
+    /** Leaving the app closes every lock again. */
+    fun relockAll() {
+        if (unlockedNow.isEmpty()) return
+        unlockedNow.clear()
+        lockVersion++
+    }
+
+    /** Set from the More menu; the overlay asks for the screen and the microphone, then starts. */
+    var screenRecordRequested by mutableStateOf(false)
+
     // Focus and presentation --------------------------------------------------------------------
 
     /** Toolbar, side panel and system bars hidden: just the page. */

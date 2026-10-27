@@ -301,6 +301,12 @@ class MainActivity : ComponentActivity() {
         editor?.persist()
     }
 
+    // Out of sight, every opened lock closes again.
+    override fun onStop() {
+        super.onStop()
+        editor?.relockAll()
+    }
+
     @Suppress("DEPRECATION") // RUNNING_* still arrive below Android 14
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
@@ -1313,7 +1319,7 @@ private fun EditorPane(
             }
             ToolbarAround(bar, onCover = editor::setToolbarCover, hidden = editor.focusMode) { floatingBar ->
                 Row(modifier = Modifier.fillMaxSize()) {
-                    if (editor.sidebarVisible && !editor.focusMode) {
+                    if (editor.sidebarVisible && !editor.focusMode && !editor.veiled) {
                         com.xnotes.ui.SidePanel(
                             editor,
                             onSharePages = { pages, asPdf -> actions.onSharePages(editor, pages, asPdf) },

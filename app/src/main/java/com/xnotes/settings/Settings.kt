@@ -90,6 +90,8 @@ data class Settings(
     val userPens: List<com.xnotes.core.tools.PenPreset> = emptyList(),
     /** Each pen drawer's own toolbar colours, by [com.xnotes.core.tools.PenFamily.id]. */
     val familyColors: Map<String, List<Rgba>> = emptyMap(),
+    /** Notes that open only after the fingerprint or screen lock, by document id. */
+    val lockedNotes: Set<String> = emptySet(),
 ) {
     fun configFor(tool: Tool): ToolConfig = tools[tool] ?: ToolDefaults.configFor(tool)
 
@@ -130,6 +132,7 @@ data class Settings(
             .put("prefs", prefs.toJson())
             .put("view_defaults", com.xnotes.platform.ViewSettingsJson.write(JSONObject(), viewDefaults))
             .put("finger_draw_auto_checked", fingerDrawAutoChecked)
+            .put("locked_notes", JSONArray(lockedNotes.toList()))
             .put("family_colors", JSONObject().apply { familyColors.forEach { (k, v) -> put(k, JSONArray().apply { v.forEach { c -> put(rgbaArr(c)) } }) } })
             .put("user_pens", JSONArray().apply { userPens.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("tool", it.tool.id).put("family", it.family.id).put("config", toolConfigJson(it.config))) } })
     }
@@ -188,6 +191,7 @@ data class Settings(
                 prefs = Preferences.fromJson(o.optJSONObject("prefs")),
                 fingerDrawAutoChecked = o.optBoolean("finger_draw_auto_checked", false),
                 userPens = userPens(o.optJSONArray("user_pens")),
+                lockedNotes = o.optJSONArray("locked_notes")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotEmpty() }.toSet() }.orEmpty(),
                 familyColors = o.optJSONObject("family_colors")?.let { f -> f.keys().asSequence().associateWith { k -> rgbaList(f.optJSONArray(k)) }.filterValues { it.isNotEmpty() } }.orEmpty(),
             )
         }
