@@ -153,6 +153,7 @@ class CanvasView @JvmOverloads constructor(
 
     @Suppress("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        PalmGuard.see(event)
         if (trackScrollbar(event)) return true
         if (trackFourFingerTap(event)) return true
         if (trackMultiFingerTap(event)) return true
@@ -340,7 +341,10 @@ class CanvasView @JvmOverloads constructor(
 
     /** Fire the configured two/three-finger tap, cancelling the pinch it began; true when consumed. */
     private fun trackMultiFingerTap(e: MotionEvent): Boolean {
-        val cb = when (fingerTaps.tapEndedBy(e)) {
+        val ended = fingerTaps.tapEndedBy(e)
+        // A resting palm is not a two- or three-finger tap.
+        if (ended >= 2 && PalmGuard.palmLikely(e, resources.displayMetrics.density)) return false
+        val cb = when (ended) {
             2 -> onTwoFingerTap
             3 -> onThreeFingerTap
             else -> null
@@ -350,8 +354,10 @@ class CanvasView @JvmOverloads constructor(
         return true
     }
 
-    override fun onHoverEvent(event: MotionEvent): Boolean =
-        hover?.invoke(event) ?: super.onHoverEvent(event)
+    override fun onHoverEvent(event: MotionEvent): Boolean {
+        PalmGuard.see(event)
+        return hover?.invoke(event) ?: super.onHoverEvent(event)
+    }
 
     override fun onGenericMotionEvent(event: MotionEvent): Boolean {
         genericMotion?.invoke(event)

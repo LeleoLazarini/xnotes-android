@@ -3259,6 +3259,8 @@ class InteractionController(
         // gesture. A stylus or mouse only has it when free, under the PAN tool, where it mirrors the
         // finger; otherwise it draws, so resting it never grabs or pops a menu.
         if (!isFinger && !free) return
+        // A palm resting while writing must not pick anything up (that arms the select tool).
+        if (isFinger && PalmGuard.penRecent()) return
         val grabEligible = tool.isStroke || tool == Tool.PAN || tool == Tool.SELECT ||
             tool == Tool.LASSO || tool == Tool.SHAPE || tool == Tool.TEXT || tool == Tool.TEXT_BOX
         val pageIndex = state.pageIndexAtContent(content)
