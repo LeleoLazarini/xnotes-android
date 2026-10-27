@@ -1182,4 +1182,11 @@
     <string name="agenda_cal_done">%1$d calendar events on the agenda.</string>
     <string name="agenda_cal_failed">Could not read the calendar.</string>
     <string name="agenda_cal_permission">Without calendar access the agenda cannot show your events.</string>
+    <string name="make_task">Make it a task</string>
+    <string name="task_made">Task: %1$s</string>
+    <string name="tasks_title">Tasks</string>
+    <string name="tasks_count">Tasks pending: %1$d</string>
+    <string name="tasks_none">No tasks yet. Select something written and choose Make it a task.</string>
+    <string name="tasks_show_done">Show done</string>
+    <string name="tasks_hide_done">Hide done</string>
 </resources>

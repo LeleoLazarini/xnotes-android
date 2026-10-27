@@ -159,6 +159,7 @@ interface SelectionMenuHost : SwatchHost {
     fun canRemind(): Boolean = false
     fun remindSelection() {}
     fun markTitle() {}
+    fun makeTask() {}
 
     /** Open the translation of the selection. */
     fun translateSelection() {}
@@ -230,6 +231,7 @@ fun SelectionMenu(host: SelectionMenuHost) {
                     if (host.canRemind()) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.mark_title)) }, onClick = { overflowOpen = false; host.markTitle() })
                         DropdownMenuItem(text = { Text(stringResource(R.string.remind)) }, onClick = { overflowOpen = false; host.remindSelection() })
+                        DropdownMenuItem(text = { Text(stringResource(R.string.make_task)) }, onClick = { overflowOpen = false; host.makeTask() })
                     }
                     if (host.canLinkSelection()) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.link_to_page)) }, onClick = { overflowOpen = false; host.linkSelection() })

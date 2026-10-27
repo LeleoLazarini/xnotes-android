@@ -1180,4 +1180,11 @@
     <string name="agenda_cal_done">%1$d compromissos do calendário na agenda.</string>
     <string name="agenda_cal_failed">Não consegui ler o calendário.</string>
     <string name="agenda_cal_permission">Sem acesso ao calendário a agenda não mostra seus compromissos.</string>
+    <string name="make_task">Virar tarefa</string>
+    <string name="task_made">Tarefa: %1$s</string>
+    <string name="tasks_title">Tarefas</string>
+    <string name="tasks_count">Tarefas pendentes: %1$d</string>
+    <string name="tasks_none">Nenhuma tarefa ainda. Selecione algo escrito e escolha Virar tarefa.</string>
+    <string name="tasks_show_done">Mostrar feitas</string>
+    <string name="tasks_hide_done">Esconder feitas</string>
 </resources>

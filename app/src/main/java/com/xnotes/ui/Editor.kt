@@ -1557,6 +1557,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             state.document.pages.getOrNull(pageIndex)?.items?.asReversed()?.forEach { item ->
                 if (!item.contains(pageLocal)) return@forEach
                 (item as? com.xnotes.core.model.ShapeItem)?.takeIf { it.studyTape }?.let { toggleTape(it); return@onLinkTap true }
+                (item as? com.xnotes.core.model.ShapeItem)?.takeIf { it.taskBox }?.let { toggleTask(it); return@onLinkTap true }
                 (item as? com.xnotes.core.model.Linkable)?.linkPage?.takeIf { it in state.document.pages.indices }?.let { goToPage(it); return@onLinkTap true }
                 audioOf(item)?.let { (clip, at) -> playAudio(clip, at); return@onLinkTap true }
             }
@@ -2483,6 +2484,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     /** Snapshot live state into settings and save (call on pause/stop). */
     fun persist() {
+        runCatching { updateTaskIndex() }
         // A style tuned on the canvas is the same style, so whichever surface was last used wins.
         val fromCanvas = infiniteOrNull
         if (fromCanvas != null && canvasOpen) {
@@ -4875,7 +4877,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         installViewOverrides(saved?.overrides ?: com.xnotes.canvas.ViewOverrides())
         // An agenda always opens on today, wherever it was left.
         val today = Agenda.todayPage(state.document)
+        val wanted = openAtPage?.takeIf { it in state.document.pages.indices }
+        openAtPage = null
+        runCatching { updateTaskIndex() }
         state.pendingInitialView = when {
+            wanted != null -> InitialView.GoToPage(wanted)
             today != null -> InitialView.GoToPage(today)
             saved != null -> InitialView.Restore(saved.zoom, saved.scrollX, saved.scrollY)
             else -> InitialView.FitWidth
@@ -7012,6 +7018,47 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     /** Set from the More menu; the overlay asks for the screen and the microphone, then starts. */
     var screenRecordRequested by mutableStateOf(false)
+
+    // Tasks -------------------------------------------------------------------------------------
+
+    /** The page the next opened note starts on (set by the task list). */
+    var openAtPage: Int? = null
+
+    override fun makeTask() = readSelection { pageIndex, text ->
+        val page = state.document.pages.getOrNull(pageIndex) ?: return@readSelection
+        val sel = controller.selectedItems.filter { it.pageIndex == pageIndex }.map { it.item.bounds() }
+        val area = if (sel.isEmpty()) Rect(page.width * 0.1, page.height * 0.1, 0.0, 0.0) else Rect.bounding(sel.flatMap { listOf(it.topLeft, Pt(it.right, it.bottom)) })
+        val side = 5.0 / 25.4 * state.document.dpi
+        val x = (area.left - side * 1.6).coerceAtLeast(side * 0.3)
+        val y = area.top + (minOf(area.h, side * 2.2) - side) / 2
+        val item = com.xnotes.core.model.ShapeItem(
+            com.xnotes.core.shapes.ShapeKind.RECTANGLE, Pt(x, y), Pt(x + side, y + side),
+            strokeRgba = Rgba(40, 40, 48), strokeWidth = 1.0, fillRgba = Rgba(255, 255, 255),
+        ).also { it.taskBox = true; it.taskText = text }
+        page.items.add(item); state.appendToCache(page, item); history.push(AddItem(page, item))
+        state.document.dirty = true; dirty = true; refreshContent(); view.requestRender()
+        updateTaskIndex()
+        message = appContext.getString(R.string.task_made, text)
+    }
+
+    private fun toggleTask(item: com.xnotes.core.model.ShapeItem) {
+        item.taskDone = !item.taskDone
+        state.document.dirty = true
+        dirty = true
+        state.invalidateAllCaches()
+        refreshView()
+        view.requestRender()
+        updateTaskIndex()
+    }
+
+    /** Write this note's tasks to the shared list. */
+    fun updateTaskIndex() {
+        val uri = state.document.path ?: return
+        val tasks = state.document.pages.flatMapIndexed { i, p ->
+            p.items.filterIsInstance<com.xnotes.core.model.ShapeItem>().filter { it.taskBox }.map { com.xnotes.platform.TaskIndex.Task(i, it.taskText, it.taskDone) }
+        }
+        com.xnotes.platform.TaskIndex.put(appContext, uri, title, tasks)
+    }
 
     // Agenda and calendar -----------------------------------------------------------------------
 

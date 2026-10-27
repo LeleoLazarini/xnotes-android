@@ -100,6 +100,11 @@ class ShapeItem(
     /** A study tape: an opaque strip that hides what is under it until a finger tap peels it. */
     var studyTape: Boolean = false
 
+    /** A task's check box; [taskText] is what the task says, read from the writing beside it. */
+    var taskBox: Boolean = false
+    var taskDone: Boolean = false
+    var taskText: String = ""
+
     /** A peeled study tape shows through. Not saved: a note always opens with its tapes down. */
     @Volatile
     var tapeRevealed: Boolean = false
@@ -211,6 +216,7 @@ class ShapeItem(
     fun paintBody(r: Renderer) {
         if (stickyNote) return paintStickyNote(r)
         if (studyTape) return paintStudyTape(r)
+        if (taskBox) return paintTaskBox(r)
         val paths = paths()
         if (neon) return Outline.paintNeon(r, paths, fillRgba, pen(), neonStrength, paintBounds())
         ShapePainter.fill(r, paths, fillRgba, strokeRgba)
@@ -241,6 +247,20 @@ class ShapeItem(
         r.fillPolygon(listOf(at(b.right - curl, b.bottom), at(b.right, b.bottom - curl), at(b.right - curl * 1.05, b.bottom - curl * 1.05)), Stroke.lighten(paper, STICKY_CURL_LIGHTEN))
         // A barely-there edge so the note reads against paper of its own colour.
         r.strokePolygon(sheet, Pen(color = Stroke.darken(paper, STICKY_EDGE_DARKEN).withAlpha(STICKY_EDGE_ALPHA), width = 0.8, cosmetic = false))
+    }
+
+    /** The task box: a rounded square, ticked when done. */
+    private fun paintTaskBox(r: Renderer) {
+        val b = box
+        fun at(x: Double, y: Double) = toPage(Pt(x, y))
+        val ink = strokeRgba.withAlpha(255)
+        val edge = listOf(at(b.left, b.top), at(b.right, b.top), at(b.right, b.bottom), at(b.left, b.bottom))
+        r.fillPolygon(edge, if (taskDone) Rgba(220, 252, 231) else Rgba(255, 255, 255))
+        r.strokePolygon(edge, Pen(color = ink, width = maxOf(1.5, b.w * 0.09), cosmetic = false))
+        if (taskDone) {
+            val tick = listOf(at(b.left + b.w * 0.2, b.top + b.h * 0.52), at(b.left + b.w * 0.42, b.top + b.h * 0.75), at(b.left + b.w * 0.82, b.top + b.h * 0.25))
+            r.strokePolyline(tick, Pen(color = Rgba(22, 163, 74), width = maxOf(2.0, b.w * 0.14), cosmetic = false))
+        }
     }
 
     /** The tape: opaque, faintly striped, with torn-looking ends; nearly clear once peeled back. */

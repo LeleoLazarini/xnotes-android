@@ -422,6 +422,11 @@ class DocumentCodec(
         // Only sticky notes carry it, so every other shape is written as before.
         if (s.stickyNote) j.name("sticky_note").value(true)
         if (s.studyTape) j.name("study_tape").value(true)
+        if (s.taskBox) {
+            j.name("task_box").value(true)
+            if (s.taskDone) j.name("task_done").value(true)
+            j.name("task_text").value(s.taskText)
+        }
         j.name("stroke_rgba")
         writeRgba(j, s.strokeRgba)
         j.name("stroke_width").value(s.strokeWidth)
@@ -940,6 +945,9 @@ class DocumentCodec(
         var stickyNote = false
         var studyTape = false
         var fromCalendar = false
+        var taskBox = false
+        var taskDone = false
+        var taskText = ""
         var kind: String? = null
         var id: Int? = null
         var connector: ConnectorScratch? = null
@@ -1060,6 +1068,9 @@ class DocumentCodec(
                 "sticky_note" -> s.stickyNote = boolOr(p, false)
                 "study_tape" -> s.studyTape = boolOr(p, false)
                 "from_calendar" -> s.fromCalendar = boolOr(p, false)
+                "task_box" -> s.taskBox = boolOr(p, false)
+                "task_done" -> s.taskDone = boolOr(p, false)
+                "task_text" -> s.taskText = stringOr(p, "")
                 else -> p.skipValue()
             }
         }
@@ -1149,6 +1160,9 @@ class DocumentCodec(
         s.headEnd?.let { shape.headEnd = Head.fromId(it) }
         shape.stickyNote = s.stickyNote
         shape.studyTape = s.studyTape
+        shape.taskBox = s.taskBox
+        shape.taskDone = s.taskDone
+        shape.taskText = s.taskText
         s.label?.takeIf { it.text.isNotEmpty() }?.let { l ->
             shape.label = ShapeLabel(l.text, TextStyle(l.rgba ?: shape.strokeRgba, l.pointSize, FontFace.fromId(l.fontFace)), textMeasurer)
             l.at?.takeIf { it.isFinite() }?.let { shape.labelAt = it.coerceIn(0.0, 1.0) }

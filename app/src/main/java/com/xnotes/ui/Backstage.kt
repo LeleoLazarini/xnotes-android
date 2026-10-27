@@ -1669,6 +1669,12 @@ private fun ExplorerSection(
                         Spacer(Modifier.width(8.dp))
                         LayoutSwitcher(switcherLayouts, layout, liftNow) { setView(view.copy(layout = it)); columnsPick = null }
                     }
+                    Spacer(Modifier.width(4.dp))
+                    var tasksOpen by remember { mutableStateOf(false) }
+                    Box(Modifier.floatingBacking(liftNow, CircleShape, floatFill, floatEdge)) {
+                        ExplorerIcon(XnotesIcons.checkboxItem, stringResource(R.string.tasks_title)) { tasksOpen = true }
+                    }
+                    if (tasksOpen) TaskListDialog(onOpen = { uri, page -> tasksOpen = false; editor.openAtPage = page; calls.openFile(uri) }, onDismiss = { tasksOpen = false })
                     if (editor.knownTags.isNotEmpty()) {
                         Spacer(Modifier.width(4.dp))
                         var tagsOpen by remember { mutableStateOf(false) }
@@ -2442,4 +2448,38 @@ internal fun EmptyPane(text: String, art: EmptyArt? = null, actions: (@Composabl
             }
         }
     }
+}
+
+/** Every note's tasks, pending first; a tap opens the note on the task's page. */
+@Composable
+private fun TaskListDialog(onOpen: (String, Int) -> Unit, onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val palette = LocalPalette.current
+    val notes = remember { com.xnotes.platform.TaskIndex.all(context) }
+    var showDone by remember { mutableStateOf(false) }
+    val pending = notes.sumOf { n -> n.tasks.count { !it.done } }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.tasks_count, pending)) },
+        text = {
+            Column(Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState())) {
+                if (notes.isEmpty()) Text(stringResource(R.string.tasks_none), color = palette.textDim.toComposeColor(), fontSize = 14.sp)
+                notes.forEach { n ->
+                    val shown = n.tasks.filter { showDone || !it.done }
+                    if (shown.isEmpty()) return@forEach
+                    Text(n.name, fontSize = 13.sp, color = palette.textDim.toComposeColor(), modifier = Modifier.padding(top = 10.dp, bottom = 2.dp))
+                    shown.forEach { t ->
+                        Row(Modifier.fillMaxWidth().clickable { onOpen(n.uri, t.page) }.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(if (t.done) "☑" else "☐", fontSize = 18.sp, color = palette.text.toComposeColor())
+                            Spacer(Modifier.width(10.dp))
+                            Text(t.text, fontSize = 15.sp, color = if (t.done) palette.textDim.toComposeColor() else palette.text.toComposeColor(), modifier = Modifier.weight(1f))
+                            Text(stringResource(R.string.page_n, t.page + 1), fontSize = 12.sp, color = palette.textDim.toComposeColor())
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.study_close)) } },
+        dismissButton = { TextButton(onClick = { showDone = !showDone }) { Text(stringResource(if (showDone) R.string.tasks_hide_done else R.string.tasks_show_done)) } },
+    )
 }
