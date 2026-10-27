@@ -100,6 +100,10 @@ data class ToolConfig(
     val pressureCurve: Double = 0.0,
     /** Fill brush: the outline drawn becomes a shape painted solid inside. */
     val fillArea: Boolean = false,
+    /** Shading pencil: laid on its side, the pen draws as wide as it leans (when the stylus reports tilt). */
+    val tiltShade: Boolean = false,
+    /** Fountain ink that pools where the nib lands and lifts, in [0, 1]. */
+    val inkPool: Double = 0.0,
 ) {
     companion object {
         const val DEFAULT_MARKUP_INTENSITY = 0.5

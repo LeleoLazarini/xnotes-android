@@ -259,6 +259,21 @@ class Stroke(
         ).also { cachedGeometry = it }
     }
 
+    /** Ink that pools where the nib lands and lifts: heavier pressure over the first and last few samples. */
+    fun poolEnds(amount: Double) {
+        val s = pts
+        val n = s.n
+        if (n < 4 || amount <= 0.0) return
+        val k = minOf(POOL_SAMPLES, n / 3).coerceAtLeast(1)
+        for (i in 0 until k) {
+            val w = (1.0 - i.toDouble() / k) * amount
+            s.pa[i] = (s.pa[i] * (1.0 + w)).toFloat().coerceAtMost(POOL_MAX)
+            val j = n - 1 - i
+            if (j > i) s.pa[j] = (s.pa[j] * (1.0 + w)).toFloat().coerceAtMost(POOL_MAX)
+        }
+        invalidate()
+    }
+
     fun invalidate() {
         wet = null
         cachedGeometry = null
@@ -447,7 +462,7 @@ class Stroke(
      *  layers composited at an alpha, and translucent ink compounds where it overlaps itself, so
      *  neither survives being painted in two runs; both keep the plain every-frame redraw. */
     val wetCacheable: Boolean
-        get() = !config.neon && renderColor.a >= 255 && !(tool == Tool.BRUSH && config.brush == Brush.WATERCOLOR)
+        get() = !config.neon && renderColor.a >= 255 && !(tool == Tool.BRUSH && config.brush.wholeStrokeOnly)
 
     /**
      * The dashed pen: a constant-width, round-capped dashed line traced down the smoothed
@@ -495,6 +510,8 @@ class Stroke(
         config.neon && tool != Tool.HIGHLIGHTER -> bounds().outset(neonGlowRadius() * 2 + 4)
         // The spray scatters past the ribbon it is hit-tested by.
         tool == Tool.BRUSH && config.brush == Brush.SPRAY -> bounds().outset(config.baseWidth * SPRAY_REACH + 2)
+        tool == Tool.BRUSH && config.brush == Brush.AIRBRUSH -> bounds().outset(config.baseWidth * AIR_SPREAD + 2)
+        tool == Tool.BRUSH && config.brush.isStamp -> bounds().outset(config.baseWidth * STAMP_SCALE + 2)
         else -> bounds()
     }
 
@@ -525,6 +542,91 @@ class Stroke(
             }
             Brush.SPRAY -> paintSpray(r, centers, radii, from, count, color)
             Brush.RAINBOW -> paintRainbow(r, centers, radii, from, count)
+            Brush.GOUACHE -> paintGouache(r, centers, radii, from, count, color)
+            Brush.AIRBRUSH -> paintAirbrush(r, centers, radii, from, count, color)
+            Brush.STAMP_STAR, Brush.STAMP_HEART, Brush.STAMP_DOTS, Brush.STAMP_HATCH -> paintStamps(r, centers, radii, from, count, color)
+        }
+    }
+
+    /** Gouache and oil: the paint opaque, with a few bristle streaks a shade darker or lighter running along it. */
+    private fun paintGouache(r: Renderer, centers: FloatArray, radii: FloatArray, from: Int, count: Int, color: Rgba) {
+        if (count <= 0) return
+        val c = color.withAlpha(255)
+        r.fillDiskRibbon(centers, radii, from, count, c)
+        if (count < 3) return
+        val end = from + count
+        var avg = 0.0
+        for (i in from until end) avg += radii[i]
+        avg /= count
+        GOUACHE_STREAKS.forEachIndexed { k, off ->
+            val line = ArrayList<com.xnotes.core.geometry.Pt>(count)
+            for (i in from until end) {
+                val a = maxOf(from, i - 1)
+                val b = minOf(end - 1, i + 1)
+                val tx = (centers[2 * b] - centers[2 * a]).toDouble()
+                val ty = (centers[2 * b + 1] - centers[2 * a + 1]).toDouble()
+                val len = kotlin.math.hypot(tx, ty).takeIf { it > 1e-6 } ?: 1.0
+                val rad = radii[i] * off
+                line += com.xnotes.core.geometry.Pt(centers[2 * i] - ty / len * rad, centers[2 * i + 1] + tx / len * rad)
+            }
+            val shade = if (k % 2 == 0) darken(c, GOUACHE_DARKEN) else lighten(c, GOUACHE_LIGHTEN)
+            r.strokePolyline(line, Pen(color = shade, width = (avg * GOUACHE_STREAK_WIDTH).coerceAtLeast(0.4), cosmetic = false))
+        }
+    }
+
+    /** Airbrush: a few ever-narrower faint passes, so the paint fades out at its edges. */
+    private fun paintAirbrush(r: Renderer, centers: FloatArray, radii: FloatArray, from: Int, count: Int, color: Rgba) {
+        if (count <= 0) return
+        val scaled = radii.copyOf()
+        val c = color.withAlpha(255)
+        for (k in 0 until AIR_PASSES) {
+            val f = ((1.0 - k * AIR_STEP) * AIR_SPREAD).toFloat()
+            for (i in from until from + count) scaled[i] = radii[i] * f
+            r.saveLayerBlended(paintBounds().outset(2.0), AIR_ALPHA, BlendMode.SRC_OVER)
+            r.fillDiskRibbon(centers, scaled, from, count, c)
+            r.restore()
+        }
+    }
+
+    /** Stamps along the line: one where it starts, then one every few widths. */
+    private fun paintStamps(r: Renderer, centers: FloatArray, radii: FloatArray, from: Int, count: Int, color: Rgba) {
+        if (count <= 0) return
+        val c = color.withAlpha(255)
+        val gapFactor = when (config.brush) { Brush.STAMP_DOTS -> 2.0; Brush.STAMP_HATCH -> 0.9; else -> 2.6 }
+        var px = centers[2 * from].toDouble()
+        var py = centers[2 * from + 1].toDouble()
+        stamp(r, px, py, radii[from] * STAMP_SCALE, 0.0, c)
+        var travelled = 0.0
+        for (i in from + 1 until from + count) {
+            val x = centers[2 * i].toDouble()
+            val y = centers[2 * i + 1].toDouble()
+            val step = kotlin.math.hypot(x - px, y - py)
+            travelled += step
+            val rad = radii[i] * STAMP_SCALE
+            if (travelled >= rad * gapFactor) {
+                stamp(r, x, y, rad, kotlin.math.atan2(y - py, x - px), c)
+                travelled = 0.0
+            }
+            px = x; py = y
+        }
+    }
+
+    private fun stamp(r: Renderer, x: Double, y: Double, rad: Double, angle: Double, c: Rgba) {
+        fun pt(a: Double, d: Double) = com.xnotes.core.geometry.Pt(x + kotlin.math.cos(a) * d, y + kotlin.math.sin(a) * d)
+        when (config.brush) {
+            Brush.STAMP_STAR -> r.fillPolygon((0 until 10).map { k -> pt(angle - Math.PI / 2 + k * Math.PI / 5, if (k % 2 == 0) rad else rad * 0.42) }, c)
+            Brush.STAMP_DOTS -> r.fillPolygon((0 until 14).map { k -> pt(k * Math.PI / 7, rad * 0.55) }, c)
+            Brush.STAMP_HEART -> r.fillPolygon((0 until 28).map { k ->
+                val t = k * 2 * Math.PI / 28
+                val hx = 16 * Math.pow(kotlin.math.sin(t), 3.0)
+                val hy = 13 * kotlin.math.cos(t) - 5 * kotlin.math.cos(2 * t) - 2 * kotlin.math.cos(3 * t) - kotlin.math.cos(4 * t)
+                com.xnotes.core.geometry.Pt(x + hx / 17 * rad, y - hy / 17 * rad)
+            }, c)
+            Brush.STAMP_HATCH -> r.strokePolyline(
+                listOf(com.xnotes.core.geometry.Pt(x - rad * 0.7, y + rad * 0.7), com.xnotes.core.geometry.Pt(x + rad * 0.7, y - rad * 0.7)),
+                Pen(color = c, width = (rad * 0.22).coerceAtLeast(0.5), cosmetic = false),
+            )
+            else -> Unit
         }
     }
 
@@ -876,6 +978,17 @@ class Stroke(
         private const val GRAIN_FLAT_PRESSURE = 0.7
 
         private const val WATERCOLOR_ALPHA = 0.42
+        private val GOUACHE_STREAKS = doubleArrayOf(-0.62, -0.3, 0.05, 0.38, 0.7)
+        private const val GOUACHE_DARKEN = 0.16
+        private const val GOUACHE_LIGHTEN = 0.14
+        private const val GOUACHE_STREAK_WIDTH = 0.13
+        private const val AIR_PASSES = 5
+        private const val AIR_STEP = 0.17
+        internal const val AIR_SPREAD = 1.6
+        private const val AIR_ALPHA = 0.16
+        internal const val STAMP_SCALE = 1.3
+        private const val POOL_SAMPLES = 6
+        private const val POOL_MAX = 1.6f
         private const val WATERCOLOR_EDGE_DARKEN = 0.25
         private const val WATERCOLOR_EDGE_WIDTH = 0.07
 

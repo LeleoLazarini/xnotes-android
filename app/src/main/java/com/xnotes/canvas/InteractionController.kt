@@ -1125,14 +1125,14 @@ class InteractionController(
             addStrokePoint(
                 e.getHistoricalX(idx, h).toDouble(),
                 e.getHistoricalY(idx, h).toDouble(),
-                if (drawingIsStylus) e.getHistoricalPressure(idx, h).toDouble() else 1.0,
+                if (drawingIsStylus) penPressure(e.getHistoricalPressure(idx, h), e.getHistoricalAxisValue(MotionEvent.AXIS_TILT, idx, h)) else 1.0,
                 e.getHistoricalEventTime(h),
                 force = false,
             )
         }
         addStrokePoint(
             e.getX(idx).toDouble(), e.getY(idx).toDouble(),
-            if (drawingIsStylus) e.getPressure(idx).toDouble() else 1.0, e.eventTime, force = false,
+            if (drawingIsStylus) penPressure(e.getPressure(idx), e.getAxisValue(MotionEvent.AXIS_TILT, idx)) else 1.0, e.eventTime, force = false,
         )
         frontInk?.wet(liveStroke, strokePageIndex, predictedLocal())
         requestRender()
@@ -1270,8 +1270,16 @@ class InteractionController(
     }
 
     /** Add a finished stroke to its page and its cache; returns the command that undoes it. */
+    /** The pen's pressure; a shading pencil laid on its side presses as hard as it leans. */
+    private fun penPressure(pressure: Float, tilt: Float): Double {
+        val p = pressure.toDouble()
+        if (liveStroke?.config?.tiltShade != true) return p
+        return maxOf(p, (tilt / TILT_FULL).toDouble().coerceIn(0.0, 1.0))
+    }
+
     private fun fileStroke(stroke: Stroke, pageIndex: Int): Command {
         simplifyForCommit(stroke)
+        if (stroke.config.inkPool > 0.0) stroke.poolEnds(stroke.config.inkPool)
         val page = state.document.pages[pageIndex]
         page.items.add(stroke)
         // The front buffer is still showing this stroke, and drawing it here as well would put two
@@ -1289,7 +1297,7 @@ class InteractionController(
         val idx = e.findPointerIndex(drawingPointerId).coerceAtLeast(0)
         addStrokePoint(
             e.getX(idx).toDouble(), e.getY(idx).toDouble(),
-            if (drawingIsStylus) e.getPressure(idx).toDouble() else 1.0, e.eventTime, force = true,
+            if (drawingIsStylus) penPressure(e.getPressure(idx), e.getAxisValue(MotionEvent.AXIS_TILT, idx)) else 1.0, e.eventTime, force = true,
         )
         // A mid-stroke snap already committed a shape and cleared liveStroke, so this block is
         // skipped and the freehand stroke is intentionally not also committed.
@@ -4628,6 +4636,9 @@ class InteractionController(
          *  zooming out cannot smear content detail the page will keep. */
         /** A full stabilizer runs the ink's low-pass this many times longer than plain ink. */
         const val STABILIZER_SPAN = 4.0
+
+        /** Tilt (radians from upright) at which a shading pencil draws its full width. */
+        const val TILT_FULL = 1.1f
 
         /** A full pressure curve raises pressure to 2^±this before it sets the width. */
         const val PRESSURE_CURVE_SPAN = 1.3

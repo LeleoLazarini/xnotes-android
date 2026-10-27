@@ -21,7 +21,8 @@ enum class PenFamily(val id: String) {
             Tool.BRUSH -> when (config.brush) {
                 Brush.PENCIL -> PENCIL
                 Brush.CRAYON, Brush.CHALK -> CHALK
-                Brush.WATERCOLOR, Brush.SPRAY, Brush.RAINBOW -> BRUSH
+                Brush.WATERCOLOR, Brush.SPRAY, Brush.RAINBOW, Brush.GOUACHE, Brush.AIRBRUSH,
+                Brush.STAMP_STAR, Brush.STAMP_HEART, Brush.STAMP_DOTS, Brush.STAMP_HATCH -> BRUSH
             }
             else -> when {
                 config.neon -> BRUSH
@@ -77,6 +78,12 @@ object BuiltInPens {
         // Canetas
         pen(F, "ballpoint-fine", "Esferográfica fina", Tool.PEN, d(Tool.PEN).copy(baseWidth = 1.2, pressureMinFactor = 0.75)),
         pen(F, "ballpoint", "Esferográfica", Tool.PEN, d(Tool.PEN).copy(baseWidth = 1.6, pressureMinFactor = 0.70)),
+        pen(F, "chisel", "Ponta chanfrada", Tool.CALLIGRAPHY, d(Tool.CALLIGRAPHY).copy(baseWidth = 7.0, pressureMinFactor = 0.9, directionStrength = 0.95)),
+        pen(F, "chisel-fine", "Ponta chanfrada fina", Tool.CALLIGRAPHY, d(Tool.CALLIGRAPHY).copy(baseWidth = 3.6, pressureMinFactor = 0.9, directionStrength = 0.95)),
+        pen(F, "fountain-wet", "Tinteiro molhado (tinta acumula)", Tool.CALLIGRAPHY, d(Tool.CALLIGRAPHY).copy(baseWidth = 3.2, pressureMinFactor = 0.55, directionStrength = 0.30, inkPool = 0.7)),
+        pen(F, "technical-02", "Caneta técnica 0.2", Tool.PEN, flat(0.8)),
+        pen(F, "technical-04", "Caneta técnica 0.4", Tool.PEN, flat(1.5)),
+        pen(F, "technical-08", "Caneta técnica 0.8", Tool.PEN, flat(2.6)),
         pen(F, "steady", "Caneta estável (letra firme)", Tool.PEN, d(Tool.PEN).copy(baseWidth = 1.8, pressureMinFactor = 0.70, stabilizer = 0.6)),
         pen(F, "gel-05", "Gel 0.5", Tool.PEN, d(Tool.PEN).copy(baseWidth = 2.2, pressureMinFactor = 0.55)),
         pen(F, "gel", "Gel 0.7", Tool.PEN, d(Tool.PEN).copy(baseWidth = 3.0, pressureMinFactor = 0.50)),
@@ -98,6 +105,13 @@ object BuiltInPens {
         pen(L, "mechanical", "Lapiseira 0.5", Tool.BRUSH, pencil(1.4, 0.85, Rgba(70, 70, 76))),
         pen(L, "colored-pencil", "Lápis de cor", Tool.BRUSH, pencil(3.0, 0.60, null)),
         pen(L, "colored-pencil-wide", "Lápis de cor grosso", Tool.BRUSH, pencil(4.6, 0.55, null)),
+        pen(L, "shading", "Lápis de sombrear (deite a caneta)", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 9.0, pressureMinFactor = 0.08, brush = Brush.PENCIL, tiltShade = true)),
+        pen(L, "cp-soft", "Lápis de cor macio", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 2.8, pressureMinFactor = 0.5, brush = Brush.CRAYON)),
+        pen(L, "cp-hard", "Lápis de cor duro (ponta fina)", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 1.4, pressureMinFactor = 0.3, brush = Brush.PENCIL)),
+        pen(L, "cp-watercolor", "Lápis aquarelável", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 3.4, pressureMinFactor = 0.45, brush = Brush.WATERCOLOR)),
+        pen(L, "cp-pastel", "Lápis pastel seco", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 3.4, pressureMinFactor = 0.6, brush = Brush.CHALK)),
+        pen(L, "cp-wax", "Lápis dermatográfico (cera)", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 4.2, pressureMinFactor = 0.85, brush = Brush.CRAYON)),
+        pen(L, "cp-coloring", "Lápis de colorir (deitado)", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 7.0, pressureMinFactor = 0.15, brush = Brush.PENCIL, tiltShade = true)),
 
         // Canetões
         pen(M, "marker", "Pincel atômico", Tool.PEN, flat(6.0)),
@@ -136,6 +150,14 @@ object BuiltInPens {
         pen(B, "watercolor-wide", "Aquarela larga", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 22.0, pressureMinFactor = 0.40, brush = Brush.WATERCOLOR)),
         pen(B, "spray", "Spray", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 10.0, pressureMinFactor = 0.60, brush = Brush.SPRAY)),
         pen(B, "spray-fine", "Spray fino", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 5.0, pressureMinFactor = 0.60, brush = Brush.SPRAY)),
+        pen(B, "gouache", "Guache", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 12.0, pressureMinFactor = 0.5, brush = Brush.GOUACHE)),
+        pen(B, "oil", "Óleo (pincel largo)", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 20.0, pressureMinFactor = 0.6, brush = Brush.GOUACHE)),
+        pen(B, "airbrush", "Aerógrafo suave", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 14.0, pressureMinFactor = 0.3, brush = Brush.AIRBRUSH)),
+        pen(B, "airbrush-fine", "Aerógrafo fino", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 6.0, pressureMinFactor = 0.3, brush = Brush.AIRBRUSH)),
+        pen(B, "stamp-star", "Carimbo de estrelas", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 8.0, pressureMinFactor = 0.6, brush = Brush.STAMP_STAR)),
+        pen(B, "stamp-heart", "Carimbo de corações", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 8.0, pressureMinFactor = 0.6, brush = Brush.STAMP_HEART)),
+        pen(B, "stamp-dots", "Pontilhado", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 4.0, pressureMinFactor = 0.6, brush = Brush.STAMP_DOTS)),
+        pen(B, "stamp-hatch", "Hachura", Tool.BRUSH, d(Tool.BRUSH).copy(baseWidth = 6.0, pressureMinFactor = 0.6, brush = Brush.STAMP_HATCH)),
         pen(B, "fill", "Pincel de preenchimento", Tool.PEN, d(Tool.PEN).copy(baseWidth = 2.0, pressureEnabled = false, fillArea = true)),
         pen(B, "neon", "Neon", Tool.PEN, d(Tool.PEN).copy(baseWidth = 2.5, neon = true, neonStrength = 0.6)),
         pen(B, "neon-bold", "Neon forte", Tool.PEN, d(Tool.PEN).copy(baseWidth = 4.0, neon = true, neonStrength = 0.9)),

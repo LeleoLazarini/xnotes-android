@@ -240,6 +240,12 @@ fun ToolConfigPopup(editor: ToolPopupHost, tool: Tool, onDismiss: () -> Unit) {
                             com.xnotes.core.tools.Brush.WATERCOLOR to R.string.brush_watercolor,
                             com.xnotes.core.tools.Brush.SPRAY to R.string.brush_spray,
                             com.xnotes.core.tools.Brush.RAINBOW to R.string.brush_rainbow,
+                            com.xnotes.core.tools.Brush.GOUACHE to R.string.brush_gouache,
+                            com.xnotes.core.tools.Brush.AIRBRUSH to R.string.brush_airbrush,
+                            com.xnotes.core.tools.Brush.STAMP_STAR to R.string.brush_stars,
+                            com.xnotes.core.tools.Brush.STAMP_HEART to R.string.brush_hearts,
+                            com.xnotes.core.tools.Brush.STAMP_DOTS to R.string.brush_dots,
+                            com.xnotes.core.tools.Brush.STAMP_HATCH to R.string.brush_hatch,
                         ).forEach { (b, label) -> ModeChip(stringResource(label), brush == b) { brush = b; emitAll() } }
                     }
                 }

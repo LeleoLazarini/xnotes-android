@@ -1203,4 +1203,11 @@
     <string name="caption_pressure_curve">Pressure: light ← → firm</string>
     <string name="caption_stabilizer">Stabilizer</string>
     <string name="caption_fill_area">Fill what you outline</string>
+    <string name="mirror_drawing">Mirror drawing</string>
+    <string name="brush_gouache">Gouache</string>
+    <string name="brush_airbrush">Soft airbrush</string>
+    <string name="brush_stars">Stars</string>
+    <string name="brush_hearts">Hearts</string>
+    <string name="brush_dots">Dots</string>
+    <string name="brush_hatch">Hatching</string>
 </resources>

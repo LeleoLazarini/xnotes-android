@@ -1201,4 +1201,11 @@
     <string name="caption_pressure_curve">Força: leve ← → firme</string>
     <string name="caption_stabilizer">Estabilizador</string>
     <string name="caption_fill_area">Pintar por dentro do contorno</string>
+    <string name="mirror_drawing">Desenho espelhado</string>
+    <string name="brush_gouache">Guache</string>
+    <string name="brush_airbrush">Aerógrafo suave</string>
+    <string name="brush_stars">Estrelas</string>
+    <string name="brush_hearts">Corações</string>
+    <string name="brush_dots">Pontilhado</string>
+    <string name="brush_hatch">Hachura</string>
 </resources>

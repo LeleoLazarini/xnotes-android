@@ -1551,7 +1551,10 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         controller.onBeforeFlip = { forward -> startPageTurn(forward) }
         controller.motionPredictor = runCatching { androidx.input.motionprediction.MotionEventPredictor.newInstance(view) }.getOrNull()
         // Ink drawn while recording remembers when, so a tap on it plays that moment back.
-        controller.onStrokeFiled = { s -> recording?.let { clip -> s.audioClip = clip.id; s.audioAt = android.os.SystemClock.uptimeMillis() - recordingStartedAt } }
+        controller.onStrokeFiled = { s ->
+            recording?.let { clip -> s.audioClip = clip.id; s.audioAt = android.os.SystemClock.uptimeMillis() - recordingStartedAt }
+            if (mirrorDrawing) mirrorStroke(s)
+        }
         controller.onLinkTap = onLinkTap@{ pageIndex, pageLocal ->
             // A finger tap on a linked box jumps to its page; on ink drawn while recording, plays that moment.
             state.document.pages.getOrNull(pageIndex)?.items?.asReversed()?.forEach { item ->
@@ -7182,6 +7185,20 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
             afterPageEdit()
             if (!quiet) message = appContext.getString(R.string.agenda_cal_done, events.count { it.start.year == year })
         }
+    }
+
+    // Mirror drawing ----------------------------------------------------------------------------
+
+    /** Every stroke is drawn again mirrored across the middle of its page. */
+    var mirrorDrawing by mutableStateOf(false)
+
+    private fun mirrorStroke(s: com.xnotes.core.model.Stroke) {
+        val page = state.document.pages.firstOrNull { p -> p.items.any { it === s } } ?: return
+        val m = s.deepCopy(textMeasurer)
+        m.applyTransform(com.xnotes.core.geometry.Affine(-1.0, 0.0, 0.0, 1.0, page.width, 0.0))
+        page.items.add(m)
+        state.appendToCache(page, m)
+        history.push(AddItem(page, m))
     }
 
     // Focus and presentation --------------------------------------------------------------------
