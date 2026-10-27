@@ -4932,6 +4932,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         val colors = sidecarDocId?.let { readSidecarColors(tree, it) }.orEmpty()
         val icons = sidecarDocId?.let { readSidecarIcons(tree, it) }.orEmpty()
         val tagMap = sidecarDocId?.let { readSidecarTags(tree, it) }.orEmpty()
+        registerTags(tagMap.values.flatten())
         // SAF reports no creation time, so an item seen for the first time is stamped with the earlier of
         // now and its modified time: nothing was created after its last edit, and a fresh item gets now.
         val now = System.currentTimeMillis()
@@ -5146,8 +5147,42 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         }.getOrDefault(emptyMap())
     }
 
+    private val tagPalette = listOf(
+        Rgba(37, 99, 235), Rgba(22, 163, 74), Rgba(234, 88, 12), Rgba(147, 51, 234),
+        Rgba(219, 39, 119), Rgba(13, 148, 136), Rgba(202, 138, 4), Rgba(220, 38, 38),
+    )
+
+    /** Bumped when a tag or its colour changes. */
+    var tagVersion by mutableStateOf(0)
+        private set
+
+    fun tagColor(tag: String): Rgba {
+        tagVersion
+        return settings.tagColors[tag] ?: tagPalette[Math.floorMod(tag.hashCode(), tagPalette.size)]
+    }
+
+    val knownTags: List<String>
+        get() { tagVersion; return settings.tagColors.keys.sorted() }
+
+    private fun registerTags(tags: Collection<String>) {
+        val missing = tags.filter { it.isNotEmpty() && it !in settings.tagColors }.distinct()
+        if (missing.isEmpty()) return
+        settings = settings.copy(tagColors = settings.tagColors + missing.associateWith { tagColor(it) })
+        saveSettingsSoon()
+        tagVersion++
+    }
+
+    /** The next colour of the palette for [tag]. */
+    fun cycleTagColor(tag: String) {
+        val i = tagPalette.indexOf(tagColor(tag))
+        settings = settings.copy(tagColors = settings.tagColors + (tag to tagPalette[(i + 1) % tagPalette.size]))
+        saveSettingsSoon()
+        tagVersion++
+    }
+
     /** Give [itemName] in [parentDocId] the labels [tags] (empty clears them). */
     fun setItemTags(treeUri: String, parentDocId: String, itemName: String, tags: List<String>): Boolean = runCatching {
+        registerTags(tags)
         val tree = android.net.Uri.parse(treeUri)
         val sidecarId = sidecarDir(tree, parentDocId, create = tags.isNotEmpty()) ?: return@runCatching tags.isEmpty()
         val map = readSidecarTags(tree, sidecarId).toMutableMap()

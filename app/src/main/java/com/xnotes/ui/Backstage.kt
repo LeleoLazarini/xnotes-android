@@ -1669,6 +1669,23 @@ private fun ExplorerSection(
                         Spacer(Modifier.width(8.dp))
                         LayoutSwitcher(switcherLayouts, layout, liftNow) { setView(view.copy(layout = it)); columnsPick = null }
                     }
+                    if (editor.knownTags.isNotEmpty()) {
+                        Spacer(Modifier.width(4.dp))
+                        var tagsOpen by remember { mutableStateOf(false) }
+                        Box(Modifier.floatingBacking(liftNow, CircleShape, floatFill, floatEdge)) {
+                            ExplorerIcon(XnotesIcons.filter, stringResource(R.string.tags_filter)) { tagsOpen = true }
+                            DropdownMenu(expanded = tagsOpen, onDismissRequest = { tagsOpen = false }) {
+                                editor.knownTags.forEach { t ->
+                                    val c = editor.tagColor(t).toComposeColor()
+                                    DropdownMenuItem(
+                                        text = { Text("#$t", color = c, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold) },
+                                        leadingIcon = { Box(Modifier.size(18.dp).clip(CircleShape).background(c).clickable { editor.cycleTagColor(t) }) },
+                                        onClick = { tagsOpen = false; query = "#$t" },
+                                    )
+                                }
+                            }
+                        }
+                    }
                     Spacer(Modifier.width(4.dp))
                     // New folder sits in plain view rather than only inside the create menus.
                     Box(Modifier.floatingBacking(liftNow, CircleShape, floatFill, floatEdge)) {

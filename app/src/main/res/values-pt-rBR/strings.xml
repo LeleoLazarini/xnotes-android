@@ -1175,4 +1175,5 @@
     <string name="screen_rec_pill">Gravando tela %1$s</string>
     <string name="screen_rec_saved">Vídeo salvo em Filmes/xnotes.</string>
     <string name="screen_rec_failed">Não consegui salvar o vídeo.</string>
+    <string name="tags_filter">Etiquetas (toque na bolinha para mudar a cor)</string>
 </resources>

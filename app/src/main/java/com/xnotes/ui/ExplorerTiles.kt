@@ -153,6 +153,23 @@ internal class ExplorerBody(
     }
 
     fun colorOf(e: BrowseEntry): Rgba? = e.color.takeIf { view.showColour }
+
+    /** [metaText] with each tag in its own colour, after [lead] when given. */
+    fun metaRich(e: BrowseEntry, lead: String? = null): androidx.compose.ui.text.AnnotatedString = androidx.compose.ui.text.buildAnnotatedString {
+        val plain = metaOverride?.invoke(e)
+        val tags = if (plain == null && !e.isDir) e.tags else emptyList()
+        val rest = plain ?: if (e.isDir) metaText(e) else listOfNotNull(whenText(e).ifEmpty { null }, formatSize(e.size).takeIf { view.showSize }).joinToString(" · ")
+        val parts = ArrayList<() -> Unit>()
+        lead?.let { l -> parts += { append(l) } }
+        if (tags.isNotEmpty()) parts += {
+            tags.forEachIndexed { i, t ->
+                if (i > 0) append(" ")
+                pushStyle(androidx.compose.ui.text.SpanStyle(color = editor.tagColor(t).toComposeColor(), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)); append("#$t"); pop()
+            }
+        }
+        if (rest.isNotEmpty()) parts += { append(rest) }
+        parts.forEachIndexed { i, p -> if (i > 0) append(" · "); p() }
+    }
 }
 
 internal fun entryKind(e: BrowseEntry, meta: DocMetaStore.Meta?): EntryKind = when {
@@ -329,7 +346,7 @@ internal fun GridFileTile(b: ExplorerBody, e: BrowseEntry) {
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(b.label(e), color = palette.text.toComposeColor(), fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                val meta = b.metaText(e)
+                val meta = b.metaRich(e)
                 if (meta.isNotEmpty()) {
                     Text(meta, color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -440,7 +457,7 @@ internal fun FolderCardTile(b: ExplorerBody, e: BrowseEntry) {
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(b.label(e), color = palette.text.toComposeColor(), fontSize = 13.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(b.metaText(e), color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, maxLines = 1)
+                Text(b.metaRich(e), color = palette.textDim.toComposeColor(), fontSize = 11.5.sp, maxLines = 1)
             }
             if (!selecting) EntryMenuButton(b, e, palette.textDim.toComposeColor())
         }
@@ -494,7 +511,7 @@ internal fun ListRow(b: ExplorerBody, e: BrowseEntry, wide: Boolean) {
             Column(Modifier.weight(1f, fill = false)) {
                 Text(b.label(e), color = fg, fontSize = 14.5.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 val where = b.whereOf?.invoke(e)
-                if (!wide && !compact) Text(listOfNotNull(where, b.metaText(e).ifEmpty { null }).joinToString(" · "), color = dim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (!wide && !compact) Text(b.metaRich(e, where), color = dim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 else if (where != null && !compact) Text(where, color = dim, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             if (code != null && !e.isDir) Box(Modifier.size(8.dp).clip(CircleShape).background(code))
@@ -572,7 +589,7 @@ internal fun GalleryItem(b: ExplorerBody, e: BrowseEntry, shelf: Dp) {
                 pages > 0 -> pluralStringResource(R.plurals.pages_count, pages, pages)
                 else -> null
             }
-            Text(listOfNotNull(count, b.metaText(e).ifEmpty { null }).joinToString(" · "), color = palette.textDim.toComposeColor(), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(b.metaRich(e, count), color = palette.textDim.toComposeColor(), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

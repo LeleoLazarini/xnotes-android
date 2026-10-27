@@ -1177,4 +1177,5 @@
     <string name="screen_rec_pill">Recording screen %1$s</string>
     <string name="screen_rec_saved">Video saved in Movies/xnotes.</string>
     <string name="screen_rec_failed">Could not save the video.</string>
+    <string name="tags_filter">Tags (tap the dot to change its colour)</string>
 </resources>
