@@ -1118,4 +1118,10 @@
     <string name="study_tape">Fita de estudo (toque para revelar)</string>
     <string name="quick_note">Nota rápida</string>
     <string name="quick_note_name">Nota rápida %1$s</string>
+    <string name="cover_look_ellipsis">Capa do caderno…</string>
+    <string name="tags_ellipsis">Etiquetas…</string>
+    <string name="tags_title">Etiquetas</string>
+    <string name="tags_hint">trabalho, reunião, ideias</string>
+    <string name="page_move_up">Mover para cima</string>
+    <string name="page_move_down">Mover para baixo</string>
 </resources>

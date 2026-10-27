@@ -222,3 +222,17 @@ internal fun FolderLookDialog(name: String, color: Rgba?, icon: FolderIcon?, onS
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
+
+/** A notebook's cover: its colour, lit from the top, a darker spine, and its picture in the middle. */
+@Composable
+internal fun NoteCover(color: Rgba?, icon: FolderIcon?, modifier: Modifier = Modifier) {
+    val base = (color ?: Rgba(91, 112, 160)).toComposeColor()
+    val ink = icon?.color?.toComposeColor() ?: Color.White
+    androidx.compose.foundation.layout.BoxWithConstraints(
+        modifier.background(Brush.verticalGradient(listOf(lerp(base, Color.White, 0.16f), base, lerp(base, Color.Black, 0.14f)))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.align(Alignment.CenterStart).size(maxWidth * 0.08f, maxHeight).background(lerp(base, Color.Black, 0.25f)))
+        Icon(FolderPurposes.of(icon?.id).icon, contentDescription = null, tint = ink, modifier = Modifier.size(minOf(maxWidth, maxHeight) * 0.42f))
+    }
+}

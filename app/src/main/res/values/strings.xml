@@ -1120,4 +1120,10 @@
     <string name="study_tape">Study tape (tap to reveal)</string>
     <string name="quick_note">Quick note</string>
     <string name="quick_note_name">Quick note %1$s</string>
+    <string name="cover_look_ellipsis">Notebook cover…</string>
+    <string name="tags_ellipsis">Tags…</string>
+    <string name="tags_title">Tags</string>
+    <string name="tags_hint">work, meeting, ideas</string>
+    <string name="page_move_up">Move up</string>
+    <string name="page_move_down">Move down</string>
 </resources>

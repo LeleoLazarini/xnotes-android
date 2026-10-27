@@ -155,6 +155,8 @@ data class BrowseEntry(
     val color: Rgba? = null,
     /** A folder's purpose picture and its colour, when one was chosen. */
     val icon: FolderIcon? = null,
+    /** Labels the user gave the item, found by the explorer search. */
+    val tags: List<String> = emptyList(),
 )
 
 /** Every note and canvas under a folder, and the names of the folders they sit in, by document id. */
@@ -182,6 +184,7 @@ data class ImportProgress(val done: Int, val total: Int)
 private const val SIDECAR_DIR = ".xnote"
 private const val SIDECAR_FILE = "colors.json"
 private const val SIDECAR_ICONS = "icons.json"
+private const val SIDECAR_TAGS = "tags.json"
 /** In the root folder's sidecar only: the names given to colour codes, so they sync with the notes. */
 private const val COLOR_NAMES_FILE = "color-names.json"
 
@@ -4927,12 +4930,13 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         }
         val colors = sidecarDocId?.let { readSidecarColors(tree, it) }.orEmpty()
         val icons = sidecarDocId?.let { readSidecarIcons(tree, it) }.orEmpty()
+        val tagMap = sidecarDocId?.let { readSidecarTags(tree, it) }.orEmpty()
         // SAF reports no creation time, so an item seen for the first time is stamped with the earlier of
         // now and its modified time: nothing was created after its last edit, and a fresh item gets now.
         val now = System.currentTimeMillis()
         createdStore.stampMissing(out.associate { documentKey(it.documentUri) to (com.xnotes.core.util.DocKeys.inferCreated(now, it.modified) ?: now) })
         val withCreated = out.map {
-            it.copy(created = createdStore.get(documentKey(it.documentUri)) ?: now, color = colors[it.name], icon = icons[it.name])
+            it.copy(created = createdStore.get(documentKey(it.documentUri)) ?: now, color = colors[it.name], icon = icons[it.name], tags = tagMap[it.name].orEmpty())
         }
         val result = withCreated.sortedWith(explorerComparator(explorerView.sortKey, explorerView.descending) { it.created })
         browseCache["$treeUri|$parentDocId"] = result
@@ -5130,6 +5134,28 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
         writeSidecarJson(tree, sidecarId, SIDECAR_ICONS, org.json.JSONObject().put("version", 1).put("icons", icons))
     }.getOrDefault(false)
 
+    /** Item tags in sidecar dir [sidecarDocId]: tags.json, by item name. */
+    private fun readSidecarTags(tree: android.net.Uri, sidecarDocId: String): Map<String, List<String>> {
+        val fileId = findChildDocId(tree, sidecarDocId, SIDECAR_TAGS, dir = false) ?: return emptyMap()
+        val fileUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, fileId)
+        val text = runCatching { appContext.contentResolver.openInputStream(fileUri)?.use { it.readBytes().toString(Charsets.UTF_8) } }.getOrNull() ?: return emptyMap()
+        return runCatching {
+            val obj = org.json.JSONObject(text).optJSONObject("tags") ?: return emptyMap()
+            obj.keys().asSequence().associateWith { k -> obj.optJSONArray(k)?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotEmpty() } }.orEmpty() }
+        }.getOrDefault(emptyMap())
+    }
+
+    /** Give [itemName] in [parentDocId] the labels [tags] (empty clears them). */
+    fun setItemTags(treeUri: String, parentDocId: String, itemName: String, tags: List<String>): Boolean = runCatching {
+        val tree = android.net.Uri.parse(treeUri)
+        val sidecarId = sidecarDir(tree, parentDocId, create = tags.isNotEmpty()) ?: return@runCatching tags.isEmpty()
+        val map = readSidecarTags(tree, sidecarId).toMutableMap()
+        if (tags.isEmpty()) map.remove(itemName) else map[itemName] = tags
+        val obj = org.json.JSONObject()
+        map.forEach { (k, v) -> obj.put(k, org.json.JSONArray(v)) }
+        writeSidecarJson(tree, sidecarId, SIDECAR_TAGS, org.json.JSONObject().put("version", 1).put("tags", obj))
+    }.getOrDefault(false)
+
     /** Carry a folder's picture across a rename, as [moveItemColor] does its colour. */
     fun moveFolderIcon(treeUri: String, parentDocId: String, oldName: String, newName: String): Boolean = runCatching {
         val tree = android.net.Uri.parse(treeUri)
@@ -5233,7 +5259,7 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
                     stack.addLast(browseDocId(e.documentUri))
                 } else {
                     val display = com.xnotes.core.util.DocumentKind.stripSuffix(e.name)
-                    if (display.contains(needle, ignoreCase = true)) out.add(e)
+                    if (display.contains(needle, ignoreCase = true) || e.tags.any { it.contains(needle.removePrefix("#"), ignoreCase = true) }) out.add(e)
                 }
             }
         }
@@ -5772,8 +5798,20 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     /** The kit drawer last picked from, so a pen tweaked away from its preset still lights its drawer. */
     private var lastFamily by mutableStateOf<com.xnotes.core.tools.PenFamily?>(null)
 
+    /** Each drawer's own toolbar colours, so pastels stay with the highlighters and graphite with the pencils. */
+    private fun swapPalette(from: com.xnotes.core.tools.PenFamily?, to: com.xnotes.core.tools.PenFamily) {
+        if (from == to) return
+        val saved = settings.familyColors.toMutableMap()
+        saved[(from ?: com.xnotes.core.tools.PenFamily.PEN).id] = toolbarColors
+        val next = saved[to.id] ?: com.xnotes.core.tools.FamilyPalettes.defaultFor(to, toolbarColors)
+        settings = settings.copy(familyColors = saved)
+        toolbarColors = next
+        pickColor(activeColorIndex.coerceIn(0, toolbarColorCount - 1))
+    }
+
     /** Arm [pen]: its tool with its style, keeping the toolbar ink unless the pen has its own colour. */
     fun applyPen(pen: com.xnotes.core.tools.PenPreset) {
+        swapPalette(lastFamily ?: activeFamily(), pen.family)
         updateToolConfig(pen.tool, pen.config)
         selectTool(pen.tool)
         lastFamily = pen.family
@@ -6166,6 +6204,27 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     /** Insert fresh clones of the page clipboard right after [index]; selects nothing, reveals the first. */
+    /** A copy of page [index] right after it. */
+    fun duplicatePage(index: Int) {
+        copyPages(listOf(index))
+        pastePagesAfter(index)
+    }
+
+    /** Move page [index] one place up (-1) or down (+1), as one undo step. */
+    fun movePage(index: Int, delta: Int) {
+        val pages = state.document.pages
+        val to = index + delta
+        if (index !in pages.indices || to !in pages.indices) return
+        // Same page count either way, so undo would not relayout by itself: the swap does it.
+        fun shift(from: Int, into: Int) { pages.add(into, pages.removeAt(from)); afterPageEdit() }
+        shift(index, to)
+        history.push(object : com.xnotes.core.history.Command {
+            override fun redo() = shift(index, to)
+            override fun undo() = shift(to, index)
+        })
+        goToPage(to)
+    }
+
     fun pastePagesAfter(index: Int) {
         if (pageClipboard.isEmpty()) return
         val pages = state.document.pages

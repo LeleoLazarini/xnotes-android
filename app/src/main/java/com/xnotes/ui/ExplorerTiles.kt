@@ -98,6 +98,7 @@ internal class EntryActions(
     val delete: (BrowseEntry) -> Unit,
     val color: (BrowseEntry, Rgba?) -> Unit,
     val look: (BrowseEntry) -> Unit,
+    val tags: (BrowseEntry) -> Unit,
     val nameColor: (Rgba) -> Unit,
     val togglePin: (BrowseEntry) -> Unit,
     val share: (BrowseEntry) -> Unit,
@@ -147,7 +148,8 @@ internal class ExplorerBody(
     fun metaText(e: BrowseEntry): String {
         metaOverride?.invoke(e)?.let { return it }
         if (e.isDir) return counts[e.documentUri]?.let { itemsLabel(words, it) } ?: whenText(e)
-        return listOfNotNull(whenText(e).ifEmpty { null }, formatSize(e.size).takeIf { view.showSize }).joinToString(" · ")
+        val tags = e.tags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" }
+        return listOfNotNull(tags, whenText(e).ifEmpty { null }, formatSize(e.size).takeIf { view.showSize }).joinToString(" · ")
     }
 
     fun colorOf(e: BrowseEntry): Rgba? = e.color.takeIf { view.showColour }
@@ -178,6 +180,8 @@ internal fun kindLabel(k: EntryKind): String = when (k) {
 /** A document's first page: the top cropped to fill [shape]'s square, or the whole page fitted in. */
 @Composable
 internal fun EntryThumb(editor: Editor, entry: BrowseEntry, shape: ThumbShape, modifier: Modifier = Modifier) {
+    // A notebook given a cover shows it, like a book on a shelf, instead of its first page.
+    if (!entry.isDir && entry.icon != null) return NoteCover(entry.color, entry.icon, modifier)
     val whole = shape == ThumbShape.PAGE
     ThumbImage(rememberThumb(editor, entry, whole), whole, modifier)
 }
@@ -260,12 +264,14 @@ internal fun EntryMenuFor(b: ExplorerBody, e: BrowseEntry, expanded: Boolean, on
         onSaveCopy = { m.saveCopy(e) },
         onExportPdf = { m.exportPdf(e) },
         onColor = { c -> m.color(e, c) },
-        pinned = e.isDir && b.host.isPinned(e),
-        onTogglePin = if (e.isDir) ({ m.togglePin(e) }) else null,
+        pinned = b.host.isPinned(e),
+        onTogglePin = { m.togglePin(e) },
         onNameColor = e.color?.let { c -> { m.nameColor(c) } },
         onMoveTo = { m.moveTo(e) },
         onPreview = if (e.isDir) null else ({ m.preview(e) }),
-        onLook = if (e.isDir) ({ m.look(e) }) else null,
+        onLook = { m.look(e) },
+        lookLabel = if (e.isDir) R.string.folder_look_ellipsis else R.string.cover_look_ellipsis,
+        onTags = { m.tags(e) },
         deleteLabel = b.deleteLabel,
     )
 }

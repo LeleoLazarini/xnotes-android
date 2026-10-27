@@ -139,3 +139,18 @@ object BuiltInPens {
 
     fun of(family: PenFamily): List<PenPreset> = all.filter { it.family == family }
 }
+
+/** Starting colours for each drawer's toolbar palette, before the user changes them. */
+object FamilyPalettes {
+    fun defaultFor(f: PenFamily, current: List<Rgba>): List<Rgba> {
+        val six = when (f) {
+            PenFamily.HIGHLIGHTER -> listOf(Rgba(255, 235, 59), Rgba(118, 255, 3), Rgba(255, 64, 129), Rgba(0, 176, 255), Rgba(255, 145, 0), Rgba(206, 147, 216))
+            PenFamily.PENCIL -> listOf(Rgba(40, 40, 45), Rgba(110, 110, 118), Rgba(190, 40, 40), Rgba(40, 80, 170), Rgba(40, 120, 70), Rgba(120, 80, 40))
+            PenFamily.CHALK -> listOf(Rgba(245, 245, 240), Rgba(250, 220, 90), Rgba(240, 140, 170), Rgba(120, 180, 240), Rgba(140, 210, 150), Rgba(245, 160, 80))
+            PenFamily.BRUSH -> listOf(Rgba(17, 24, 39), Rgba(220, 38, 38), Rgba(37, 99, 235), Rgba(22, 163, 74), Rgba(234, 179, 8), Rgba(147, 51, 234))
+            else -> return current
+        }
+        // Keep the palette's full length: only the first six slots change.
+        return six + current.drop(six.size)
+    }
+}

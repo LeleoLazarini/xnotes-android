@@ -88,6 +88,8 @@ data class Settings(
     val fingerDrawAutoChecked: Boolean = false,
     /** The pens the user saved, after the built-in ones in the pen menu. */
     val userPens: List<com.xnotes.core.tools.PenPreset> = emptyList(),
+    /** Each pen drawer's own toolbar colours, by [com.xnotes.core.tools.PenFamily.id]. */
+    val familyColors: Map<String, List<Rgba>> = emptyMap(),
 ) {
     fun configFor(tool: Tool): ToolConfig = tools[tool] ?: ToolDefaults.configFor(tool)
 
@@ -128,6 +130,7 @@ data class Settings(
             .put("prefs", prefs.toJson())
             .put("view_defaults", com.xnotes.platform.ViewSettingsJson.write(JSONObject(), viewDefaults))
             .put("finger_draw_auto_checked", fingerDrawAutoChecked)
+            .put("family_colors", JSONObject().apply { familyColors.forEach { (k, v) -> put(k, JSONArray().apply { v.forEach { c -> put(rgbaArr(c)) } }) } })
             .put("user_pens", JSONArray().apply { userPens.forEach { put(JSONObject().put("id", it.id).put("name", it.name).put("tool", it.tool.id).put("family", it.family.id).put("config", toolConfigJson(it.config))) } })
     }
 
@@ -185,6 +188,7 @@ data class Settings(
                 prefs = Preferences.fromJson(o.optJSONObject("prefs")),
                 fingerDrawAutoChecked = o.optBoolean("finger_draw_auto_checked", false),
                 userPens = userPens(o.optJSONArray("user_pens")),
+                familyColors = o.optJSONObject("family_colors")?.let { f -> f.keys().asSequence().associateWith { k -> rgbaList(f.optJSONArray(k)) }.filterValues { it.isNotEmpty() } }.orEmpty(),
             )
         }
 

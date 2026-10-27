@@ -311,7 +311,11 @@ private fun BackstageContent(
             onOpenColor = { selectView(BackstageView.HOME); explorerNav = ExplorerNav(null, it) },
             onRenameColor = { renamingColor = it },
             onForgetColor = { c -> scope.launch { withContext(Dispatchers.IO) { editor.setColorName(c, null) } } },
-            onOpenPin = { selectView(BackstageView.HOME); explorerNav = ExplorerNav(it.uri) },
+            // A pinned note (a favourite) opens; a pinned folder is browsed.
+            onOpenPin = { pin ->
+                if (com.xnotes.core.util.DocumentKind.isDocument(pin.uri.substringAfterLast('/').let { android.net.Uri.decode(it) })) calls.openFile(pin.uri)
+                else { selectView(BackstageView.HOME); explorerNav = ExplorerNav(pin.uri) }
+            },
             onUnpin = { editor.unpinFolder(it.uri) },
         )
     }
@@ -931,6 +935,7 @@ private fun ExplorerSection(
     var columnsPick by remember(root) { mutableStateOf<BrowseEntry?>(null) }
     var namingColor by remember(root) { mutableStateOf<Rgba?>(null) }
     var styling by remember(root) { mutableStateOf<BrowseEntry?>(null) }
+    var tagging by remember(root) { mutableStateOf<BrowseEntry?>(null) }
     // The look picked in the New folder dialog, applied once the folder exists.
     var newFolderColor by remember(root) { mutableStateOf<Rgba?>(null) }
     var newFolderIcon by remember(root) { mutableStateOf<FolderIcon?>(null) }
@@ -1204,7 +1209,7 @@ private fun ExplorerSection(
             isSelected = { e -> selection.any { it.documentUri == e.documentUri } },
             selecting = { selection.isNotEmpty() },
             isCut = { e -> clipboard?.let { c -> c.isCut && c.entries.any { it.documentUri == e.documentUri } } == true },
-            isPinned = { e -> e.isDir && editor.isPinned(e.documentUri) },
+            isPinned = { e -> editor.isPinned(e.documentUri) },
             isDropTarget = { e -> dragPos != null && dropTargetUri == e.documentUri },
             isPulsing = { e -> pulseUri == e.documentUri },
             onPulseDone = { e -> if (pulseUri == e.documentUri) pulseUri = null },
@@ -1233,8 +1238,9 @@ private fun ExplorerSection(
                 delete = { remove(listOf(it)) },
                 color = { e, c -> recolor(listOf(e), c) },
                 look = { styling = it },
+                tags = { tagging = it },
                 nameColor = { namingColor = it },
-                togglePin = { e -> if (editor.isPinned(e.documentUri)) editor.unpinFolder(e.documentUri) else editor.pinFolder(e.documentUri, e.name) },
+                togglePin = { e -> if (editor.isPinned(e.documentUri)) editor.unpinFolder(e.documentUri) else editor.pinFolder(e.documentUri, com.xnotes.core.util.DocumentKind.stripSuffix(e.name)) },
                 share = { callsNow.value.shareFile(it.documentUri) },
                 saveCopy = { callsNow.value.saveCopyFile(it.documentUri) },
                 exportPdf = { callsNow.value.exportFilePdf(it.documentUri) },
@@ -1842,6 +1848,25 @@ private fun ExplorerSection(
 
     namingColor?.let { c -> ColorNameDialog(editor, c) { namingColor = null } }
 
+    tagging?.let { e ->
+        NameDialog(
+            title = stringResource(R.string.tags_title),
+            initial = e.tags.joinToString(", "),
+            confirmLabel = stringResource(R.string.save),
+            placeholder = stringResource(R.string.tags_hint),
+            allowEmpty = true,
+            onConfirm = { raw ->
+                tagging = null
+                val tags = raw.split(',', ';', '#').map { it.trim().lowercase() }.filter { it.isNotEmpty() }.distinct()
+                scope.launch {
+                    withContext(Dispatchers.IO) { editor.setItemTags(root, e.parentDocId, e.name, tags) }
+                    refreshKey++
+                }
+            },
+            onDismiss = { tagging = null },
+        )
+    }
+
     styling?.let { e ->
         FolderLookDialog(
             name = e.name,
@@ -1875,9 +1900,10 @@ private fun ExplorerSection(
                 renaming = null
                 if (ok) {
                     // Carry the colour code to the new name (sidecar is keyed by name), then re-list.
-                    if (entry.color != null || entry.icon != null) {
+                    if (entry.color != null || entry.icon != null || entry.tags.isNotEmpty()) {
                         scope.launch {
                             withContext(Dispatchers.IO) {
+                                if (entry.tags.isNotEmpty()) { editor.setItemTags(root, entry.parentDocId, newName, entry.tags); editor.setItemTags(root, entry.parentDocId, entry.name, emptyList()) }
                                 if (entry.color != null) editor.moveItemColor(root, entry.parentDocId, entry.name, newName)
                                 if (entry.icon != null) editor.moveFolderIcon(root, entry.parentDocId, entry.name, newName)
                             }
@@ -2086,6 +2112,8 @@ internal fun EntryMenu(
     onMoveTo: (() -> Unit)? = null,
     onPreview: (() -> Unit)? = null,
     onLook: (() -> Unit)? = null,
+    lookLabel: Int = R.string.folder_look_ellipsis,
+    onTags: (() -> Unit)? = null,
     deleteLabel: String = stringResource(R.string.delete),
 ) {
     val palette = LocalPalette.current
@@ -2102,7 +2130,8 @@ internal fun EntryMenu(
             if (onMoveTo != null) DropdownMenuItem(text = { Text(stringResource(R.string.move_to_folder_ellipsis)) }, onClick = { onDismiss(); onMoveTo() })
             DropdownMenuItem(text = { Text(stringResource(R.string.copy)) }, onClick = { onDismiss(); onCopy?.invoke() })
             DropdownMenuItem(text = { Text(stringResource(R.string.cut)) }, onClick = { onDismiss(); onCut?.invoke() })
-            if (onLook != null) DropdownMenuItem(text = { Text(stringResource(R.string.folder_look_ellipsis)) }, onClick = { onDismiss(); onLook() })
+            if (onLook != null) DropdownMenuItem(text = { Text(stringResource(lookLabel)) }, onClick = { onDismiss(); onLook() })
+            if (onTags != null) DropdownMenuItem(text = { Text(stringResource(R.string.tags_ellipsis)) }, onClick = { onDismiss(); onTags() })
             if (onColor != null) DropdownMenuItem(text = { Text(stringResource(R.string.colour_code)) }, onClick = { showColors = true })
             if (onNameColor != null) DropdownMenuItem(text = { Text(stringResource(R.string.name_colour_ellipsis)) }, onClick = { onDismiss(); onNameColor() })
             if (onTogglePin != null) {
