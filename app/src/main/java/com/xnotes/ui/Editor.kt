@@ -2285,6 +2285,11 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     private fun applySettings() {
+        // Drawer palettes are off: a row left on a pencil's or marker's colours goes back to the pens' own, once.
+        if (!FAMILY_PALETTES) settings.familyColors["pen"]?.let { penRow ->
+            settings = settings.copy(toolbarColors = penRow, familyColors = emptyMap())
+            saveSettingsSoon()
+        }
         toolbarColors = settings.toolbarColors
         toolbarColorCount = settings.toolbarColorCount
         toolbarLayout = settings.toolbarLayout
@@ -5846,6 +5851,8 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
 
     /** Each drawer's own toolbar colours, so pastels stay with the highlighters and graphite with the pencils. */
     private fun swapPalette(from: com.xnotes.core.tools.PenFamily?, to: com.xnotes.core.tools.PenFamily) {
+        // Off: the colour row changing with the pen (and recolouring a selection) read as colours changing by themselves.
+        if (!FAMILY_PALETTES) return
         if (from == to) return
         val saved = settings.familyColors.toMutableMap()
         saved[(from ?: com.xnotes.core.tools.PenFamily.PEN).id] = toolbarColors
@@ -8790,6 +8797,9 @@ private const val TEXT_FROM_INK_SCALE = 0.62
 
 /** The narrowest text box a conversion makes, in page px. */
 private const val MIN_CONVERTED_WIDTH = 160.0
+
+/** Each pen drawer with its own colour row. Off at Leonardo's request: colours must change only when he picks one. */
+private const val FAMILY_PALETTES = false
 
 /** At most this many rows on a contents page built from pages (no bookmarks). */
 private const val MAX_CONTENTS_ROWS = 40

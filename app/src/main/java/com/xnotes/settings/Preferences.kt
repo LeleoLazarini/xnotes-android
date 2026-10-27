@@ -50,9 +50,9 @@ data class Preferences(
     /** Whether the side-button tool also activates during hover (no contact needed); eraser/pan only. */
     val penButtonHover: Boolean = false,
     /** Action mapped to a clean two-finger tap; "none" (default) disables it. */
-    val twoFingerTap: String = "undo",
+    val twoFingerTap: String = "none",
     /** Action mapped to a clean three-finger tap; "none" (default) disables it. */
-    val threeFingerTap: String = "redo",
+    val threeFingerTap: String = "none",
     /** Action mapped to a stylus barrel double-tap (pens with no side button, e.g. Huawei M-Pencil
      *  whose double-tap arrives as keycode 718); "none" (default) disables it. */
     val stylusDoubleTap: String = "none",
@@ -145,8 +145,8 @@ data class Preferences(
         .put("detect_shapes", detectShapes)
         .put("pen_button_tool", penButtonTool)
         .put("pen_button_hover", penButtonHover)
-        .put("two_finger_tap2", twoFingerTap)
-        .put("three_finger_tap2", threeFingerTap)
+        .put("two_finger_tap3", twoFingerTap)
+        .put("three_finger_tap3", threeFingerTap)
         .put("stylus_double_tap", stylusDoubleTap)
         .put("stylus_button_tap", stylusButtonTap)
         .put("stylus_button_1_tap", stylusButton1Tap)
@@ -282,8 +282,8 @@ data class Preferences(
                 detectShapes = o.optBoolean("detect_shapes", true),
                 penButtonTool = o.optString("pen_button_tool", "eraser").ifEmpty { "eraser" },
                 penButtonHover = o.optBoolean("pen_button_hover", false),
-                twoFingerTap = tapAction2("two_finger_tap2", "undo"),
-                threeFingerTap = tapAction2("three_finger_tap2", "redo"),
+                twoFingerTap = tapAction2("two_finger_tap3", "none"),
+                threeFingerTap = tapAction2("three_finger_tap3", "none"),
                 stylusDoubleTap = tapAction("stylus_double_tap"),
                 stylusButtonTap = tapAction("stylus_button_tap"),
                 stylusButton1Tap = tapAction("stylus_button_1_tap"),

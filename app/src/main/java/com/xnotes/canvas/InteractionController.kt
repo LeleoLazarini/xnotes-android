@@ -3275,8 +3275,8 @@ class InteractionController(
         // A locked item cannot be picked up, so a held finger offers to release it instead. That is
         // the only way back: it is out of reach of the band, the lasso and every tap.
         longPressLocked = hit?.takeIf { it.locked }
-        longPressCandidate =
-            if (grabEligible && hit != null && !hit.locked) Selected(pageIndex!!, hit) else null
+        // No grab on a held finger: it switched to the select tool without being asked.
+        longPressCandidate = if (LONG_PRESS_GRAB && grabEligible && hit != null && !hit.locked) Selected(pageIndex!!, hit) else null
         // An item on top wins; a free pointer on the bare PDF selects its text.
         val text = pdfText
         if (free && text != null && hit == null && pageIndex != null && state.document.pages[pageIndex].pdfPage != null) {
@@ -4638,6 +4638,9 @@ class InteractionController(
          *  zooming out cannot smear content detail the page will keep. */
         /** A full stabilizer runs the ink's low-pass this many times longer than plain ink. */
         const val STABILIZER_SPAN = 4.0
+
+        /** A held finger picks up the item under it (arming the select tool). Off: tools change only when chosen. */
+        const val LONG_PRESS_GRAB = false
 
         /** Tilt (radians from upright) at which a shading pencil draws its full width. */
         const val TILT_FULL = 1.1f
