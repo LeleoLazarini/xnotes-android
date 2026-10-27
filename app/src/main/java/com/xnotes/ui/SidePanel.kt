@@ -293,6 +293,8 @@ private fun PageContextMenu(
             else -> {
                 DropdownMenuItem(text = { Text(stringResource(R.string.add_page)) }, leadingIcon = menuIcon(XnotesIcons.plus), onClick = { editor.insertPageAfter(index); onDismiss() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.insert_pdf)) }, leadingIcon = menuIcon(XnotesIcons.importDoc), onClick = { onInsertPdf(index); onDismiss() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.page_model_insert)) }, leadingIcon = menuIcon(XnotesIcons.plus), onClick = { editor.pageModelPickAfter = index; onDismiss() })
+                DropdownMenuItem(text = { Text(stringResource(R.string.page_model_save)) }, leadingIcon = menuIcon(XnotesIcons.duplicate), onClick = { editor.pageModelSaveFor = index; onDismiss() })
                 DropdownMenuItem(text = { Text(stringResource(R.string.duplicate)) }, leadingIcon = menuIcon(XnotesIcons.duplicate), onClick = { editor.duplicatePage(index); onDismiss() })
                 if (index > 0) DropdownMenuItem(text = { Text(stringResource(R.string.page_move_up)) }, leadingIcon = menuIcon(XnotesIcons.arrowUp), onClick = { editor.movePage(index, -1); onDismiss() })
                 if (index < editor.pageCount - 1) DropdownMenuItem(text = { Text(stringResource(R.string.page_move_down)) }, leadingIcon = menuIcon(XnotesIcons.arrowDown), onClick = { editor.movePage(index, 1); onDismiss() })

@@ -1124,4 +1124,12 @@
     <string name="tags_hint">trabalho, reunião, ideias</string>
     <string name="page_move_up">Mover para cima</string>
     <string name="page_move_down">Mover para baixo</string>
+    <string name="page_model_save">Salvar como meu modelo…</string>
+    <string name="page_model_insert">Página de um modelo meu…</string>
+    <string name="page_model_save_help">Esta página (escrita, textos, formas e papel) vira um modelo que você insere de novo em qualquer nota.</string>
+    <string name="page_model_name_hint">Ata de reunião, Checklist…</string>
+    <string name="page_model_saved">Modelo \"%1$s\" salvo.</string>
+    <string name="page_model_failed">Não consegui usar o modelo \"%1$s\".</string>
+    <string name="page_model_none">Nenhum modelo ainda. No menu de uma página, escolha Salvar como meu modelo.</string>
+    <string name="page_model_no_pdf">Página de PDF não pode virar modelo.</string>
 </resources>

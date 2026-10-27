@@ -6205,6 +6205,47 @@ class Editor(context: Context, val pane: Pane = Pane.PRIMARY) : ToolPopupHost, S
     }
 
     /** Insert fresh clones of the page clipboard right after [index]; selects nothing, reveals the first. */
+    /** Page whose "save as my model" dialog is open, or null. */
+    var pageModelSaveFor by mutableStateOf<Int?>(null)
+
+    /** Page after which a chosen model goes, while the model picker is open; or null. */
+    var pageModelPickAfter by mutableStateOf<Int?>(null)
+
+    /** Keep page [index] as the model [name] (an existing model of that name is replaced). */
+    fun savePageModel(index: Int, name: String) {
+        val page = pageAt(index) ?: return
+        // A PDF page's picture lives in the note's PDF, which a model does not carry.
+        if (page.pdfPage != null) { message = appString(R.string.page_model_no_pdf); return }
+        val copy = page.deepCopy(textMeasurer)
+        copy.items.forEach { (it as? com.xnotes.core.model.Stroke)?.audioClip = null } // no recording travels with it
+        val doc = com.xnotes.core.model.Document(pages = mutableListOf(copy), dpi = state.document.dpi)
+        doc.templates = state.document.templates.filterKeys { it == copy.style.template }
+        com.xnotes.platform.TemplateLibrary.embed(doc, copy.style.template)
+        val ok = runCatching {
+            com.xnotes.platform.PageModels.file(appContext, name).outputStream().use { codec.write(doc, it) }
+        }.isSuccess
+        message = appContext.getString(if (ok) R.string.page_model_saved else R.string.page_model_failed, name)
+    }
+
+    /** Insert a fresh copy of model [name] after page [after]; its contents come locked, like printed paper. */
+    fun insertPageModel(name: String, after: Int) {
+        val doc = runCatching {
+            com.xnotes.platform.PageModels.file(appContext, name).inputStream().use { codec.read(it, imageDir = imageDir) }
+        }.getOrNull()
+        val page = doc?.pages?.firstOrNull()
+        if (page == null) { message = appContext.getString(R.string.page_model_failed, name); return }
+        // Locked, so writing over the model never drags its titles and boxes along (long-press unlocks).
+        page.items.forEach { it.locked = true }
+        val missing = doc.templates.filterKeys { it !in state.document.templates }
+        if (missing.isNotEmpty()) state.document.templates = state.document.templates + missing
+        val pages = state.document.pages
+        val at = (after + 1).coerceIn(0, pages.size)
+        pages.add(at, page)
+        history.push(AddPage(state.document, page, at))
+        afterPageEdit()
+        goToPage(at)
+    }
+
     /** A copy of page [index] right after it. */
     fun duplicatePage(index: Int) {
         copyPages(listOf(index))

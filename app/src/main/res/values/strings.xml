@@ -1126,4 +1126,12 @@
     <string name="tags_hint">work, meeting, ideas</string>
     <string name="page_move_up">Move up</string>
     <string name="page_move_down">Move down</string>
+    <string name="page_model_save">Save as my model…</string>
+    <string name="page_model_insert">Page from my models…</string>
+    <string name="page_model_save_help">This page (ink, text, shapes, paper) is kept as a model you can insert again in any note.</string>
+    <string name="page_model_name_hint">Meeting notes, Checklist…</string>
+    <string name="page_model_saved">Model \"%1$s\" saved.</string>
+    <string name="page_model_failed">Could not use the model \"%1$s\".</string>
+    <string name="page_model_none">No models yet. In a page\'s menu, choose Save as my model.</string>
+    <string name="page_model_no_pdf">A PDF page can\'t be a model.</string>
 </resources>

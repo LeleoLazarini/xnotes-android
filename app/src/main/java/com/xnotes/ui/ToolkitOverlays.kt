@@ -66,6 +66,8 @@ internal fun ToolkitOverlays(editor: Editor) {
     editor.imageTextResult?.let { ImageTextDialog(editor, it) }
     if (editor.linkPicking) LinkPickerDialog(editor)
     editor.translation?.let { TranslationDialog(editor, it) }
+    editor.pageModelSaveFor?.let { SavePageModelDialog(editor, it) }
+    editor.pageModelPickAfter?.let { PageModelPicker(editor, it) }
     RecordingControls(editor)
     TranscriptionControls(editor)
     editor.transcriptResult?.let { TranscriptDialog(editor, it) }
@@ -343,5 +345,54 @@ private fun LinkPickerDialog(editor: Editor) {
                 TextButton(onClick = { editor.linkPicking = false }) { Text(stringResource(R.string.cancel)) }
             }
         },
+    )
+}
+
+@Composable
+private fun SavePageModelDialog(editor: Editor, index: Int) {
+    var name by remember(index) { mutableStateOf("") }
+    val close = { editor.pageModelSaveFor = null }
+    AlertDialog(
+        onDismissRequest = close,
+        title = { Text(stringResource(R.string.page_model_save)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.page_model_save_help), fontSize = 13.sp, color = LocalPalette.current.textDim.toComposeColor())
+                Spacer(Modifier.size(8.dp))
+                OutlinedTextField(value = name, onValueChange = { name = it }, singleLine = true, placeholder = { Text(stringResource(R.string.page_model_name_hint)) })
+            }
+        },
+        confirmButton = { TextButton(onClick = { editor.savePageModel(index, name.trim()); close() }, enabled = name.isNotBlank()) { Text(stringResource(R.string.save)) } },
+        dismissButton = { TextButton(onClick = close) { Text(stringResource(R.string.cancel)) } },
+    )
+}
+
+@Composable
+private fun PageModelPicker(editor: Editor, after: Int) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val palette = LocalPalette.current
+    var models by remember { mutableStateOf(com.xnotes.platform.PageModels.list(context)) }
+    val close = { editor.pageModelPickAfter = null }
+    AlertDialog(
+        onDismissRequest = close,
+        title = { Text(stringResource(R.string.page_model_insert)) },
+        text = {
+            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                if (models.isEmpty()) Text(stringResource(R.string.page_model_none), fontSize = 14.sp, color = palette.textDim.toComposeColor())
+                models.forEach { m ->
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text(
+                            m,
+                            fontSize = 16.sp,
+                            modifier = Modifier.weight(1f).clickable { close(); editor.insertPageModel(m, after) }.padding(vertical = 12.dp),
+                        )
+                        TextButton(onClick = { com.xnotes.platform.PageModels.delete(context, m); models = com.xnotes.platform.PageModels.list(context) }) {
+                            Text(stringResource(R.string.delete), color = palette.textDim.toComposeColor())
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = close) { Text(stringResource(R.string.cancel)) } },
     )
 }
